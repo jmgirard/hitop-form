@@ -13,7 +13,7 @@ The page reads the instrument from the hitop package's JSON export
 (`https://jmgirard.github.io/hitop/downloads/hitopsr.json` and
 `hitopbr.json`). Item text, response options and instructions are the
 package's, shown unchanged. The export's build date and package version are
-printed on the page and written into every saved file.
+printed on the page, and the build date is written into every saved file.
 
 ## Make a study link
 
@@ -98,7 +98,8 @@ npx playwright test
 | `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
-workflow runs the suite on every push and pull request against the checkout.
+workflow runs the suite on every pull request and every push to `main`,
+against the checkout.
 It runs every Monday against the deployed page, so a new package export that
 breaks the page is noticed.
 
