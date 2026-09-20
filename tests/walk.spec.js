@@ -20,8 +20,10 @@ import {
 
 const base = useTarget();
 
-function refusal(k) {
-  return `Please answer item ${k} on this page before continuing.`;
+// The refusal names the number printed beside the item and its place on the
+// page: on page p, position k on the page is item 15 (p - 1) + k.
+function refusal(k, p) {
+  return `Please answer item ${PAGE_SIZE * (p - 1) + k} (item ${k} on this page) before continuing.`;
 }
 
 async function answerOne(page, k) {
@@ -47,8 +49,10 @@ async function walk(page, itemCount) {
       await answerPage(page, { skip: probes });
       for (const k of probes) {
         await nextButton(page).click();
-        await expect(page.locator('[role=alert]')).toHaveText(refusal(k));
+        await expect(page.locator('[role=alert]')).toHaveText(refusal(k, 1));
         expect(await currentPage(page), 'did not advance').toEqual({ page: 1, of: pages });
+        // The named item's first option holds focus after a refusal.
+        await expect(page.locator('fieldset.item').nth(k - 1).locator('input[type=radio]').first()).toBeFocused();
         await answerOne(page, k);
       }
     } else if (p === pages) {
@@ -56,7 +60,7 @@ async function walk(page, itemCount) {
       const k = lastCount;
       await answerPage(page, { skip: [k] });
       await nextButton(page).click();
-      await expect(page.locator('[role=alert]')).toHaveText(refusal(k));
+      await expect(page.locator('[role=alert]')).toHaveText(refusal(k, p));
       expect(await currentPage(page), 'did not advance').toEqual({ page: p, of: pages });
       await answerOne(page, k);
     } else {
@@ -67,6 +71,8 @@ async function walk(page, itemCount) {
     await nextButton(page).click();
     if (p < pages) {
       await expect(page.locator('.progress')).toHaveText(`Page ${p + 1} of ${pages}`);
+      // Each new page starts with focus on its heading, not on the document.
+      await expect(page.locator('h1')).toBeFocused();
     }
   }
   await expect(page.locator('h1')).toHaveText('Thank you');

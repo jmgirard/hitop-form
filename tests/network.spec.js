@@ -17,14 +17,18 @@ import {
 
 const base = useTarget();
 
-function withoutQuery(u) {
+// The page's own address carries the study link as its query string, which
+// is dropped; any other request keeps its query, so an answer smuggled onto
+// a request for one of the page's own files fails the walk too.
+function recorded(u) {
   const url = new URL(u);
-  return `${url.origin}${url.pathname}`;
+  const bare = `${url.origin}${url.pathname}`;
+  return bare === base() ? bare : u;
 }
 
 function record(page) {
   const urls = new Set();
-  page.on('request', (req) => urls.add(withoutQuery(req.url())));
+  page.on('request', (req) => urls.add(recorded(req.url())));
   return urls;
 }
 

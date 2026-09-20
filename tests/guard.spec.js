@@ -12,7 +12,7 @@
 // nothing but the one field differs.
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openForm, begin, walkAll, fetchExport } from './helpers.mjs';
+import { useTarget, openForm, begin, walkAll, fetchExport, readDescriptor } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -55,6 +55,43 @@ for (const probe of PROBES) {
     await expect(page.locator('fieldset.item')).toHaveCount(0);
   });
 }
+
+// G5: the fields the saved file carries are guarded too.
+test('an export whose stem does not match the link is refused', async ({ page }) => {
+  const exp = await fetchExport('hitopbr');
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g5' }, {
+    exportJson: { ...exp, stem: 'hitopsr' },
+  });
+  await expect(page.locator('[role=alert]')).toContainText('its stem is "hitopsr" and the link asked for "hitopbr"');
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('an export with no buildDate is refused', async ({ page }) => {
+  const exp = await fetchExport('hitopbr');
+  const served = { ...exp };
+  delete served.buildDate;
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g5' }, {
+    exportJson: served,
+  });
+  await expect(page.locator('[role=alert]')).toContainText('its buildDate field is missing or not text');
+});
+
+// G6: the link's own guards. A descriptor of another format is refused by
+// name, and a blank participant identifier makes the start screen ask.
+test('a descriptor whose format is not "1.0" is refused', async ({ page }) => {
+  const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
+  await openForm(page, base(), { instrument: module.instrument, study: 'guard', module });
+  await expect(page.locator('[role=alert]')).toContainText('this page reads format "1.0" and found format "2.0"');
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('a blank participant identifier in the link is asked for on the start screen', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: '   ' });
+  await expect(page.locator('input[name="participant"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Begin' }).click();
+  await expect(page.locator('[role=alert]')).toHaveText('Please enter your participant identifier before starting.');
+  await expect(page.locator('.progress')).toHaveCount(0);
+});
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

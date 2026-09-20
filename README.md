@@ -2,7 +2,7 @@
 
 A static page that shows a HiTOP-SR or HiTOP-BR questionnaire in the browser.
 It saves each participant's answers to their own device as one CSV file.
-The page sends nothing anywhere. It is built for studies that collect
+No answer is sent anywhere. It is built for studies that collect
 responses without a survey platform, and it scores nothing: scoring is the
 job of the [hitop](https://jmgirard.github.io/hitop/) R package.
 
@@ -37,6 +37,12 @@ no account. Copy it and send it to the participant. A link with a module
 descriptor is a few hundred characters long. If a mail client or a course
 system truncates it, the page reports that the link cannot be read.
 
+The page's host, GitHub Pages, sees the address when the page is requested.
+So the study name, the participant identifier and the module composition
+reach that host's request logs. The answers never do. If the identifier must
+not reach any server, leave it out of the link. The participant then types it
+on the start screen, and it is written only into the saved file.
+
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
@@ -45,11 +51,14 @@ identifier, the start screen asks for one.
 
 The items follow, 15 to a page, numbered 1, 2, 3 in the order they appear.
 Each item has one set of response options. Every item on a page must be
-answered before the next page opens. If one is blank, the page says which
-item, by its number on that page, and waits.
+answered before the next page opens. If one is blank, the page names it by
+the number printed beside it and by its place on that page. The cursor moves
+to that item, and the page waits.
 
 The last page ends with "Finish". Pressing it saves the file and shows the
-file name. No answer leaves the page.
+file name. No answer leaves the page. Until then the answers live only in
+the open page. If the participant reloads or closes the page, the browser
+asks first. A reload starts the form over.
 
 ## Where the file lands
 
@@ -72,7 +81,8 @@ Read the files into R and score them with the hitop package. The package's
 [Building HiTOP-SR Modules](https://jmgirard.github.io/hitop/articles/modules-hitopsr.html)
 article describes the descriptor and scoring a module. The package's reader
 for these files is under development. Until it ships, read a file with
-`read.csv()` and pass the item columns to `score_hitopsr()` or
+`read.csv(path, fileEncoding = "UTF-8")` (the file is UTF-8 with no byte
+order mark) and pass the item columns to `score_hitopsr()` or
 `score_hitopbr()`.
 
 ## Development
@@ -94,7 +104,7 @@ npx playwright test
 | `tests/render.spec.js` | Item text, option labels and order match the export. A descriptor's items render in its order |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item |
 | `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures |
-| `tests/guard.spec.js` | The version display and the refusal of an export whose `format` is not `"1.0"` |
+| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier |
 | `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests

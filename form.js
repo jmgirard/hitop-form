@@ -2,12 +2,14 @@
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
-// items to a page, and saves one CSV to the participant's device. Nothing is
-// transmitted: the only network request after the page's own files is the
-// export fetch.
+// items to a page, and saves one CSV to the participant's device. No answer
+// is transmitted: the only network request after the page's own files is the
+// export fetch. (The link's own contents, study, participant and module, are
+// in the page's address, which the host serving the page sees.)
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
+export const MODULE_FORMAT = '1.0';
 export const PAGE_SIZE = 15;
 export const INSTRUMENTS = { hitopsr: 'HiTOP-SR', hitopbr: 'HiTOP-BR' };
 
@@ -69,16 +71,30 @@ export function parseLink(search) {
   if (config.participant !== undefined && typeof config.participant !== 'string') {
     throw new Error('The study link carries a participant identifier that is not text.');
   }
+  // A blank identifier is no identifier: the start screen asks for one.
+  if (typeof config.participant === 'string' && config.participant.trim() === '') {
+    delete config.participant;
+  }
   if (config.module !== undefined) checkModule(config.module, config.instrument);
   return config;
 }
 
-// A module descriptor as write_module() writes it: `instrument`, `items`
-// (instrument item numbers) and an optional `itemOrder`, a permutation of
-// `items`. The other fields are for the reader and are not read here.
-function checkModule(m, instrument) {
-  const bad = (why) => new Error(`The study link's module descriptor could not be used: ${why}`);
+// A module descriptor as write_module() writes it: `format` "1.0",
+// `instrument`, `items` (instrument item numbers) and an optional `itemOrder`,
+// a permutation of `items`. The other fields are for the reader and are not
+// read here. link.html runs the same check on a pasted descriptor.
+export function checkModule(m, instrument) {
+  const bad = (why) => new Error(`The module descriptor could not be used: ${why}`);
   if (m === null || typeof m !== 'object' || Array.isArray(m)) throw bad('it is not an object.');
+  // The instrument export has the same top-level shape (a `format`, an
+  // `items` list) but names its instrument as `stem` and its items as
+  // objects; a pasted export is named as such rather than as a bad descriptor.
+  if (m.instrument === undefined && typeof m.stem === 'string' && Array.isArray(m.items)) {
+    throw bad('it is the instrument export, not a module descriptor. Paste the JSON that write_module() wrote.');
+  }
+  if (m.format !== MODULE_FORMAT) {
+    throw bad(`this page reads format "${MODULE_FORMAT}" and found ${m.format === undefined ? 'no format field' : `format ${JSON.stringify(m.format)}`}.`);
+  }
   if (m.instrument !== instrument) {
     throw bad(
       `its instrument is ${JSON.stringify(m.instrument)} and the link's is ${JSON.stringify(instrument)}.`,
@@ -109,8 +125,9 @@ export function exportUrl(instrument) {
 }
 
 // Refuses an export whose `format` is not the string "1.0", naming what it
-// found, and checks the shape the renderer reads.
-export function checkExport(exp) {
+// found, and checks the shape the renderer reads and the fields the saved
+// file carries. `instrument`, when given, must equal the export's `stem`.
+export function checkExport(exp, instrument) {
   const found =
     exp === null || typeof exp !== 'object' || Array.isArray(exp)
       ? 'not an object'
@@ -141,6 +158,13 @@ export function checkExport(exp) {
     }
   }
   if (typeof exp.instructions.start !== 'string') throw shape('it has no instructions.');
+  // These four reach the screen, the file or its name; none may be missing.
+  for (const field of ['stem', 'buildDate', 'packageVersion', 'package']) {
+    if (!isNonEmptyString(exp[field])) throw shape(`its ${field} field is missing or not text.`);
+  }
+  if (instrument !== undefined && exp.stem !== instrument) {
+    throw shape(`its stem is ${JSON.stringify(exp.stem)} and the link asked for ${JSON.stringify(instrument)}.`);
+  }
   return exp;
 }
 
@@ -161,7 +185,7 @@ export async function fetchExport(instrument) {
   } catch {
     throw new Error(`The file at ${url} is not JSON.`);
   }
-  return checkExport(exp);
+  return checkExport(exp, instrument);
 }
 
 // The items to render, in order: the export's items as exported, or the
@@ -235,6 +259,18 @@ function showError(root, message) {
   );
 }
 
+// Every screen is a full replacement of `root`, which drops keyboard focus
+// to the document. The heading takes it, so a keyboard or screen-reader
+// participant starts each screen at its top rather than at the page bottom.
+function heading(text) {
+  return el('h1', { text, tabindex: '-1' });
+}
+
+function focusHeading(root) {
+  const h = root.querySelector('h1');
+  if (h) h.focus({ preventScroll: true });
+}
+
 function versionLine(exp) {
   return el('p', {
     class: 'version',
@@ -274,6 +310,15 @@ function runForm(root, config, exp, items) {
   const pageCount = Math.ceil(items.length / PAGE_SIZE);
   let participant = config.participant;
   let page = 0;
+  let finished = false;
+
+  // A reload or a back gesture would lose every answer, since they live only
+  // in memory until Finish writes the file. The browser asks first.
+  window.addEventListener('beforeunload', (ev) => {
+    if (finished || answers.size === 0) return;
+    ev.preventDefault();
+    ev.returnValue = '';
+  });
 
   function start() {
     const alert = el('p', { role: 'alert' });
@@ -295,12 +340,12 @@ function runForm(root, config, exp, items) {
       showPage();
     };
     root.replaceChildren(
-      el('h1', { text: title }),
+      heading(title),
       versionLine(exp),
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
       el('p', {
         class: 'muted',
-        text: `${items.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. Your answers are saved to this device as one file when you finish; nothing is sent anywhere.`,
+        text: `${items.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. Your answers are saved to this device as one file when you finish. No answer is sent anywhere.`,
       }),
       ...(askParticipant
         ? [el('label', { class: 'field' }, ['Participant identifier', input])]
@@ -309,6 +354,7 @@ function runForm(root, config, exp, items) {
       el('div', { class: 'nav' }, [el('button', { type: 'button', text: 'Begin', onclick: begin })]),
     );
     if (input) input.focus();
+    else focusHeading(root);
   }
 
   function itemNode(it, position) {
@@ -352,8 +398,11 @@ function runForm(root, config, exp, items) {
       const missing = slice.findIndex((it) => !answers.has(it.number));
       if (missing >= 0) {
         nodes.forEach((n, i) => n.classList.toggle('unanswered', !answers.has(slice[i].number)));
-        alert.textContent = `Please answer item ${missing + 1} on this page before continuing.`;
+        // Both numbers: the one printed beside the item, and its place on
+        // this page.
+        alert.textContent = `Please answer item ${first + missing + 1} (item ${missing + 1} on this page) before continuing.`;
         nodes[missing].scrollIntoView({ block: 'center' });
+        nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
         return;
       }
       if (last) finish();
@@ -368,7 +417,7 @@ function runForm(root, config, exp, items) {
     };
 
     root.replaceChildren(
-      el('h1', { text: title }),
+      heading(title),
       el('p', { class: 'progress', text: `Page ${page + 1} of ${pageCount}` }),
       ...nodes,
       alert,
@@ -379,6 +428,7 @@ function runForm(root, config, exp, items) {
       ]),
     );
     window.scrollTo(0, 0);
+    focusHeading(root);
   }
 
   function finish() {
@@ -395,16 +445,18 @@ function runForm(root, config, exp, items) {
     };
     const name = fileName(record);
     saveFile(name, buildCsv(record));
+    finished = true;
     root.replaceChildren(
-      el('h1', { text: 'Thank you' }),
+      heading('Thank you'),
       el('p', {
         class: 'done',
         text: 'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
       }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
-      el('p', { text: 'Please send that file to the study team the way they asked. Nothing was sent from this page.' }),
+      el('p', { text: 'Please send that file to the study team the way they asked. No answer was sent from this page.' }),
       versionLine(exp),
     );
+    focusHeading(root);
   }
 
   start();

@@ -46,16 +46,18 @@ jobs:
       # run, and is empty otherwise. With it empty the tests serve this
       # checkout on localhost instead.
       #
-      # FORM_REQUIRE_TARGET is set on exactly the two events that mean the
-      # deployed page, and tells the tests to fail rather than fall back.
-      # Without it, a dropped env: block or a renamed event would leave the
-      # weekly run quietly testing this checkout and reporting green forever.
+      # FORM_REQUIRE_TARGET tells the tests to fail rather than fall back to
+      # the checkout. It is derived the opposite way round from FORM_TARGET:
+      # set on every event that is not one of the two checkout events. So an
+      # event renamed or added on the schedule side leaves FORM_TARGET empty
+      # and FORM_REQUIRE_TARGET set, and the run fails instead of quietly
+      # testing this checkout and reporting green forever.
       - name: Run the tests
         env:
           FORM_TARGET: >-
             ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
                 && 'https://jmgirard.github.io/hitop-form/' || '' }}
           FORM_REQUIRE_TARGET: >-
-            ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+            ${{ (github.event_name != 'push' && github.event_name != 'pull_request')
                 && '1' || '' }}
         run: npx playwright test

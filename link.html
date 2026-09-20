@@ -91,7 +91,7 @@
   <p id="open" class="muted"></p>
 </main>
 <script type="module">
-  import { encodeConfig } from './form.js';
+  import { encodeConfig, checkModule } from './form.js';
 
   const f = document.getElementById('f');
   const err = document.getElementById('err');
@@ -122,12 +122,12 @@
         err.textContent = 'The module descriptor is not JSON.';
         return;
       }
-      if (!m || typeof m !== 'object' || Array.isArray(m) || !Array.isArray(m.items)) {
-        err.textContent = 'The module descriptor has no items list.';
-        return;
-      }
-      if (m.instrument !== config.instrument) {
-        err.textContent = `The descriptor's instrument is ${JSON.stringify(m.instrument)}, and the instrument chosen above is ${JSON.stringify(config.instrument)}.`;
+      // The same check the form page runs on the link, so a bad descriptor
+      // is refused here, at the researcher, and never at a participant.
+      try {
+        checkModule(m, config.instrument);
+      } catch (e) {
+        err.textContent = e.message;
         return;
       }
       config.module = m;

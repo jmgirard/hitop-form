@@ -47,10 +47,21 @@ export function parseCsv(text) {
   return rows;
 }
 
+// The fourth case has no fixture: it carries a comma, a double quote and a
+// non-ASCII character through the link and into the file, so the quoting
+// the reader depends on (S6) and the link's UTF-8 round trip are exercised.
 const CASES = [
   { name: 'hitopbr', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' } },
   { name: 'hitopsr', fixture: 'responses-hitopsr.csv', config: { instrument: 'hitopsr' } },
   { name: 'shuffled module', fixture: 'responses-module-shuffled.csv', module: 'module-shuffled.json' },
+  {
+    name: 'quoted fields',
+    config: { instrument: 'hitopbr' },
+    study: 'Pilot, wave "2"',
+    participant: 'p-ü',
+    quoted: '"Pilot, wave ""2""",p-ü,hitopbr,',
+    fileStem: 'hitopbr_Pilot-wave-2_p',
+  },
 ];
 
 for (const c of CASES) {
@@ -58,7 +69,9 @@ for (const c of CASES) {
     const module = c.module ? await readDescriptor(c.module) : undefined;
     const instrument = module ? module.instrument : c.config.instrument;
     const exp = await fetchExport(instrument);
-    const config = { instrument, study: 'fixture', participant: 'p001', ...(module ? { module } : {}) };
+    const study = c.study ?? 'fixture';
+    const participant = c.participant ?? 'p001';
+    const config = { instrument, study, participant, ...(module ? { module } : {}) };
 
     const byNumber = new Map(exp.items.map((it) => [it.number, it]));
     const order = module ? module.itemOrder ?? module.items : exp.items.map((it) => it.number);
@@ -82,9 +95,9 @@ for (const c of CASES) {
     expect(rows[0]).toEqual([...LEAD, ...names]);
 
     // S2
-    const [study, participant, instr, formBuild, submitted, ...values] = rows[1];
-    expect({ study, participant, instr, formBuild }).toEqual({
-      study: 'fixture', participant: 'p001', instr: exp.stem, formBuild: exp.buildDate,
+    const [studyRead, participantRead, instr, formBuild, submitted, ...values] = rows[1];
+    expect({ study: studyRead, participant: participantRead, instr, formBuild }).toEqual({
+      study, participant, instr: exp.stem, formBuild: exp.buildDate,
     });
     expect(submitted).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
     const t = Date.parse(submitted);
@@ -98,10 +111,14 @@ for (const c of CASES) {
 
     // S5
     expect(download.suggestedFilename()).toMatch(
-      new RegExp(`^${exp.stem}_fixture_p001_\\d{8}T\\d{6}Z\\.csv$`),
+      new RegExp(`^${c.fileStem ?? `${exp.stem}_fixture_p001`}_\\d{8}T\\d{6}Z\\.csv$`),
     );
 
+    // S6: the raw bytes hold the quoted field as RFC 4180 writes it.
+    if (c.quoted) expect(text).toContain(`\r\n${c.quoted}`);
+
     // S4
+    if (!c.fixture) return;
     const fixturePath = path.join(FIXTURES, c.fixture);
     if (process.env.WRITE_FIXTURES) await writeFile(fixturePath, text);
     const fixture = parseCsv(await readFile(fixturePath, 'utf8'));
