@@ -12,7 +12,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, exportUrl,
+  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, exportUrl, awaitDownload,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -36,7 +36,7 @@ test('N1: the HiTOP-BR walk through save requests only its files and the export'
   const urls = record(page);
   await openForm(page, base(), { instrument: 'hitopbr', study: 'net', participant: 'n1' });
   await begin(page);
-  const downloading = page.waitForEvent('download');
+  const downloading = awaitDownload(page);
   await walkAll(page);
   await downloading;
   await expect(page.locator('h1')).toHaveText('Thank you');
@@ -48,7 +48,7 @@ test('N2: the shuffled module walk through save requests only its files and the 
   const urls = record(page);
   await openForm(page, base(), { instrument: module.instrument, study: 'net', module });
   await begin(page, 'n2');
-  const downloading = page.waitForEvent('download');
+  const downloading = awaitDownload(page);
   await walkAll(page);
   await downloading;
   await expect(page.locator('h1')).toHaveText('Thank you');

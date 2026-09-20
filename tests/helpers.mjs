@@ -127,6 +127,14 @@ export async function answerPage(page, { skip = [] } = {}) {
   }
 }
 
+// A promise for the file the page saves. Started before the walk that ends
+// in Finish, so it covers the whole walk: the 405-item HiTOP-SR takes longer
+// than the action timeout on a slow runner, and the page's default timeout
+// would otherwise cut the wait short.
+export function awaitDownload(page) {
+  return page.waitForEvent('download', { timeout: 110 * 1000 });
+}
+
 export function nextButton(page) {
   return page.locator('.nav button').last();
 }

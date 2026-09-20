@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES,
+  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -69,7 +69,7 @@ for (const c of CASES) {
     await openForm(page, base(), config);
     await begin(page);
     const before = Date.now();
-    const downloading = page.waitForEvent('download');
+    const downloading = awaitDownload(page);
     await walkAll(page);
     const download = await downloading;
     const after = Date.now();
