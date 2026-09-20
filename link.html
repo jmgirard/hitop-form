@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HiTOP form: make a study link</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f8; --fg: #16202b; --muted: #4d5a67;
+    --accent: #185a8c; --accent-fg: #ffffff; --line: #c7d0d9; --line-strong: #6f7d8b;
+    --focus: #0b4f86; --error: #a3261c; --error-bg: #fbe9e7;
+    --s1: .25rem; --s2: .5rem; --s3: .75rem; --s4: 1rem; --s5: 1.5rem; --s7: 3rem;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --r1: 6px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181d; --surface: #1c2229; --fg: #e6ebf0; --muted: #a3b0bd;
+      --accent: #7ab8e8; --accent-fg: #0b1219; --line: #3a444f; --line-strong: #78848f;
+      --focus: #9ccbf0; --error: #f2a49b; --error-bg: #3a1f1c;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: var(--s5) var(--s4) var(--s7); max-width: 44rem;
+    background: var(--bg); color: var(--fg); font: 1rem/1.55 var(--font);
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 var(--s2); }
+  p { margin: 0 0 var(--s4); }
+  .muted { color: var(--muted); font-size: .875rem; }
+  label { display: block; margin: 0 0 var(--s4); font-weight: 600; }
+  label .hint { display: block; font-weight: 400; color: var(--muted); font-size: .875rem; }
+  input, select, textarea {
+    display: block; width: 100%; margin-top: var(--s1); font: inherit;
+    padding: var(--s2) var(--s3); border: 1px solid var(--line-strong);
+    border-radius: var(--r1); background: var(--bg); color: var(--fg);
+  }
+  textarea { font-family: var(--mono); font-size: .875rem; min-height: 8rem; }
+  button {
+    font: inherit; font-weight: 600; padding: var(--s2) var(--s5);
+    border-radius: var(--r1); border: 1px solid var(--accent);
+    background: var(--accent); color: var(--accent-fg); cursor: pointer;
+  }
+  button.secondary { background: var(--bg); color: var(--accent); margin-left: var(--s2); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  [role="alert"] {
+    background: var(--error-bg); color: var(--error); border: 1px solid var(--error);
+    border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4);
+  }
+  [role="alert"]:empty { display: none; }
+  #out { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
+         padding: var(--s3) var(--s4); word-break: break-all; font-family: var(--mono);
+         font-size: .875rem; }
+  #out:empty { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Make a study link</h1>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give one, the participant and the module folded into its address. Nothing here is stored or sent. Give each participant a link; the page saves a file to their device when they finish.</p>
+  <form id="f" novalidate>
+    <label>Instrument
+      <select name="instrument">
+        <option value="hitopsr">HiTOP-SR (405 items)</option>
+        <option value="hitopbr">HiTOP-BR (45 items)</option>
+      </select>
+    </label>
+    <label>Study
+      <span class="hint">Written into every saved file. Required.</span>
+      <input name="study" type="text" autocomplete="off">
+    </label>
+    <label>Participant
+      <span class="hint">Optional. Leave it empty for a link shared with many participants; the page then asks each one for an identifier.</span>
+      <input name="participant" type="text" autocomplete="off">
+    </label>
+    <label>Module descriptor
+      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the Module Builder saved beside your form. The page then shows only the module's items, in the descriptor's printed order.</span>
+      <textarea name="module" spellcheck="false"></textarea>
+    </label>
+    <p role="alert" id="err"></p>
+    <p>
+      <button type="submit">Make the link</button>
+      <button type="button" class="secondary" id="copy" hidden>Copy</button>
+    </p>
+  </form>
+  <p id="out"></p>
+  <p id="open" class="muted"></p>
+</main>
+<script type="module">
+  import { encodeConfig } from './form.js';
+
+  const f = document.getElementById('f');
+  const err = document.getElementById('err');
+  const out = document.getElementById('out');
+  const open = document.getElementById('open');
+  const copy = document.getElementById('copy');
+
+  f.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    err.textContent = '';
+    out.textContent = '';
+    open.textContent = '';
+    copy.hidden = true;
+    const data = new FormData(f);
+    const config = { instrument: data.get('instrument'), study: data.get('study').trim() };
+    if (config.study === '') {
+      err.textContent = 'Give the study a name.';
+      return;
+    }
+    const participant = data.get('participant').trim();
+    if (participant !== '') config.participant = participant;
+    const text = data.get('module').trim();
+    if (text !== '') {
+      let m;
+      try {
+        m = JSON.parse(text);
+      } catch {
+        err.textContent = 'The module descriptor is not JSON.';
+        return;
+      }
+      if (!m || typeof m !== 'object' || Array.isArray(m) || !Array.isArray(m.items)) {
+        err.textContent = 'The module descriptor has no items list.';
+        return;
+      }
+      if (m.instrument !== config.instrument) {
+        err.textContent = `The descriptor's instrument is ${JSON.stringify(m.instrument)}, and the instrument chosen above is ${JSON.stringify(config.instrument)}.`;
+        return;
+      }
+      config.module = m;
+    }
+    const url = new URL('./', window.location.href);
+    url.search = `?c=${encodeConfig(config)}`;
+    out.textContent = url.href;
+    const a = document.createElement('a');
+    a.href = url.href;
+    a.textContent = 'Open the link';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    open.replaceChildren(a, ` (${url.href.length} characters)`);
+    copy.hidden = !navigator.clipboard;
+  });
+
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(out.textContent);
+      copy.textContent = 'Copied';
+      setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+    } catch {
+      err.textContent = 'The link could not be copied. Select it and copy by hand.';
+    }
+  });
+</script>
+</body>
+</html>

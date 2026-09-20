@@ -1,0 +1,10 @@
+{
+  "format": "1.0",
+  "package": "hitop",
+  "packageVersion": "0.2.0",
+  "buildDate": "2026-09-20",
+  "instrument": "hitopsr",
+  "scales": ["Agoraphobia", "Distress-Dysphoria"],
+  "items": [11, 20, 64, 66, 100, 109, 118, 170, 194, 224, 233, 260, 291, 300, 304, 343, 365, 367, 380, 386, 394],
+  "nItems": 21
+}
