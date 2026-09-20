@@ -1,0 +1,13 @@
+{
+  "name": "hitop-form-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright tests for the hitop-form page. Nothing here is served: the Pages workflow publishes index.html, link.html, form.js, LICENSE.md and README.md and nothing else.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

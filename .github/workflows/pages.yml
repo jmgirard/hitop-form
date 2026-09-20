@@ -1,0 +1,43 @@
+# Publish the static site to GitHub Pages. There is no build step: the two
+# pages and their script are the site. They are staged into a directory of
+# their own rather than uploaded from the checkout, because the checkout also
+# holds the tests, the lockfile and the config, none of which a visitor's
+# browser has any use for, and all of which `path: .` would serve at the
+# public URL.
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Stage the site
+        # Named one by one rather than uploading the checkout: the test
+        # harness, its lockfile and node_modules have no business at the
+        # public URL.
+        run: |
+          mkdir _site
+          cp index.html link.html form.js LICENSE.md README.md _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
