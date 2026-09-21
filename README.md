@@ -1,6 +1,8 @@
 # hitop-form
 
-A static page that shows a HiTOP-SR or HiTOP-BR questionnaire in the browser.
+A static page that shows one of five questionnaires in the browser: the
+HiTOP-SR, the HiTOP-BR, or the PID-5 in its full (PID-5), short (PID-5-SF) or
+brief (PID-5-BF) form.
 It saves each participant's answers to their own device as one CSV file.
 No answer is sent anywhere. It is built for studies that collect
 responses without a survey platform, and it scores nothing: scoring is the
@@ -10,8 +12,8 @@ Live page: <https://jmgirard.github.io/hitop-form/>
 Make a study link: <https://jmgirard.github.io/hitop-form/link.html>
 
 The page reads the instrument from the hitop package's JSON export
-(`https://jmgirard.github.io/hitop/downloads/hitopsr.json` and
-`hitopbr.json`). Item text, response options and instructions are the
+(`https://jmgirard.github.io/hitop/downloads/hitopsr.json`, `hitopbr.json`,
+`pid5.json`, `pid5sf.json` and `pid5bf.json`). Item text, response options and instructions are the
 package's, shown unchanged. The export's build date and package version are
 printed on the page, and the build date is written into every saved file.
 
@@ -20,7 +22,8 @@ printed on the page, and the build date is written into every saved file.
 Open [link.html](https://jmgirard.github.io/hitop-form/link.html) and fill in
 the form:
 
-1. Choose the instrument, HiTOP-SR (405 items) or HiTOP-BR (45 items).
+1. Choose the instrument: HiTOP-SR (405 items), HiTOP-BR (45 items),
+   PID-5 (220 items), PID-5-SF (100 items) or PID-5-BF (25 items).
 2. Give the study a name. The name is written into every saved file.
 3. Optionally give a participant identifier. Leave it empty for one link
    shared with many participants. The page then asks each participant for an
@@ -64,26 +67,39 @@ asks first. A reload starts the form over.
 
 The file is saved where the participant's browser puts downloads. Its name is
 `<instrument>_<study>_<participant>_<timestamp>.csv`, for example
-`hitopbr_Pilot-A_p001_20260920T211531Z.csv`. Ask each participant to send you
+`hitopbr_Pilot-A_p001_20260920T211531Z.csv` or
+`pid5sf_Pilot-A_p001_20260920T211531Z.csv`. Ask each participant to send you
 the file the way your study collects documents.
 
 The file has two rows. The header is
 `study,participant,instrument,form_build,submitted` followed by one column
 per item, named as the package names the items (`hitopbr_01`,
-`hitopsr_233`). The item columns follow the order the participant saw. The
-data row holds the study fields, the export's build date and the time of
-saving as an ISO-8601 timestamp in UTC. Then comes each answer's numeric
-value. Three example files are under `tests/fixtures/`.
+`hitopsr_233`, `pid5_001`, `pid5sf_100`, `pid5bf_25`). The item columns follow
+the order the participant saw. The data row holds the study fields, the
+export's build date and the time of saving as an ISO-8601 timestamp in UTC.
+Then comes each answer's numeric value: 1 to 4 on the HiTOP forms and 0 to 3
+on the PID-5 forms, as the export's response options number them. Six
+example files are under `tests/fixtures/`, one per form and one for a
+HiTOP-SR module.
 
 ## Scoring
 
-Read the files into R and score them with the hitop package. The package's
+Read the files into R and score them with the hitop package.
+`read_form_responses()` reads a folder of files saved for one form into one
+data frame. Pass its item columns to the scoring function for the form:
+`score_hitopsr()`, `score_hitopbr()` or `score_pid5()`. For a PID-5 file, set
+`version` to `"FULL"`, `"SF"` or `"BF"` to match the form:
+
+```r
+library(hitop)
+responses <- read_form_responses("path/to/pid5bf-files")
+items <- grep("^pid5bf_", names(responses), value = TRUE)
+score_pid5(responses, items, version = "BF")
+```
+
+The package's
 [Building HiTOP-SR Modules](https://jmgirard.github.io/hitop/articles/modules-hitopsr.html)
-article describes the descriptor and scoring a module. The package's reader
-for these files is under development. Until it ships, read a file with
-`read.csv(path, fileEncoding = "UTF-8")` (the file is UTF-8 with no byte
-order mark) and pass the item columns to `score_hitopsr()` or
-`score_hitopbr()`.
+article describes the descriptor and scoring a module.
 
 ## Development
 
@@ -101,11 +117,12 @@ npx playwright test
 
 | Spec | What it checks |
 |---|---|
-| `tests/render.spec.js` | Item text, option labels and order match the export. A descriptor's items render in its order |
-| `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item |
-| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures |
+| `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order |
+| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, and its module hint says HiTOP-SR only |
+| `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
+| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
 | `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier |
-| `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch |
+| `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
 workflow runs the suite on every pull request and every push to `main`,

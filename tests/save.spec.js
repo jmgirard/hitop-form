@@ -10,9 +10,12 @@
 //   S4: the file equals the committed fixture in every column but submitted
 //       and form_build (which move with the clock and the export's build)
 //   S5: the suggested file name is <instrument>_<study>_<participant>_<stamp>.csv
+//   S7: on a form whose options start at 0, the item at position 4, where
+//       the answer pattern picks the first option, is written as 0
 //
-// Run with WRITE_FIXTURES=1 to rewrite the three fixtures from a capture.
-// Walked for the full HiTOP-BR, the full HiTOP-SR and the shuffled module.
+// Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
+// Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
+// the three PID-5 forms.
 
 import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -54,6 +57,9 @@ const CASES = [
   { name: 'hitopbr', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' } },
   { name: 'hitopsr', fixture: 'responses-hitopsr.csv', config: { instrument: 'hitopsr' } },
   { name: 'shuffled module', fixture: 'responses-module-shuffled.csv', module: 'module-shuffled.json' },
+  { name: 'pid5', fixture: 'responses-pid5.csv', config: { instrument: 'pid5' }, zeroAt: 4 },
+  { name: 'pid5sf', fixture: 'responses-pid5sf.csv', config: { instrument: 'pid5sf' }, zeroAt: 4 },
+  { name: 'pid5bf', fixture: 'responses-pid5bf.csv', config: { instrument: 'pid5bf' }, zeroAt: 4 },
   {
     name: 'quoted fields',
     config: { instrument: 'hitopbr' },
@@ -116,6 +122,13 @@ for (const c of CASES) {
 
     // S6: the raw bytes hold the quoted field as RFC 4180 writes it.
     if (c.quoted) expect(text).toContain(`\r\n${c.quoted}`);
+
+    // S7: a chosen 0 reaches the file as the text 0, not as a blank.
+    if (c.zeroAt) {
+      expect(chosenIndex(c.zeroAt, optionCount), 'the pattern picks the first option').toBe(0);
+      expect(exp.instructions.options[0].value, 'the first option is worth 0').toBe(0);
+      expect(values[c.zeroAt - 1], `the answer at position ${c.zeroAt}`).toBe('0');
+    }
 
     // S4
     if (!c.fixture) return;
