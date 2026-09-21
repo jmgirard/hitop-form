@@ -11,7 +11,13 @@ export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
 export const MODULE_FORMAT = '1.0';
 export const PAGE_SIZE = 15;
-export const INSTRUMENTS = { hitopsr: 'HiTOP-SR', hitopbr: 'HiTOP-BR' };
+export const INSTRUMENTS = {
+  hitopsr: 'HiTOP-SR',
+  hitopbr: 'HiTOP-BR',
+  pid5: 'PID-5',
+  pid5sf: 'PID-5-SF',
+  pid5bf: 'PID-5-BF',
+};
 
 // ---- The study link -------------------------------------------------------
 
