@@ -10,5 +10,6 @@ editing it.
 
 The hitop package's `read_form_responses()` reads the HiTOP-SR, HiTOP-BR and
 module files in its own tests, from copies in its `tests/testthat/fixtures/`.
-The three PID-5 files are the samples for its PID-5 tests.
+The package has no PID-5 reader tests yet. The three PID-5 files are the
+samples for them.
 `.gitattributes` keeps the CSV files' CRLF row endings as the page writes them.
