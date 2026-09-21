@@ -119,10 +119,10 @@ npx playwright test
 |---|---|
 | `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order |
 | `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, and its module hint says HiTOP-SR only |
-| `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item |
-| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures |
+| `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
+| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
 | `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier |
-| `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch |
+| `tests/network.spec.js` | No request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
 workflow runs the suite on every pull request and every push to `main`,
