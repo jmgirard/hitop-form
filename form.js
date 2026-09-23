@@ -6,8 +6,9 @@
 // to the store the link names or, with no store, saves them as one CSV to
 // the participant's device. With no store, no answer is transmitted: the
 // only network request after the page's own files is the export fetch. With
-// a store, the one request after Finish is the POST to its address, and the
-// CSV is saved only when that send is not confirmed. (The link's own
+// a store, the requests after Finish are the POST to its address and any
+// redirect it answers with, and the CSV is saved only when that send is not
+// confirmed. (The link's own
 // contents, study, participant, module and store, are in the page's address,
 // which the host serving the page sees.)
 

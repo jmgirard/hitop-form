@@ -10,8 +10,9 @@
 // equals { the page, form.js, the export }. A request the page never made
 // cannot be in the set, and one it made to anywhere else fails the walk.
 //
-// With a store in the link, the one request beyond that set is the POST to
-// the store's address, and it is made only when Finish is pressed:
+// With a store in the link, the requests beyond that set are the POST to
+// the store's address and any redirect it answers with, and the POST is
+// made only when Finish is pressed:
 //
 //   N4: the HiTOP-BR walk with a store that answers directly: the set at the
 //       last page before Finish equals the three above, and after Finish it

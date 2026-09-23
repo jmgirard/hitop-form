@@ -39,8 +39,9 @@ the form:
 5. Optionally give an address to send responses to. It is the `https://`
    address of an endpoint that accepts one JSON row per participant. The web
    app in [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
-   below is one. The builder refuses an address that is not `https://`. Leave
-   it empty and the page saves a file instead.
+   below is one. The builder refuses an address that is not `https://`, with
+   one exception for local testing: `http://` to `127.0.0.1` or `localhost`.
+   Leave it empty and the page saves a file instead.
 
 Press "Make the link". The link carries the instrument, the study, the
 participant, the module and the address folded into its address, so it needs
@@ -177,8 +178,10 @@ The page never reads the sheet.
 To download the responses, open the sheet's `Responses` tab and choose File,
 then Download, then Comma Separated Values (.csv). The file has one header
 row and one row per participant, in the column order above. Read it in R
-with `read.csv(file, colClasses = "character")` or `readr::read_csv()`, and
-score the item columns as the next section describes. The file
+with `read.csv(file, colClasses = "character")` or
+`readr::read_csv(file, col_types = readr::cols(.default = "c"))`. Either
+call keeps a participant code such as `007` as text. Then score the item
+columns as the next section describes. The file
 `tests/fixtures/sheet-hitopbr.csv` is one such download, from two HiTOP-BR
 walks against a web app deployed from the code above.
 
@@ -223,7 +226,7 @@ npx playwright test
 | `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
 | `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. Against a recording endpoint the tests start themselves |
 | `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, and a send address outside `https://` or the loopback exception the tests use |
-| `tests/network.spec.js` | Without a send address, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the only further request is the POST to it at Finish |
+| `tests/network.spec.js` | Without a send address, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
 workflow runs the suite on every pull request and every push to `main`,

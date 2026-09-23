@@ -17,8 +17,8 @@
 //   T6: a 200 with an HTML body, a 404, a 500, a refused connection and an
 //       endpoint that never answers (the page's 30-second limit) are each
 //       unconfirmed: the CSV is saved to the device, the final screen says
-//       the send could not be confirmed and names the saved file, and no
-//       screen says that no answer was sent
+//       the send could not be confirmed and names the saved file, and that
+//       final screen does not say that no answer was sent
 //   T7: Finish is disabled from its first press until the outcome screen
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
