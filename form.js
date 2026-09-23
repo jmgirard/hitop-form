@@ -93,10 +93,18 @@ export function parseLink(search) {
 // ---- The store ------------------------------------------------------------
 
 // The store kinds this page can send to. A `webhook` is an HTTPS endpoint
-// that accepts a POST of one JSON row and answers {"ok":true}.
-export const STORE_KINDS = ['webhook'];
+// that accepts a POST of one JSON row and answers {"ok":true}. A `supabase`
+// store is a table in a Supabase project, reached through the project's
+// REST API with its publishable (or legacy anon) key.
+export const STORE_KINDS = ['webhook', 'supabase'];
 
-// A store as the link carries it: `{ kind, url }`. Returns a copy whose url
+// A Postgres name the page puts in a URL path and the builder in
+// double-quoted SQL: a lower-case letter or underscore, then up to 62
+// lower-case letters, digits or underscores.
+export const TABLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
+
+// A store as the link carries it: `{ kind, url }` for a webhook, or
+// `{ kind, url, key, table }` for a supabase store. Returns a copy whose url
 // is the parsed address's string form, or throws naming the fault. link.html
 // runs the same check before it builds a link.
 export function checkStore(store) {
@@ -109,7 +117,19 @@ export function checkStore(store) {
       `its kind is ${JSON.stringify(store.kind)}, and this page knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
     );
   }
-  return { kind: store.kind, url: checkStoreUrl(store.url, bad) };
+  const url = checkStoreUrl(store.url, bad);
+  if (store.kind === 'webhook') return { kind: store.kind, url };
+  if (store.key === undefined) throw bad('it names no key.');
+  if (typeof store.key !== 'string') throw bad('its key is not text.');
+  if (store.key.trim() === '') throw bad('its key is empty.');
+  if (store.table === undefined) throw bad('it names no table.');
+  if (typeof store.table !== 'string') throw bad('its table is not text.');
+  if (!TABLE_NAME.test(store.table)) {
+    throw bad(
+      `its table must be a lower-case name of up to 63 letters, digits and underscores, not starting with a digit, and it is ${JSON.stringify(store.table)}.`,
+    );
+  }
+  return { kind: store.kind, url, key: store.key, table: store.table };
 }
 
 // The address a store may name: `https:` to any host, or `http:` to this
@@ -175,6 +195,29 @@ export function checkModule(m, instrument) {
 
 function isIntegerArray(x) {
   return Array.isArray(x) && x.every((v) => Number.isInteger(v));
+}
+
+// The SQL that makes the table a supabase store names, for the items in the
+// order the page will show them: the five study fields as text, one integer
+// column per item, row-level security on, and the anon role allowed to
+// insert and nothing else. Shown by link.html; pasted by the researcher into
+// the project's SQL editor.
+export function storeSql(table, items) {
+  const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
+  const t = q(table);
+  const columns = [
+    ...['study', 'participant', 'instrument', 'form_build', 'submitted'].map((c) => `  ${q(c)} text`),
+    ...items.map((it) => `  ${q(it.name)} integer`),
+  ];
+  return [
+    `create table ${t} (`,
+    columns.join(',\n'),
+    ');',
+    `alter table ${t} enable row level security;`,
+    `grant insert on ${t} to anon;`,
+    `create policy "anon inserts" on ${t} for insert to anon with check (true);`,
+    '',
+  ].join('\n');
 }
 
 // ---- The export -----------------------------------------------------------

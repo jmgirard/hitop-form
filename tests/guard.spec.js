@@ -12,6 +12,10 @@
 //       text, unparsable, http: to a host other than 127.0.0.1 or localhost
 //       (near misses included), or of another scheme; an https: url and an
 //       http: url to 127.0.0.1 or localhost are accepted
+//   G8: a supabase store is refused by name when its url fails the G7 rule,
+//       its key is missing, empty or not text, or its table is missing or
+//       not a lower-case Postgres name (a capital, a leading digit, a
+//       hyphen, the empty string, 64 characters); four table forms accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -107,7 +111,7 @@ const REFUSED_STORES = [
   {
     name: 'an unknown kind',
     store: { kind: 'ftp', url: 'https://example.com/hook' },
-    names: 'its kind is "ftp", and this page knows only "webhook".',
+    names: 'its kind is "ftp", and this page knows only "webhook", "supabase".',
   },
   { name: 'a missing url', store: { kind: 'webhook' }, names: 'it names no url.' },
   { name: 'a url that is not text', store: { kind: 'webhook', url: 7 }, names: 'its url is not text.' },
@@ -132,6 +136,22 @@ const REFUSED_STORES = [
     store: { kind: 'webhook', url: 'https://user:pass@example.com/hook' },
     names: 'its url must not carry a user name or password, and it is "https://user:pass@example.com/hook".',
   },
+  // G8: the supabase kind. Its url takes the webhook rule; its key and its
+  // table have rules of their own.
+  {
+    name: 'a supabase store with an http: url to another host',
+    store: { kind: 'supabase', url: 'http://example.supabase.co', key: 'k', table: 'responses' },
+    names: 'its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is "http://example.supabase.co".',
+  },
+  { name: 'a supabase store with no key', store: { kind: 'supabase', url: 'https://example.supabase.co', table: 'responses' }, names: 'it names no key.' },
+  { name: 'a supabase store whose key is empty', store: { kind: 'supabase', url: 'https://example.supabase.co', key: '  ', table: 'responses' }, names: 'its key is empty.' },
+  { name: 'a supabase store whose key is not text', store: { kind: 'supabase', url: 'https://example.supabase.co', key: 7, table: 'responses' }, names: 'its key is not text.' },
+  { name: 'a supabase store with no table', store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'k' }, names: 'it names no table.' },
+  ...['Responses', '1abc', 'a-b', '', 'a'.repeat(64)].map((table) => ({
+    name: `a supabase store whose table is ${JSON.stringify(table)}`,
+    store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'k', table },
+    names: `its table must be a lower-case name of up to 63 letters, digits and underscores, not starting with a digit, and it is ${JSON.stringify(table)}.`,
+  })),
 ];
 
 for (const probe of REFUSED_STORES) {
@@ -148,6 +168,19 @@ for (const url of ['https://example.com/hook', 'http://127.0.0.1:8123/record', '
   test(`a store at ${url} is accepted`, async ({ page }) => {
     await openForm(page, base(), {
       instrument: 'hitopbr', study: 'guard', participant: 'g7', store: { kind: 'webhook', url },
+    });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  });
+}
+
+// The accepted table forms: the shortest, one with digits and underscores
+// after the first letter, one starting with an underscore, and the longest.
+for (const table of ['a', 'r2_d2', '_x', 'a'.repeat(63)]) {
+  test(`a supabase store whose table is ${JSON.stringify(table)} is accepted`, async ({ page }) => {
+    await openForm(page, base(), {
+      instrument: 'hitopbr', study: 'guard', participant: 'g8',
+      store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'sb_publishable_x', table },
     });
     await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
     await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
