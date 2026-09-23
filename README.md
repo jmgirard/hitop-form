@@ -62,8 +62,8 @@ screen, and it is written only into the row or the file.
 The link opens a start screen with the instrument's instructions, the item
 count, and a "Begin" button. The start screen says where the answers go.
 With a send address, it names the address's host. Without one, it says the
-answers are saved to a file on this device. When the link carries no participant identifier, the start
-screen asks for one.
+answers are saved to a file on this device. When the link carries no
+participant identifier, the start screen asks for one.
 
 The items follow, 15 to a page, numbered 1, 2, 3 in the order they appear.
 Each item has one set of response options. Every item on a page must be
@@ -114,8 +114,13 @@ keys are the file's columns in the same order: `study`, `participant`,
 `instrument`, `form_build`, `submitted`, then one key per item. Its values
 are the same as the file's, with each answer as a JSON integer. The request
 is a POST with the body as `text/plain`, sent from the page's origin. The
-endpoint must answer with the JSON `{"ok":true}`. Any other answer makes the
-page save the file instead.
+endpoint must answer with the JSON `{"ok":true}` and with an
+`Access-Control-Allow-Origin` header that admits the page's origin, as an
+Apps Script web app does. Any other answer makes the page save the file
+instead. If the answer arrives after the page's 30-second limit, the page
+reports the send as unconfirmed, but the row still reaches the endpoint. The
+file saved in that case duplicates a stored row. The `submitted` value
+identifies the pair.
 
 A Google Apps Script web app bound to a Google Sheet is one such endpoint,
 and it needs only a Google account. Each row lands in the sheet as text. So
@@ -129,37 +134,49 @@ an identifier such as `007` keeps its zeros, and a value that starts with
    ```js
    // Appends one row per POST to the sheet named below, creating it on the
    // first row. The first row's keys become the header. Later rows follow the
-   // header's order, and a key the header lacks is added to it. Every cell is
-   // formatted as text before it is written, so "007" keeps its zeros. A value
-   // that starts with "=" is written behind a leading apostrophe, the sheet's
-   // mark for text, so "=1+1" stays the text =1+1 rather than a formula (the
-   // text format alone does not stop the formula). Answers {"ok":true}.
+   // header's order, and a key the header lacks is added to it. A body that
+   // is not an object, has more than MAX_KEYS keys, or has a key outside
+   // a-z, 0-9 and _ is refused, so no one can grow the header without limit
+   // or put a formula in it. Every cell is written behind a leading
+   // apostrophe, the sheet's mark for text, and formatted as text, so "007"
+   // keeps its zeros and "=1+1" stays the text =1+1 rather than a formula
+   // (the text format alone does not stop the formula). Answers {"ok":true},
+   // or {"ok":false} with the reason when the body is refused.
    const SHEET_NAME = 'Responses';
-   const asText = (v) => (v.startsWith('=') ? "'" + v : v);
+   const MAX_KEYS = 1000;
+   const asText = (v) => "'" + String(v);
+   const answer = (body) => ContentService.createTextOutput(JSON.stringify(body))
+     .setMimeType(ContentService.MimeType.JSON);
 
    function doPost(e) {
      const row = JSON.parse(e.postData.contents);
+     if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+       return answer({ ok: false, why: 'the body is not an object' });
+     }
+     const keys = Object.keys(row);
+     if (keys.length > MAX_KEYS) return answer({ ok: false, why: 'too many keys' });
+     const badKey = keys.find((k) => !/^[a-z0-9_]+$/.test(k));
+     if (badKey !== undefined) return answer({ ok: false, why: 'a key is not a column name' });
      const lock = LockService.getScriptLock();
-     lock.waitLock(30000);
+     lock.waitLock(10000);
      try {
        const book = SpreadsheetApp.getActiveSpreadsheet();
        const sheet = book.getSheetByName(SHEET_NAME) || book.insertSheet(SHEET_NAME);
        let header = sheet.getLastRow() === 0
          ? []
          : sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-       const missing = Object.keys(row).filter((k) => !header.includes(k));
+       const missing = keys.filter((k) => !header.includes(k));
        if (missing.length) {
          header = header.concat(missing);
-         sheet.getRange(1, 1, 1, header.length).setNumberFormat('@').setValues([header]);
+         sheet.getRange(1, 1, 1, header.length).setNumberFormat('@').setValues([header.map(asText)]);
        }
-       const values = header.map((k) => (k in row ? asText(String(row[k])) : ''));
+       const values = header.map((k) => (k in row ? asText(row[k]) : ''));
        const at = sheet.getLastRow() + 1;
        sheet.getRange(at, 1, 1, values.length).setNumberFormat('@').setValues([values]);
      } finally {
        lock.releaseLock();
      }
-     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
-       .setMimeType(ContentService.MimeType.JSON);
+     return answer({ ok: true });
    }
    ```
 
@@ -173,7 +190,11 @@ an identifier such as `007` keeps its zeros, and a value that starts with
    edit the deployment and pick "New version". The `/exec` URL stays the same.
 
 Anyone with the URL can post a row to the sheet, and only you can read it.
-The page never reads the sheet.
+The URL sits inside every study link you send out. So a participant, or
+anyone who sees a link, can post rows the page never made. If that matters
+for your study, compare `row.study` with your study name in `doPost` and
+refuse a mismatch. Screen the sheet before scoring. The page never reads
+the sheet.
 
 To download the responses, open the sheet's `Responses` tab and choose File,
 then Download, then Comma Separated Values (.csv). The file has one header

@@ -19,7 +19,12 @@
 //       unconfirmed: the CSV is saved to the device, the final screen says
 //       the send could not be confirmed and names the saved file, and that
 //       final screen does not say that no answer was sent
-//   T7: Finish is disabled from its first press until the outcome screen
+//   T7: every nav button is disabled from Finish's first press until the
+//       outcome screen
+//   T8: the committed Google Sheet download (tests/fixtures/sheet-hitopbr.csv,
+//       from the hand run the fixture README describes) has the HiTOP-BR
+//       fixture's header, and two rows whose participant codes are the text
+//       =1+1 and 007 and whose item columns equal the fixture's
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -150,10 +155,14 @@ for (const u of UNCONFIRMED) {
     const t0 = Date.now();
     const seen = await walkAll(page);
     if (u.hang) {
-      // T7: Finish is disabled while the send is pending.
+      // T7: every nav button, Back included, is disabled while the send is
+      // pending, and Finish reads Sending….
       const finish = nextButton(page);
       await expect(finish).toBeDisabled();
       await expect(finish).toHaveText('Sending…');
+      const buttons = page.locator('.nav button');
+      expect(await buttons.count()).toBeGreaterThan(1);
+      for (const b of await buttons.all()) await expect(b).toBeDisabled();
     }
     const download = await downloading;
     if (u.hang) expect(Date.now() - t0, 'the outcome waited for the limit').toBeGreaterThanOrEqual(SEND_TIMEOUT_MS);
@@ -172,3 +181,22 @@ for (const u of UNCONFIRMED) {
     expect(rows[1].slice(0, 4)).toEqual(['send', 'u1', exp.stem, exp.buildDate]);
   });
 }
+
+// T8: the sheet download keeps what the page posted. The Apps Script code
+// in the README writes every cell as text, so a participant code such as
+// =1+1 or 007 comes back unchanged.
+test('the committed sheet download has the fixture header and both participant codes as text', async () => {
+  const sheet = parseCsv(await readFixture('sheet-hitopbr.csv'));
+  const fixture = parseCsv(await readFixture('responses-hitopbr.csv'));
+  expect(sheet[0]).toEqual(fixture[0]);
+  expect(sheet).toHaveLength(3);
+  expect(sheet[1][0]).toBe('fixture');
+  expect(sheet[1][1]).toBe('=1+1');
+  expect(sheet[2][1]).toBe('007');
+  expect(sheet[2][0]).toBe('fixture');
+  for (const r of sheet.slice(1)) {
+    expect(r[2]).toBe('hitopbr');
+    expect(r[4]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(r.slice(5)).toEqual(fixture[1].slice(5));
+  }
+});

@@ -127,6 +127,11 @@ const REFUSED_STORES = [
     store: { kind: 'webhook', url },
     names: `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
   })),
+  {
+    name: 'a url with a user name and password',
+    store: { kind: 'webhook', url: 'https://user:pass@example.com/hook' },
+    names: 'its url must not carry a user name or password, and it is "https://user:pass@example.com/hook".',
+  },
 ];
 
 for (const probe of REFUSED_STORES) {

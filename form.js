@@ -8,9 +8,8 @@
 // only network request after the page's own files is the export fetch. With
 // a store, the requests after Finish are the POST to its address and any
 // redirect it answers with, and the CSV is saved only when that send is not
-// confirmed. (The link's own
-// contents, study, participant, module and store, are in the page's address,
-// which the host serving the page sees.)
+// confirmed. (The link's own contents, study, participant, module and store,
+// are in the page's address, which the host serving the page sees.)
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -110,7 +109,7 @@ export function checkStore(store) {
       `its kind is ${JSON.stringify(store.kind)}, and this page knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
     );
   }
-  return { ...store, url: checkStoreUrl(store.url, bad) };
+  return { kind: store.kind, url: checkStoreUrl(store.url, bad) };
 }
 
 // The address a store may name: `https:` to any host, or `http:` to this
@@ -130,6 +129,11 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
     throw bad(
       `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
     );
+  }
+  // fetch() refuses a URL that carries a user name or password, so such an
+  // address would make every send unconfirmed; refuse it here by name.
+  if (u.username !== '' || u.password !== '') {
+    throw bad(`its url must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
   }
   return u.href;
 }
@@ -314,6 +318,8 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(row),
         redirect: 'follow',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
         signal: controller.signal,
       });
     } catch (e) {
@@ -327,6 +333,9 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
     try {
       ack = await res.json();
     } catch {
+      if (controller.signal.aborted) {
+        return { confirmed: false, why: `no answer within ${Math.round(timeoutMs / 1000)} seconds` };
+      }
       return { confirmed: false, why: 'the endpoint did not answer with JSON' };
     }
     if (ack === null || typeof ack !== 'object' || ack.ok !== true) {
@@ -569,7 +578,9 @@ function runForm(root, config, exp, items) {
       formBuild: exp.buildDate,
       submitted,
       items,
-      answers,
+      // A copy: the radios stay live during a send, and the file saved on an
+      // unconfirmed send must hold the answers the row was posted with.
+      answers: new Map(answers),
     };
     if (!store) {
       finished = true;
