@@ -21,34 +21,11 @@ import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload,
+  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
 } from './helpers.mjs';
 
 const base = useTarget();
 const LEAD = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
-
-// RFC 4180: fields separated by commas, quoted when they hold a comma, a
-// quote or a line break, a quote inside doubled; rows end in CRLF.
-export function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
-      else if (ch === '"') quoted = false;
-      else field += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === ',') { row.push(field); field = ''; }
-    else if (ch === '\r' && text[i + 1] === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; }
-    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
-    else field += ch;
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  return rows;
-}
 
 // The fourth case has no fixture: it carries a comma, a double quote and a
 // non-ASCII character through the link and into the file, so the quoting

@@ -61,7 +61,7 @@
 <body>
 <main>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give one, the participant and the module folded into its address. Nothing here is stored or sent. Give each participant a link; the page saves a file to their device when they finish.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the address to send responses to folded into its address. This builder keeps nothing and transmits nothing. Give each participant a link. When they finish, the page sends their responses to the address you named, or, with no address, saves them as a file in their own downloads folder.</p>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -84,6 +84,10 @@
       <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the Module Builder saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
+    <label>Send responses to
+      <span class="hint">Optional. The https:// address of an endpoint that accepts each participant's responses as one JSON row, such as a Google Apps Script web app that appends to a sheet (see the README). Leave it empty and the page saves each participant's responses as a file in their own downloads folder instead.</span>
+      <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+    </label>
     <p role="alert" id="err"></p>
     <p>
       <button type="submit">Make the link</button>
@@ -94,7 +98,7 @@
   <p id="open" class="muted"></p>
 </main>
 <script type="module">
-  import { encodeConfig, checkModule } from './form.js';
+  import { encodeConfig, checkModule, checkStore } from './form.js';
 
   const f = document.getElementById('f');
   const err = document.getElementById('err');
@@ -134,6 +138,17 @@
         return;
       }
       config.module = m;
+    }
+    const storeUrl = data.get('store').trim();
+    if (storeUrl !== '') {
+      // The same check the form page runs on the link, so an address it
+      // would refuse is refused here, at the researcher.
+      try {
+        config.store = checkStore({ kind: 'webhook', url: storeUrl });
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
     }
     const url = new URL('./', window.location.href);
     url.search = `?c=${encodeConfig(config)}`;
