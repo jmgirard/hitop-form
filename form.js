@@ -82,7 +82,51 @@ export function parseLink(search) {
     delete config.participant;
   }
   if (config.module !== undefined) checkModule(config.module, config.instrument);
+  if (config.store !== undefined) config.store = checkStore(config.store);
   return config;
+}
+
+// ---- The store ------------------------------------------------------------
+
+// The store kinds this page can send to. A `webhook` is an HTTPS endpoint
+// that accepts a POST of one JSON row and answers {"ok":true}.
+export const STORE_KINDS = ['webhook'];
+
+// A store as the link carries it: `{ kind, url }`. Returns a copy whose url
+// is the parsed address's string form, or throws naming the fault. link.html
+// runs the same check before it builds a link.
+export function checkStore(store) {
+  const bad = (why) => new Error(`The study link's store could not be used: ${why}`);
+  if (store === null || typeof store !== 'object' || Array.isArray(store)) {
+    throw bad('it is not an object.');
+  }
+  if (!STORE_KINDS.includes(store.kind)) {
+    throw bad(
+      `its kind is ${JSON.stringify(store.kind)}, and this page knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
+    );
+  }
+  return { ...store, url: checkStoreUrl(store.url, bad) };
+}
+
+// The address a store may name: `https:` to any host, or `http:` to this
+// machine (host exactly 127.0.0.1 or localhost), which the tests' recording
+// endpoint needs. Anything else is refused by name.
+export function checkStoreUrl(url, bad = (why) => new Error(`The store address could not be used: ${why}`)) {
+  if (url === undefined) throw bad('it names no url.');
+  if (typeof url !== 'string') throw bad('its url is not text.');
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    throw bad(`its url is not a web address: ${JSON.stringify(url)}.`);
+  }
+  const loopback = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
+  if (u.protocol !== 'https:' && !loopback) {
+    throw bad(
+      `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
+    );
+  }
+  return u.href;
 }
 
 // A module descriptor as write_module() writes it: `format` "1.0",
