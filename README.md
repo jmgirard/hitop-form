@@ -4,10 +4,10 @@ A static page that shows one of five questionnaires in the browser: the
 HiTOP-SR, the HiTOP-BR, or the PID-5 in its full (PID-5), short (PID-5-SF) or
 brief (PID-5-BF) form.
 When a participant finishes, the page sends their answers as one JSON row to
-an address the study link names. A Google Apps Script web app that appends
-to a Google Sheet is one such address. When the link names no address, the
-page saves the answers to the participant's own device as one CSV file, and
-no answer is sent anywhere. It is built for studies that collect responses
+the store the study link names: a web address, such as a Google Apps Script
+web app that appends to a Google Sheet, or a table in a Supabase project.
+When the link names no store, the page saves the answers to the
+participant's own device as one CSV file, and no answer is sent anywhere. It is built for studies that collect responses
 without a survey platform, and it scores nothing: scoring is the job of the
 [hitop](https://jmgirard.github.io/hitop/) R package.
 
@@ -36,24 +36,30 @@ the form:
    [Module Builder](https://jmgirard.github.io/hitop-builder/) saved beside
    your form. The page then shows only the module's items. When the
    descriptor records a printed order, the items follow it.
-5. Optionally give an address to send responses to. It is the `https://`
-   address of an endpoint that accepts one JSON row per participant. The web
-   app in [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
-   below is one. The builder refuses an address that is not `https://`, with
-   one exception for local testing: `http://` to `127.0.0.1` or `localhost`.
-   Leave it empty and the page saves a file instead.
+5. Choose where responses go. "A file on the participant's device" is the
+   default: the page saves a file and sends nothing. "A web address" is the
+   `https://` address of an endpoint that accepts one JSON row per
+   participant. The web app in
+   [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
+   below is one. "A Supabase table" takes the project URL, its publishable
+   key and a table name, as
+   [Send responses to Supabase](#send-responses-to-supabase) describes. The
+   builder refuses an address that is not `https://`, with one exception
+   for local testing: `http://` to `127.0.0.1` or `localhost`. A table
+   name must be lower-case letters, digits and underscores, up to 63 of
+   them, and its first character must not be a digit.
 
 Press "Make the link". The link carries the instrument, the study, the
-participant, the module and the address folded into its address, so it needs
+participant, the module and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
 a module descriptor is a few hundred characters long. If a mail client or a
 course system truncates it, the page reports that the link cannot be read.
 
 The page's host, GitHub Pages, sees the address when the page is requested.
 So the study name, the participant identifier, the module composition and
-the send address reach that host's request logs. The answers never do: with
-a send address they go to that address and nowhere else, and without one
-they stay on the participant's device. If the identifier must not reach any
+the store, a Supabase key included, reach that host's request logs. The
+answers never do: with a store they go to that store and nowhere else, and
+without one they stay on the participant's device. If the identifier must not reach any
 server, leave it out of the link. The participant then types it on the start
 screen, and it is written only into the row or the file.
 
@@ -75,12 +81,13 @@ The last page ends with "Finish". Until it is pressed the answers live only
 in the open page. If the participant reloads or closes the page, the browser
 asks first. A reload starts the form over.
 
-With a send address, pressing Finish posts the answers to it and waits up to
-30 seconds for the endpoint to confirm. The button is disabled while it
+With a store, pressing Finish posts the answers to it and waits up to
+30 seconds for it to confirm. The button is disabled while it
 waits, so a second press sends nothing. On a confirmed send the page says
 that the responses were sent to the study team, and no file is saved. Every
-other outcome is unconfirmed: an error status, an answer that is not a
-confirmation, a lost connection, or no answer within the limit. Then the
+other outcome is unconfirmed: an error status, an answer from a web address
+that is not a confirmation, a lost connection, or no answer within the
+limit. Then the
 page saves the CSV file described below and says that the send could not be
 confirmed. It names the file, so the participant can send it by hand.
 
@@ -206,6 +213,61 @@ columns as the next section describes. The file
 `tests/fixtures/sheet-hitopbr.csv` is one such download, from two HiTOP-BR
 walks against a web app deployed from the code above.
 
+## Send responses to Supabase
+
+A Supabase project holds a Postgres database behind a REST API, and a free
+project needs only an account. The page inserts each participant's
+responses as one row of a table you create, with one column per item. The
+request goes to `<project URL>/rest/v1/<table>` with the project's key in
+the `apikey` header and the row as JSON, and asks for no row back. A 2xx
+answer confirms the send. Anything else makes the page save the file
+instead.
+
+1. Create a project at <https://supabase.com/dashboard>. Pick a region
+   where your study's data is allowed to be stored.
+2. In [link.html](https://jmgirard.github.io/hitop-form/link.html), choose
+   the instrument (and paste the module descriptor, if any), set "Send
+   responses to" to "A Supabase table", and fill in the three fields:
+   - Project URL: in the dashboard, open Project Settings, then Data API.
+     It looks like `https://abcdefghijkl.supabase.co`.
+   - Publishable key: Project Settings, then API Keys. It starts with
+     `sb_publishable_`. A project made before the new keys shows a legacy
+     `anon` key instead, a long token with two dots. The page accepts
+     either. Never put a secret or service-role key in a study link. The
+     link is public to everyone who receives it.
+   - Table name: a lower-case name such as `responses`.
+3. Press "Make the link". The SQL for the table appears under the link.
+   Copy it, open the dashboard's SQL Editor, paste it in and run it. The
+   SQL creates the table with the five study columns and one integer column
+   per item, in the order the form shows them. It then turns on row-level
+   security, grants insert to the `anon` role, and adds one policy that
+   lets that role insert. With the publishable key, the API can then insert
+   rows and nothing else. A select returns no rows, and an update or a
+   delete changes none.
+4. Send the link to the participants.
+
+The table's columns are fixed by the SQL, so a link for a different
+instrument or module needs a table of its own. A row whose keys do not
+match the columns is refused by the API, and the page then saves the file.
+
+A free project is paused after a week without activity. A paused project
+refuses every send, so each participant's page saves the file instead.
+Open the dashboard and restore the project before a study starts, and look
+at it during a slow study. Or move the project to a paid plan for the
+study's duration.
+
+To download the responses, open the Table Editor, choose the table, and
+use its export to CSV. The file has one header row in the SQL's column order
+and one row per participant. Read it in R as the previous section shows,
+with every column kept as text. Then score the item columns as the next
+section describes. The file `tests/fixtures/supabase-hitopbr.csv` is one
+such export, from a HiTOP-BR walk against a table made from the builder's
+SQL.
+
+Anyone with the link can insert rows: the key and the table name sit inside
+every study link. Screen the table before scoring, as with a sheet. The page
+never reads the table.
+
 ## Scoring
 
 Read the files into R and score them with the hitop package.
@@ -242,12 +304,12 @@ npx playwright test
 | Spec | What it checks |
 |---|---|
 | `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order. The start screen's wording with and without a send address |
-| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address the page would refuse, and a link built with one posts at Finish |
+| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
 | `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
-| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. Against a recording endpoint the tests start themselves |
-| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, and a send address outside `https://` or the loopback exception the tests use |
-| `tests/network.spec.js` | Without a send address, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with |
+| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash, one preflight per walk, and a 401 or a refused connection saving the file. Against a recording endpoint the tests start themselves |
+| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, and a Supabase store with a bad address, key or table name |
+| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
 workflow runs the suite on every pull request and every push to `main`,
