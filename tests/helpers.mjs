@@ -99,6 +99,16 @@ export function webhook(store, p = '/record') {
   return { kind: 'webhook', url: store.url(p) };
 }
 
+// A supabase store whose project URL is a path on the recording endpoint
+// (`/project` by default, so the insert goes to /project/rest/v1/<table>).
+export function supabase(store, { key = 'sb_publishable_test', table = 'responses', p = '/project' } = {}) {
+  return { kind: 'supabase', url: store.url(p), key, table };
+}
+
+// A key of the legacy anon shape: three dot-separated segments. Not a real
+// token; only its shape is read.
+export const JWT_SHAPED_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.c2lnbmF0dXJl';
+
 export function formUrl(base, config) {
   return `${base}?c=${encodeConfig(config)}`;
 }

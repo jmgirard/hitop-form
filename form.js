@@ -341,24 +341,50 @@ export function buildRow({ study, participant, instrument, formBuild, submitted,
   return row;
 }
 
-// Posts one row to the store and says whether the store confirmed it. The
-// request is a CORS simple request (POST, text/plain, no other header of the
-// page's own), so an endpoint that answers no preflight, an Apps Script web
-// app among them, still receives it; redirects are followed, as such an app
-// answers through one. A send is confirmed only by a 2xx status whose body
-// is JSON with `ok` equal to true: an Apps Script web app answers 200 with
-// an HTML page when its doPost throws, and a 2xx alone would count that as
-// stored. Anything else, a lost connection and the time limit included, is
+// A key with the three dot-separated segments of a JWT: a legacy anon key.
+// Supabase reads such a key from the Authorization header too, and refuses
+// a publishable key there, since it is not a JWT.
+export function isJwtShaped(key) {
+  return /^[^.\s]+\.[^.\s]+\.[^.\s]+$/.test(key);
+}
+
+// The request a store takes: its address and the page's own headers.
+export function sendRequest(store) {
+  if (store.kind === 'supabase') {
+    const headers = { apikey: store.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+    if (isJwtShaped(store.key)) headers.Authorization = `Bearer ${store.key}`;
+    return { url: `${store.url.replace(/\/+$/, '')}/rest/v1/${store.table}`, headers };
+  }
+  return { url: store.url, headers: { 'Content-Type': 'text/plain;charset=utf-8' } };
+}
+
+// Posts one row to the store and says whether the store confirmed it.
+//
+// To a webhook the request is a CORS simple request (POST, text/plain, no
+// other header of the page's own), so an endpoint that answers no preflight,
+// an Apps Script web app among them, still receives it; redirects are
+// followed, as such an app answers through one. A send is confirmed only by
+// a 2xx status whose body is JSON with `ok` equal to true: an Apps Script
+// web app answers 200 with an HTML page when its doPost throws, and a 2xx
+// alone would count that as stored.
+//
+// To a supabase store the request is an insert through the project's REST
+// API, with the key in the headers, so the browser sends a preflight first,
+// which the project answers. The insert asks for no row back, and a 2xx
+// status alone confirms it: the API answers 201 with an empty body.
+//
+// Anything else, a lost connection and the time limit included, is
 // unconfirmed, and the caller falls back to the device.
 export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, fetchFn = fetch } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { url, headers } = sendRequest(store);
   try {
     let res;
     try {
-      res = await fetchFn(store.url, {
+      res = await fetchFn(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        headers,
         body: JSON.stringify(row),
         redirect: 'follow',
         credentials: 'omit',
@@ -372,6 +398,7 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
       };
     }
     if (!res.ok) return { confirmed: false, why: `the endpoint answered HTTP ${res.status}` };
+    if (store.kind === 'supabase') return { confirmed: true };
     let ack;
     try {
       ack = await res.json();

@@ -15,10 +15,14 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+// The Authorization header is not covered by a wildcard, so the headers a
+// supabase send carries are listed by name. Max-Age 0: no browser caches
+// the preflight, so every walk's OPTIONS reaches the log.
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST, GET, OPTIONS',
-  'access-control-allow-headers': '*',
+  'access-control-allow-headers': 'apikey, authorization, content-type, prefer',
+  'access-control-max-age': '0',
 };
 
 // The paths a store test can name, and their answers:
@@ -28,9 +32,12 @@ const CORS = {
 //                  when doPost throws
 //   /status/<nnn>  that status with a text body
 //   /hang/...      held open, never answered
+//   .../rest/v1/<table>  the Supabase REST insert: 201 with an empty body,
+//                  as the API answers an insert with Prefer: return=minimal;
+//                  a table named status_<nnn> answers that status instead
 // Every answer carries Access-Control-Allow-Origin: *, and OPTIONS is
-// answered 204 with the CORS headers, so a preflight the browser sent would
-// succeed and be recorded rather than fail the send for a second reason.
+// answered 204 with the CORS headers, so a preflight the browser sent
+// succeeds and is recorded rather than failing the send for a second reason.
 export async function serveStore() {
   const requests = [];
   const held = new Set();
@@ -72,6 +79,13 @@ export async function serveStore() {
     const status = /^\/status\/(\d{3})$/.exec(url.pathname);
     if (status) {
       res.writeHead(Number(status[1]), { ...CORS, 'content-type': 'text/plain' }).end(`status ${status[1]}`);
+      return;
+    }
+    const rest = /\/rest\/v1\/([a-z_][a-z0-9_]*)$/.exec(url.pathname);
+    if (rest) {
+      const named = /^status_(\d{3})$/.exec(rest[1]);
+      if (named) res.writeHead(Number(named[1]), { ...CORS, 'content-type': 'application/json' }).end('{}');
+      else res.writeHead(201, CORS).end();
       return;
     }
     res.writeHead(404, { ...CORS, 'content-type': 'text/plain' }).end('not found');

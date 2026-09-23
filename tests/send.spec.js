@@ -25,6 +25,14 @@
 //       from the hand run the fixture README describes) has the HiTOP-BR
 //       fixture's header, and two rows whose participant codes are the text
 //       =1+1 and 007 and whose item columns equal the fixture's
+//   T9: a supabase store: three HiTOP-BR walks (a JWT-shaped key, a
+//       publishable key, a project URL ending in a slash) each post one
+//       insert to <url>/rest/v1/<table> with apikey, Content-Type
+//       application/json and Prefer return=minimal, Authorization: Bearer
+//       only for the JWT shape, the fixture body, after one answered
+//       OPTIONS preflight; a 201 with no body is confirmed
+//  T10: a supabase store answering 401 and one refusing the connection are
+//       each unconfirmed: the file is saved and the screen says so
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -33,8 +41,8 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, fetchExport, readDescriptor,
-  readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS,
+  useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
+  fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -110,28 +118,88 @@ for (const w of WALKS) {
       expect(recorded.filter((r) => r.method === 'OPTIONS'), 'no OPTIONS').toEqual([]);
 
       // T1: the body.
-      const row = JSON.parse(sent[0].body);
-      expect(Object.keys(row)).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
-      expect(Object.keys(row), 'the fixture header').toEqual(fixture[0]);
-      const values = fixture[1];
-      for (let i = 0; i < fixture[0].length; i++) {
-        const key = fixture[0][i];
-        if (key === 'submitted') {
-          expect(row.submitted).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
-          const t = Date.parse(row.submitted);
-          expect(t).toBeGreaterThanOrEqual(Math.floor(t0 / 1000) * 1000);
-          expect(t).toBeLessThanOrEqual(t1);
-        } else if (key === 'form_build') {
-          expect(row.form_build).toBe(exp.buildDate);
-        } else if (i < LEAD.length) {
-          expect(row[key], key).toBe(values[i]);
-        } else {
-          expect(Number.isInteger(row[key]), `${key} is a JSON integer`).toBe(true);
-          expect(row[key], key).toBe(Number(values[i]));
-        }
-      }
+      expectBody(JSON.parse(sent[0].body), { fixture, exp, seen, t0, t1 });
     });
   }
+}
+
+// The posted body against the CSV fixture of the same walk: the keys are the
+// fixture's header (the five lead fields, then the items in the order seen),
+// submitted is a UTC timestamp inside the walk, form_build is the export's
+// build date, and every item value is the fixture's as a JSON integer.
+function expectBody(row, { fixture, exp, seen, t0, t1 }) {
+  expect(Object.keys(row)).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
+  expect(Object.keys(row), 'the fixture header').toEqual(fixture[0]);
+  const values = fixture[1];
+  for (let i = 0; i < fixture[0].length; i++) {
+    const key = fixture[0][i];
+    if (key === 'submitted') {
+      expect(row.submitted).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+      const t = Date.parse(row.submitted);
+      expect(t).toBeGreaterThanOrEqual(Math.floor(t0 / 1000) * 1000);
+      expect(t).toBeLessThanOrEqual(t1);
+    } else if (key === 'form_build') {
+      expect(row.form_build).toBe(exp.buildDate);
+    } else if (i < LEAD.length) {
+      expect(row[key], key).toBe(values[i]);
+    } else {
+      expect(Number.isInteger(row[key]), `${key} is a JSON integer`).toBe(true);
+      expect(row[key], key).toBe(Number(values[i]));
+    }
+  }
+}
+
+// T9: the supabase kind. Three HiTOP-BR walks: a legacy key of JWT shape, a
+// publishable key, and a publishable key with the project URL ending in a
+// slash. Each posts once to <url>/rest/v1/<table> (the slash not doubled)
+// with the four headers as literals, Authorization only for the JWT shape,
+// the fixture body, and one OPTIONS preflight the endpoint answered.
+const SUPABASE_WALKS = [
+  { name: 'a JWT-shaped key', key: JWT_SHAPED_KEY, p: '/project', bearer: true },
+  { name: 'a publishable key', key: 'sb_publishable_abc123', p: '/project', bearer: false },
+  { name: 'a project URL ending in a slash', key: 'sb_publishable_abc123', p: '/project/', bearer: false },
+];
+
+for (const w of SUPABASE_WALKS) {
+  test(`supabase with ${w.name}: one insert with the literal headers and the fixture body, after one preflight`, async ({ page }) => {
+    const exp = await fetchExport('hitopbr');
+    const fixture = parseCsv(await readFixture('responses-hitopbr.csv'));
+    const downloads = [];
+    page.on('download', (d) => downloads.push(d));
+    const s = supabase(store(), { key: w.key, table: 'hitopbr_responses', p: w.p });
+
+    const from = store().requests.length;
+    const t0 = Date.now();
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', participant: 'p001', store: s });
+    await begin(page);
+    const seen = await walkAll(page);
+    await expect(page.locator('h1')).toHaveText('Thank you');
+    const t1 = Date.now();
+    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
+
+    const recorded = since(from);
+    const sent = recorded.filter((r) => r.method === 'POST');
+    expect(sent.length, 'one POST').toBe(1);
+    expect(sent[0].server).toBe('store');
+    expect(sent[0].path).toBe('/project/rest/v1/hitopbr_responses');
+
+    const { headers } = sent[0];
+    expect(headers.apikey).toBe(w.key);
+    expect(headers['content-type']).toBe('application/json');
+    expect(headers.prefer).toBe('return=minimal');
+    if (w.bearer) expect(headers.authorization).toBe(`Bearer ${w.key}`);
+    else expect(headers.authorization, 'no Authorization header with a key that is not a JWT').toBeUndefined();
+
+    const preflights = recorded.filter((r) => r.method === 'OPTIONS');
+    expect(preflights.map((r) => r.path), 'one preflight, to the insert address').toEqual(['/project/rest/v1/hitopbr_responses']);
+    // The preflight was answered: the POST that followed it is the proof,
+    // and its request line asked for the page's own headers.
+    expect(preflights[0].headers['access-control-request-method']).toBe('POST');
+    expect(preflights[0].headers['access-control-request-headers']).toContain('apikey');
+
+    expectBody(JSON.parse(sent[0].body), { fixture, exp, seen, t0, t1 });
+  });
 }
 
 // T6: each unconfirmed outcome saves the file and says so.
@@ -179,6 +247,46 @@ for (const u of UNCONFIRMED) {
     const rows = parseCsv(await readFile(await download.path(), 'utf8'));
     expect(rows[0]).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
     expect(rows[1].slice(0, 4)).toEqual(['send', 'u1', exp.stem, exp.buildDate]);
+  });
+}
+
+// T10: a supabase store that answers 401 (a wrong key, or a table the key
+// cannot insert into) and one whose connection is refused are each
+// unconfirmed: the file is saved and the screen says so.
+const SUPABASE_UNCONFIRMED = [
+  { name: 'a 401', make: () => supabase(store(), { table: 'status_401' }), why: 'answered HTTP 401' },
+  {
+    name: 'a refused connection',
+    make: async () => ({ kind: 'supabase', url: `http://127.0.0.1:${await unusedPort()}`, key: 'sb_publishable_x', table: 'responses' }),
+    why: 'the connection failed',
+  },
+];
+
+for (const u of SUPABASE_UNCONFIRMED) {
+  test(`a supabase store with ${u.name} is unconfirmed: the file is saved and the screen says so`, async ({ page }) => {
+    const exp = await fetchExport('hitopbr');
+    const from = store().requests.length;
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'send', participant: 'u2', store: await u.make() });
+    await begin(page);
+    const downloading = awaitDownload(page);
+    const seen = await walkAll(page);
+    const download = await downloading;
+
+    await expect(page.locator('h1')).toHaveText('Thank you');
+    const done = page.locator('.done');
+    await expect(done).toContainText('The send to the study team could not be confirmed');
+    await expect(done).toContainText(u.why);
+    await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+    if (u.name === 'a 401') {
+      // The 401 was the endpoint's answer to the insert, not to the preflight.
+      expect(since(from).map((r) => [r.method, r.path])).toEqual([
+        ['OPTIONS', '/project/rest/v1/status_401'], ['POST', '/project/rest/v1/status_401'],
+      ]);
+    }
+
+    const rows = parseCsv(await readFile(await download.path(), 'utf8'));
+    expect(rows[0]).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
+    expect(rows[1].slice(0, 4)).toEqual(['send', 'u2', exp.stem, exp.buildDate]);
   });
 }
 

@@ -20,10 +20,12 @@
 //   N5: the same walk with a store that answers 302 to a third origin: after
 //       Finish the set equals the three plus the store URL plus the redirect
 //       target
+//   N6: the same walk with a supabase store: after Finish the set equals
+//       the three plus the insert address under the project URL
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, fetchExport, readDescriptor,
+  useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
   exportUrl, awaitDownload, answerPage, currentPage, nextButton,
 } from './helpers.mjs';
 
@@ -83,13 +85,17 @@ async function walkToLast(page) {
   }
 }
 
-for (const [label, storePath, extra] of [
-  ['N4', '/record', () => []],
-  ['N5', '/redirect', () => [`${store().targetOrigin}/record`]],
+for (const [label, storePath, extra, make] of [
+  ['N4', '/record', () => [], (s) => webhook(s, '/record')],
+  ['N5', '/redirect', () => [`${store().targetOrigin}/record`], (s) => webhook(s, '/redirect')],
+  // N6: a supabase store: the one further address is the insert's, which
+  // the preflight and the POST share.
+  ['N6', '/project/rest/v1/net_responses', () => [], (s) => supabase(s, { table: 'net_responses' })],
 ]) {
   test(`${label}: the HiTOP-BR walk with a store through ${storePath} requests the store only at Finish`, async ({ page, context }) => {
     await allowLocalStore(context);
-    const s = webhook(store(), storePath);
+    const s = make(store());
+    const sent = store().url(storePath);
     const urls = record(page);
     await openForm(page, base(), { instrument: 'hitopbr', study: 'net', participant: label.toLowerCase(), store: s });
     await begin(page);
@@ -98,7 +104,7 @@ for (const [label, storePath, extra] of [
     await nextButton(page).click();
     await expect(page.locator('h1')).toHaveText('Thank you');
     await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
-    expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), s.url, ...extra()].sort());
+    expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, ...extra()].sort());
   });
 }
 
