@@ -32,9 +32,10 @@ const CORS = {
 //                  when doPost throws
 //   /status/<nnn>  that status with a text body
 //   /hang/...      held open, never answered
-//   .../rest/v1/<table>  the Supabase REST insert: 201 with an empty body,
-//                  as the API answers an insert with Prefer: return=minimal;
-//                  a table named status_<nnn> answers that status instead
+//   .../rest/v1/<table>  the Supabase REST insert: any request but OPTIONS
+//                  is answered 201 with an empty body, as the API answers
+//                  an insert with Prefer: return=minimal; a table named
+//                  status_<nnn> answers that status with a {} body instead
 // Every answer carries Access-Control-Allow-Origin: *, and OPTIONS is
 // answered 204 with the CORS headers, so a preflight the browser sent
 // succeeds and is recorded rather than failing the send for a second reason.

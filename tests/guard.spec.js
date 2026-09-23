@@ -15,7 +15,8 @@
 //   G8: a supabase store is refused by name when its url fails the G7 rule,
 //       its key is missing, empty or not text, or its table is missing or
 //       not a lower-case Postgres name (a capital, a leading digit, a
-//       hyphen, the empty string, 64 characters); four table forms accepted
+//       hyphen, the empty string, 64 characters); four table forms and a
+//       url ending in /rest/v1/ accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -175,7 +176,7 @@ for (const url of ['https://example.com/hook', 'http://127.0.0.1:8123/record', '
 }
 
 // A project URL pasted with the REST path the dashboard shows is accepted,
-// and the start screen names the same host either way.
+// and the start screen names the project host.
 test('a supabase store whose url ends in /rest/v1/ is accepted', async ({ page }) => {
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'guard', participant: 'g8',

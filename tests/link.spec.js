@@ -8,7 +8,8 @@
 //   L4: a "Send responses to" address the form page would refuse is refused
 //       here, naming the fault, and no link is built; the web-address kind
 //       with an empty address is refused too; the file kind builds a link
-//       with no store whatever the hidden fields hold
+//       with no store even when the hidden address field holds an
+//       invalid address
 //   L5: a link built with the address set opens a form whose Finish posts
 //       the responses to that address
 //   L6: a Supabase store the form page would refuse (its URL, its key, its
@@ -125,7 +126,7 @@ test('the web-address kind with an empty address is refused, naming the fault', 
   expect(href, 'no link is built').toBe('');
 });
 
-test('the file kind builds a link with no store, whatever the hidden fields hold', async ({ page }) => {
+test('the file kind builds a link with no store even when the hidden address field is invalid', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');

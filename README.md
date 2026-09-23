@@ -247,8 +247,10 @@ instead.
 4. Send the link to the participants.
 
 The table's columns are fixed by the SQL, so a link for a different
-instrument or module needs a table of its own. A row whose keys do not
-match the columns is refused by the API, and the page then saves the file.
+instrument or module needs a table of its own. A row with a key the table
+has no column for is refused by the API, and the page then saves the file.
+A row that lacks some of the table's columns is stored with those columns
+empty, because the SQL puts no constraint on any column.
 
 A free project is paused after a week without activity. A paused project
 refuses every send, so each participant's page saves the file instead.
@@ -311,7 +313,7 @@ npx playwright test
 | `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
 | `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
-| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash, one preflight per walk, and a 401 or a refused connection saving the file. Against a recording endpoint the tests start themselves |
+| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Against a recording endpoint the tests start themselves |
 | `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, and a Supabase store with a bad address, key or table name |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL |
 

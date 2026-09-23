@@ -25,12 +25,13 @@
 //       from the hand run the fixture README describes) has the HiTOP-BR
 //       fixture's header, and two rows whose participant codes are the text
 //       =1+1 and 007 and whose item columns equal the fixture's
-//   T9: a supabase store: three HiTOP-BR walks (a JWT-shaped key, a
-//       publishable key, a project URL ending in a slash) each post one
-//       insert to <url>/rest/v1/<table> with apikey, Content-Type
-//       application/json and Prefer return=minimal, Authorization: Bearer
-//       only for the JWT shape, the fixture body, after one answered
-//       OPTIONS preflight; a 201 with no body is confirmed
+//   T9: a supabase store: four HiTOP-BR walks (a JWT-shaped key, a
+//       publishable key, a project URL ending in a slash, one ending in
+//       /rest/v1/) each post one insert to <url>/rest/v1/<table> with
+//       apikey, Content-Type application/json and Prefer return=minimal,
+//       Authorization: Bearer only for the JWT shape, the fixture body,
+//       after one answered OPTIONS preflight; a 201 with no body is
+//       confirmed
 //  T10: a supabase store answering 401 and one refusing the connection are
 //       each unconfirmed: the file is saved and the screen says so
 //  T11: the committed Supabase export (tests/fixtures/supabase-hitopbr.csv)
@@ -152,11 +153,13 @@ function expectBody(row, { fixture, exp, seen, t0, t1 }) {
   }
 }
 
-// T9: the supabase kind. Three HiTOP-BR walks: a legacy key of JWT shape, a
-// publishable key, and a publishable key with the project URL ending in a
-// slash. Each posts once to <url>/rest/v1/<table> (the slash not doubled)
-// with the four headers as literals, Authorization only for the JWT shape,
-// the fixture body, and one OPTIONS preflight the endpoint answered.
+// T9: the supabase kind. Four HiTOP-BR walks: a legacy key of JWT shape, a
+// publishable key, a publishable key with the project URL ending in a
+// slash, and one with the URL ending in /rest/v1/ (the suffix dropped).
+// Each posts once to <url>/rest/v1/<table> (the slash not doubled) with
+// apikey, Content-Type and Prefer as literals, Authorization only for the
+// JWT shape, the fixture body, and one OPTIONS preflight the endpoint
+// answered.
 const SUPABASE_WALKS = [
   { name: 'a JWT-shaped key', key: JWT_SHAPED_KEY, p: '/project', bearer: true },
   { name: 'a publishable key', key: 'sb_publishable_abc123', p: '/project', bearer: false },

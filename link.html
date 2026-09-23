@@ -61,7 +61,7 @@
 <body>
 <main>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and transmits nothing. For a Supabase table it reads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. For a Supabase table it downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -100,7 +100,7 @@
     </div>
     <div id="supabaseFields" hidden>
       <label>Project URL
-        <span class="hint">From the project's API settings.</span>
+        <span class="hint">In the dashboard: Project Settings, then Data API.</span>
         <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
       </label>
       <label>Publishable key
@@ -122,7 +122,7 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with one column per item in the order the form shows them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns and one column per item in the order the form shows them, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
