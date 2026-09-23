@@ -16,6 +16,8 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export const FIXTURES = path.join(ROOT, 'tests', 'fixtures');
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const PAGE_SIZE = 15;
+// The page's limit on a send, stated here rather than read from form.js.
+export const SEND_TIMEOUT_MS = 30 * 1000;
 
 export function exportUrl(instrument) {
   return `${EXPORT_BASE}${instrument}.json`;
@@ -169,6 +171,29 @@ export function awaitDownload(page) {
   return page.waitForEvent('download', { timeout: 110 * 1000 });
 }
 
+// RFC 4180: fields separated by commas, quoted when they hold a comma, a
+// quote or a line break, a quote inside doubled; rows end in CRLF.
+export function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\r' && text[i + 1] === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
 export function nextButton(page) {
   return page.locator('.nav button').last();
 }
@@ -180,15 +205,17 @@ export async function currentPage(page) {
 }
 
 // Walks every page from the first, answering each, collecting the items seen,
-// and pressing Finish on the last. Returns the items in rendered order.
-export async function walkAll(page) {
+// and pressing Finish on the last (with a double click when `finish` is
+// 'dblclick'). Returns the items in rendered order.
+export async function walkAll(page, { finish = 'click' } = {}) {
   const seen = [];
   for (;;) {
     const { page: p, of } = await currentPage(page);
     seen.push(...(await readItems(page)));
     await answerPage(page);
     if (p === of) {
-      await nextButton(page).click();
+      if (finish === 'dblclick') await nextButton(page).dblclick();
+      else await nextButton(page).click();
       break;
     }
     await nextButton(page).click();

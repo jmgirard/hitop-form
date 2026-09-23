@@ -2,10 +2,14 @@
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
-// items to a page, and saves one CSV to the participant's device. No answer
-// is transmitted: the only network request after the page's own files is the
-// export fetch. (The link's own contents, study, participant and module, are
-// in the page's address, which the host serving the page sees.)
+// items to a page, and at Finish either posts the responses as one JSON row
+// to the store the link names or, with no store, saves them as one CSV to
+// the participant's device. With no store, no answer is transmitted: the
+// only network request after the page's own files is the export fetch. With
+// a store, the one request after Finish is the POST to its address, and the
+// CSV is saved only when that send is not confirmed. (The link's own
+// contents, study, participant, module and store, are in the page's address,
+// which the host serving the page sees.)
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -276,6 +280,63 @@ export function fileName({ study, participant, instrument, submitted }) {
   return `${safe(instrument)}_${safe(study)}_${safe(participant)}_${stamp}.csv`;
 }
 
+// ---- The send -------------------------------------------------------------
+
+export const SEND_TIMEOUT_MS = 30_000;
+
+// One JSON object per finished form: the five study fields, then one key per
+// item in the order the page showed them, each value the chosen option's
+// integer value. The same record buildCsv() writes.
+export function buildRow({ study, participant, instrument, formBuild, submitted, items, answers }) {
+  const row = { study, participant, instrument, form_build: formBuild, submitted };
+  for (const it of items) row[it.name] = answers.get(it.number);
+  return row;
+}
+
+// Posts one row to the store and says whether the store confirmed it. The
+// request is a CORS simple request (POST, text/plain, no other header of the
+// page's own), so an endpoint that answers no preflight, an Apps Script web
+// app among them, still receives it; redirects are followed, as such an app
+// answers through one. A send is confirmed only by a 2xx status whose body
+// is JSON with `ok` equal to true: an Apps Script web app answers 200 with
+// an HTML page when its doPost throws, and a 2xx alone would count that as
+// stored. Anything else, a lost connection and the time limit included, is
+// unconfirmed, and the caller falls back to the device.
+export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, fetchFn = fetch } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let res;
+    try {
+      res = await fetchFn(store.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(row),
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+    } catch (e) {
+      return {
+        confirmed: false,
+        why: e && e.name === 'AbortError' ? `no answer within ${Math.round(timeoutMs / 1000)} seconds` : 'the connection failed',
+      };
+    }
+    if (!res.ok) return { confirmed: false, why: `the endpoint answered HTTP ${res.status}` };
+    let ack;
+    try {
+      ack = await res.json();
+    } catch {
+      return { confirmed: false, why: 'the endpoint did not answer with JSON' };
+    }
+    if (ack === null || typeof ack !== 'object' || ack.ok !== true) {
+      return { confirmed: false, why: 'the endpoint did not confirm the send' };
+    }
+    return { confirmed: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function saveFile(name, text) {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -361,6 +422,9 @@ function runForm(root, config, exp, items) {
   let participant = config.participant;
   let page = 0;
   let finished = false;
+  let sending = false;
+  const store = config.store;
+  const storeHost = store ? new URL(store.url).host : null;
 
   // A reload or a back gesture would lose every answer, since they live only
   // in memory until Finish writes the file. The browser asks first.
@@ -395,7 +459,11 @@ function runForm(root, config, exp, items) {
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
       el('p', {
         class: 'muted',
-        text: `${items.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. Your answers are saved to this device as one file when you finish. No answer is sent anywhere.`,
+        text: `${items.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. ${
+          store
+            ? `When you finish, your answers are sent to the study team at ${storeHost}. If the send cannot be confirmed, they are saved as one file in this browser's downloads folder instead.`
+            : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.'
+        }`,
       }),
       ...(askParticipant
         ? [el('label', { class: 'field' }, ['Participant identifier', input])]
@@ -445,6 +513,7 @@ function runForm(root, config, exp, items) {
     const last = page === pageCount - 1;
 
     const advance = () => {
+      if (sending) return;
       const missing = slice.findIndex((it) => !answers.has(it.number));
       if (missing >= 0) {
         nodes.forEach((n, i) => n.classList.toggle('unanswered', !answers.has(slice[i].number)));
@@ -455,33 +524,41 @@ function runForm(root, config, exp, items) {
         nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
         return;
       }
-      if (last) finish();
+      if (last) finish(nav);
       else {
         page += 1;
         showPage();
       }
     };
     const back = () => {
+      if (sending) return;
       page -= 1;
       showPage();
     };
+    const nav = el('div', { class: 'nav' }, [
+      ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
+      el('span', { class: 'spacer' }),
+      el('button', { type: 'button', text: last ? 'Finish' : 'Next', onclick: advance }),
+    ]);
 
     root.replaceChildren(
       heading(title),
       el('p', { class: 'progress', text: `Page ${page + 1} of ${pageCount}` }),
       ...nodes,
       alert,
-      el('div', { class: 'nav' }, [
-        ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
-        el('span', { class: 'spacer' }),
-        el('button', { type: 'button', text: last ? 'Finish' : 'Next', onclick: advance }),
-      ]),
+      nav,
     );
     window.scrollTo(0, 0);
     focusHeading(root);
   }
 
-  function finish() {
+  // Finish is pressed. With no store: the file, then the saved screen. With
+  // a store: the nav buttons are disabled from this first press until an
+  // outcome screen shows, so a second press cannot send a second row; a
+  // confirmed send shows the sent screen and saves nothing; anything else
+  // saves the file and shows the unconfirmed screen naming it.
+  async function finish(nav) {
+    if (sending) return;
     // ISO-8601 in UTC, to the second: 2026-09-20T21:15:31Z.
     const submitted = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     const record = {
@@ -493,17 +570,51 @@ function runForm(root, config, exp, items) {
       items,
       answers,
     };
+    if (!store) {
+      finished = true;
+      showSaved(
+        saveCsv(record),
+        'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
+        'Please send that file to the study team the way they asked. No answer was sent from this page.',
+      );
+      return;
+    }
+    sending = true;
+    const finishButton = nav.querySelector('button:last-of-type');
+    for (const b of nav.querySelectorAll('button')) b.disabled = true;
+    finishButton.textContent = 'Sending…';
+    const outcome = await sendResponses(store, buildRow(record));
+    sending = false;
+    finished = true;
+    if (outcome.confirmed) {
+      root.replaceChildren(
+        heading('Thank you'),
+        el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
+        el('p', { text: 'You can close this page.' }),
+        versionLine(exp),
+      );
+      focusHeading(root);
+      return;
+    }
+    showSaved(
+      saveCsv(record),
+      `The send to the study team could not be confirmed (${outcome.why}). Your responses were saved instead as one file, in the folder your browser uses for downloads:`,
+      'Please send that file to the study team the way they asked.',
+    );
+  }
+
+  function saveCsv(record) {
     const name = fileName(record);
     saveFile(name, buildCsv(record));
-    finished = true;
+    return name;
+  }
+
+  function showSaved(name, lead, trail) {
     root.replaceChildren(
       heading('Thank you'),
-      el('p', {
-        class: 'done',
-        text: 'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
-      }),
+      el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
-      el('p', { text: 'Please send that file to the study team the way they asked. No answer was sent from this page.' }),
+      el('p', { text: trail }),
       versionLine(exp),
     );
     focusHeading(root);
