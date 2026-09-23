@@ -129,9 +129,12 @@ an identifier such as `007` keeps its zeros, and a value that starts with
    // Appends one row per POST to the sheet named below, creating it on the
    // first row. The first row's keys become the header. Later rows follow the
    // header's order, and a key the header lacks is added to it. Every cell is
-   // formatted as text before it is written, so "007" keeps its zeros and
-   // "=1+1" stays the text =1+1 rather than a formula. Answers {"ok":true}.
+   // formatted as text before it is written, so "007" keeps its zeros. A value
+   // that starts with "=" is written behind a leading apostrophe, the sheet's
+   // mark for text, so "=1+1" stays the text =1+1 rather than a formula (the
+   // text format alone does not stop the formula). Answers {"ok":true}.
    const SHEET_NAME = 'Responses';
+   const asText = (v) => (v.startsWith('=') ? "'" + v : v);
 
    function doPost(e) {
      const row = JSON.parse(e.postData.contents);
@@ -148,7 +151,7 @@ an identifier such as `007` keeps its zeros, and a value that starts with
          header = header.concat(missing);
          sheet.getRange(1, 1, 1, header.length).setNumberFormat('@').setValues([header]);
        }
-       const values = header.map((k) => (k in row ? String(row[k]) : ''));
+       const values = header.map((k) => (k in row ? asText(String(row[k])) : ''));
        const at = sheet.getLastRow() + 1;
        sheet.getRange(at, 1, 1, values.length).setNumberFormat('@').setValues([values]);
      } finally {
