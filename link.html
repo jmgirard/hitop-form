@@ -61,7 +61,7 @@
 <body>
 <main>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the address to send responses to folded into its address. This builder keeps nothing and transmits nothing. Give each participant a link. When they finish, the page sends their responses to the address you named, or, with no address, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. For a Supabase table it downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -85,9 +85,33 @@
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label>Send responses to
-      <span class="hint">Optional. The https:// address of an endpoint that accepts each participant's responses as one JSON row, such as a Google Apps Script web app that appends to a sheet (see the README). Leave it empty and the page saves each participant's responses as a file in their own downloads folder instead.</span>
-      <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+      <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
+      <select name="storeKind">
+        <option value="">A file on the participant's device</option>
+        <option value="webhook">A web address</option>
+        <option value="supabase">A Supabase table</option>
+      </select>
     </label>
+    <div id="webhookFields" hidden>
+      <label>Address
+        <span class="hint">The https:// address of the endpoint.</span>
+        <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+      </label>
+    </div>
+    <div id="supabaseFields" hidden>
+      <label>Project URL
+        <span class="hint">In the dashboard: Project Settings, then Data API.</span>
+        <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
+      </label>
+      <label>Publishable key
+        <span class="hint">The project's publishable key (or its legacy anon key). It goes into every study link, so use no other key.</span>
+        <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
+      </label>
+      <label>Table name
+        <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that creates it is shown under the link.</span>
+        <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
+      </label>
+    </div>
     <p role="alert" id="err"></p>
     <p>
       <button type="submit">Make the link</button>
@@ -96,22 +120,57 @@
   </form>
   <p id="out"></p>
   <p id="open" class="muted"></p>
+  <div id="sqlBlock" hidden>
+    <label>SQL for the table
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns and one column per item in the order the form shows them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <textarea id="sql" readonly spellcheck="false"></textarea>
+    </label>
+    <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
+  </div>
 </main>
 <script type="module">
-  import { encodeConfig, checkModule, checkStore } from './form.js';
+  import { encodeConfig, checkModule, checkStore, fetchExport, planItems, storeSql } from './form.js';
 
   const f = document.getElementById('f');
   const err = document.getElementById('err');
   const out = document.getElementById('out');
   const open = document.getElementById('open');
   const copy = document.getElementById('copy');
+  const sqlBlock = document.getElementById('sqlBlock');
+  const sql = document.getElementById('sql');
+  const copySql = document.getElementById('copySql');
+  const kindSelect = f.elements.storeKind;
 
-  f.addEventListener('submit', (ev) => {
+  // Only the chosen kind's fields show.
+  function showKind() {
+    document.getElementById('webhookFields').hidden = kindSelect.value !== 'webhook';
+    document.getElementById('supabaseFields').hidden = kindSelect.value !== 'supabase';
+  }
+  kindSelect.addEventListener('change', showKind);
+  showKind();
+
+  const makeButton = f.querySelector('button[type="submit"]');
+
+  f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    // A Supabase build waits on the export fetch; a second press meanwhile
+    // could finish first and be overwritten by the stale build.
+    if (makeButton.disabled) return;
+    makeButton.disabled = true;
+    try {
+      await build();
+    } finally {
+      makeButton.disabled = false;
+    }
+  });
+
+  async function build() {
     err.textContent = '';
     out.textContent = '';
     open.textContent = '';
     copy.hidden = true;
+    sqlBlock.hidden = true;
+    sql.value = '';
     const data = new FormData(f);
     const config = { instrument: data.get('instrument'), study: data.get('study').trim() };
     if (config.study === '') {
@@ -139,16 +198,37 @@
       }
       config.module = m;
     }
-    const storeUrl = data.get('store').trim();
-    if (storeUrl !== '') {
-      // The same check the form page runs on the link, so an address it
-      // would refuse is refused here, at the researcher.
+    const kind = data.get('storeKind');
+    if (kind !== '') {
+      // The same check the form page runs on the link, so a store it would
+      // refuse is refused here, at the researcher.
+      const store = kind === 'webhook'
+        ? { kind, url: data.get('store').trim() }
+        : {
+            kind,
+            url: data.get('supabaseUrl').trim(),
+            key: data.get('supabaseKey').trim(),
+            table: data.get('supabaseTable').trim(),
+          };
       try {
-        config.store = checkStore({ kind: 'webhook', url: storeUrl });
+        config.store = checkStore(store);
       } catch (e) {
         err.textContent = e.message;
         return;
       }
+    }
+    if (kind === 'supabase') {
+      // The table's columns are the items the page will show, named as the
+      // export names them, so the export is read here as the page reads it.
+      let items;
+      try {
+        items = planItems(await fetchExport(config.instrument), config.module);
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
+      sql.value = storeSql(config.store.table, items);
+      sqlBlock.hidden = false;
     }
     const url = new URL('./', window.location.href);
     url.search = `?c=${encodeConfig(config)}`;
@@ -160,6 +240,17 @@
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${url.href.length} characters)`);
     copy.hidden = !navigator.clipboard;
+    copySql.hidden = !navigator.clipboard;
+  }
+
+  copySql.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(sql.value);
+      copySql.textContent = 'Copied';
+      setTimeout(() => { copySql.textContent = 'Copy the SQL'; }, 1500);
+    } catch {
+      err.textContent = 'The SQL could not be copied. Select it and copy by hand.';
+    }
   });
 
   copy.addEventListener('click', async () => {

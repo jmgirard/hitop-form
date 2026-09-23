@@ -6,14 +6,22 @@
 //       heading names the instrument and whose start screen counts its items
 //   L3: the module hint limits modules to the HiTOP-SR
 //   L4: a "Send responses to" address the form page would refuse is refused
-//       here, naming the fault, and no link is built; an empty field builds
-//       a link with no store
+//       here, naming the fault, and no link is built; the web-address kind
+//       with an empty address is refused too; the file kind builds a link
+//       with no store even when the hidden address field holds an
+//       invalid address
 //   L5: a link built with the address set opens a form whose Finish posts
 //       the responses to that address
+//   L6: a Supabase store the form page would refuse (its URL, its key, its
+//       table, a secret key) is refused here, naming the fault; no link and
+//       no SQL, and a refused build clears the link and SQL shown before it
+//   L7: the SQL shown for a Supabase store equals the hand-written fixture
+//       for the HiTOP-BR and for the shuffled module, and the link carries
+//       the store's four fields
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport,
+  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -55,16 +63,41 @@ for (const o of OFFERED) {
   });
 }
 
-// Fills the builder for the HiTOP-BR with a store address and presses the
-// button; returns the alert text and the built link (empty when refused).
+// Fills the builder for the HiTOP-BR with the web-address kind and a store
+// address and presses the button; returns the alert text and the built link
+// (empty when refused).
 async function build(page, storeUrl) {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
   await page.locator('input[name="participant"]').fill('l4');
+  await page.locator('select[name="storeKind"]').selectOption('webhook');
   await page.locator('input[name="store"]').fill(storeUrl);
   await page.getByRole('button', { name: 'Make the link' }).click();
   return { err: await page.locator('#err').textContent(), href: await page.locator('#out').textContent() };
+}
+
+// The same with the Supabase kind and its three fields, for an instrument
+// and an optional pasted descriptor; returns the shown SQL too.
+async function buildSupabase(page, { instrument = 'hitopbr', module, url, key, table }) {
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption(instrument);
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l6');
+  if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  await page.locator('select[name="storeKind"]').selectOption('supabase');
+  await page.locator('input[name="supabaseUrl"]').fill(url);
+  await page.locator('input[name="supabaseKey"]').fill(key);
+  await page.locator('input[name="supabaseTable"]').fill(table);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  // The SQL waits on the export fetch; the link and the SQL appear together.
+  await expect(page.locator('#err, #out').filter({ hasText: /./ }).first()).toBeVisible();
+  return {
+    err: await page.locator('#err').textContent(),
+    href: await page.locator('#out').textContent(),
+    sql: await page.locator('#sql').inputValue(),
+    sqlShown: await page.locator('#sqlBlock').isVisible(),
+  };
 }
 
 function decodeLink(href) {
@@ -88,10 +121,86 @@ for (const fault of BUILDER_FAULTS) {
   });
 }
 
-test('an empty "Send responses to" field builds a link with no store', async ({ page }) => {
+test('the web-address kind with an empty address is refused, naming the fault', async ({ page }) => {
   const { err, href } = await build(page, '   ');
+  expect(err).toContain('its url is not a web address: "".');
+  expect(href, 'no link is built').toBe('');
+});
+
+test('the file kind builds a link with no store even when the hidden address field is invalid', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l4');
+  await page.locator('select[name="storeKind"]').selectOption('webhook');
+  await page.locator('input[name="store"]').fill('not a url');
+  await page.locator('select[name="storeKind"]').selectOption('');
+  await expect(page.locator('input[name="store"]')).toBeHidden();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  expect(await page.locator('#err').textContent()).toBe('');
+  expect(decodeLink(await page.locator('#out').textContent())).toEqual({ instrument: 'hitopbr', study: 'link', participant: 'l4' });
+});
+
+// L6: one builder test per Supabase fault (the url, the key, the table).
+const SUPABASE_FAULTS = [
+  { name: 'an http: project URL', url: 'http://abc.supabase.co', key: 'sb_publishable_x', table: 'responses', names: 'its url must start with https://' },
+  { name: 'an empty key', url: 'https://abc.supabase.co', key: '   ', table: 'responses', names: 'its key is empty.' },
+  { name: 'a table name with a capital', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'Responses', names: 'its table must be a lower-case name of up to 63 letters, digits and underscores, not starting with a digit, and it is "Responses".' },
+  { name: 'a secret key', url: 'https://abc.supabase.co', key: 'sb_secret_x', table: 'responses', names: 'its key is a secret key (sb_secret_…), which must never be in a study link.' },
+];
+
+for (const fault of SUPABASE_FAULTS) {
+  test(`the builder refuses a Supabase store with ${fault.name}`, async ({ page }) => {
+    const { err, href, sqlShown } = await buildSupabase(page, fault);
+    expect(err).toContain("The study link's store could not be used: ");
+    expect(err).toContain(fault.names);
+    expect(href, 'no link is built').toBe('');
+    expect(sqlShown, 'no SQL is shown').toBe(false);
+  });
+}
+
+// A project URL pasted with the dashboard's /rest/v1 path builds a link
+// whose store url is the project origin, so the send does not double it.
+test('the builder drops a /rest/v1/ suffix from the project URL', async ({ page }) => {
+  const { err, href } = await buildSupabase(page, { url: 'https://abc.supabase.co/rest/v1/', key: 'sb_publishable_x', table: 'r' });
   expect(err).toBe('');
-  expect(decodeLink(href)).toEqual({ instrument: 'hitopbr', study: 'link', participant: 'l4' });
+  expect(decodeLink(href).store.url).toBe('https://abc.supabase.co');
+});
+
+// L7: the SQL shown for a Supabase store equals the hand-written fixture,
+// for the HiTOP-BR and for the shuffled module, and the link carries the
+// four store fields with the URL in its parsed form.
+for (const w of [
+  { name: 'the HiTOP-BR', table: 'hitopbr_responses', fixture: 'supabase-hitopbr.sql' },
+  { name: 'the shuffled module', module: 'module-shuffled.json', table: 'module_responses', fixture: 'supabase-module-shuffled.sql' },
+]) {
+  test(`${w.name}: the shown SQL equals ${w.fixture}`, async ({ page }) => {
+    const module = w.module ? await readDescriptor(w.module) : undefined;
+    const { err, href, sql, sqlShown } = await buildSupabase(page, {
+      instrument: module ? module.instrument : 'hitopbr', module,
+      url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: w.table,
+    });
+    expect(err).toBe('');
+    expect(sqlShown).toBe(true);
+    expect(sql).toBe(await readFixture(w.fixture));
+    expect(decodeLink(href).store).toEqual({
+      kind: 'supabase', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: w.table,
+    });
+  });
+}
+
+// L8: a refused build on a page that already shows a link and its SQL
+// clears both.
+test('a refused build clears the link and the SQL of the build before it', async ({ page }) => {
+  const good = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });
+  expect(good.err).toBe('');
+  expect(good.sqlShown).toBe(true);
+  await page.locator('input[name="supabaseTable"]').fill('Responses');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toContainText('its table must be a lower-case name');
+  expect(await page.locator('#out').textContent()).toBe('');
+  await expect(page.locator('#sqlBlock')).toBeHidden();
+  expect(await page.locator('#sql').inputValue()).toBe('');
 });
 
 // L5
