@@ -33,6 +33,9 @@
 //       OPTIONS preflight; a 201 with no body is confirmed
 //  T10: a supabase store answering 401 and one refusing the connection are
 //       each unconfirmed: the file is saved and the screen says so
+//  T11: the committed Supabase export (tests/fixtures/supabase-hitopbr.csv)
+//       has the HiTOP-BR fixture's header and two rows, p001 and p002, whose
+//       item columns equal the fixture's
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -290,6 +293,23 @@ for (const u of SUPABASE_UNCONFIRMED) {
     expect(rows[1].slice(0, 4)).toEqual(['send', 'u2', exp.stem, exp.buildDate]);
   });
 }
+
+// T11: the committed Supabase export (tests/fixtures/supabase-hitopbr.csv,
+// from the hand run the fixture README describes) has the HiTOP-BR
+// fixture's header and two rows, p001 and p002, whose item columns equal
+// the fixture's.
+test('the committed Supabase export has the fixture header and both walks', async () => {
+  const exported = parseCsv(await readFixture('supabase-hitopbr.csv'));
+  const fixture = parseCsv(await readFixture('responses-hitopbr.csv'));
+  expect(exported[0]).toEqual(fixture[0]);
+  expect(exported).toHaveLength(3);
+  expect(exported.slice(1).map((r) => r[1])).toEqual(['p001', 'p002']);
+  for (const r of exported.slice(1)) {
+    expect(r.slice(0, 4)).toEqual(['fixture', r[1], 'hitopbr', fixture[1][3]]);
+    expect(r[4]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(r.slice(5)).toEqual(fixture[1].slice(5));
+  }
+});
 
 // T8: the sheet download keeps what the page posted. The Apps Script code
 // in the README writes every cell as text, so a participant code such as

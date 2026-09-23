@@ -261,8 +261,12 @@ use its export to CSV. The file has one header row in the SQL's column order
 and one row per participant. Read it in R as the previous section shows,
 with every column kept as text. Then score the item columns as the next
 section describes. The file `tests/fixtures/supabase-hitopbr.csv` is one
-such export, from a HiTOP-BR walk against a table made from the builder's
-SQL.
+such export, from two HiTOP-BR walks against a table made from the
+builder's SQL, one with the publishable key and one with a legacy anon key.
+The Table Editor warns that the table has no primary key when you export
+it. The SQL adds none on purpose, so the export has exactly the posted
+columns. The warning is about speed on very large tables and can be
+ignored.
 
 Anyone with the link can insert rows: the key and the table name sit inside
 every study link. Screen the table before scoring, as with a sheet. The page
