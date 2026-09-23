@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { serveDir } from './serve.mjs';
+import { serveDir, serveStore } from './serve.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const FIXTURES = path.join(ROOT, 'tests', 'fixtures');
@@ -61,6 +61,40 @@ export function useTarget() {
     if (server) await server.close();
   });
   return () => base;
+}
+
+// Registers beforeAll/afterAll hooks that start and stop a recording
+// endpoint (tests/serve.mjs serveStore()), whatever the target: the send
+// tests need their own store even when FORM_TARGET names the deployed page.
+// Returns a getter for the store.
+export function useStore() {
+  let store;
+  test.beforeAll(async () => {
+    store = await serveStore();
+  });
+  test.afterAll(async () => {
+    if (store) await store.close();
+  });
+  return () => store;
+}
+
+// The deployed page is on a public origin, and Chromium lets a public page
+// reach a local address only under a permission the browser grants by
+// prompt. Under FORM_TARGET this asks Playwright to grant it, and skips the
+// test with the reason when that call is refused. Against the checkout both
+// origins are loopback, and nothing is asked.
+export async function allowLocalStore(context) {
+  if (!process.env.FORM_TARGET?.trim()) return;
+  try {
+    await context.grantPermissions(['local-network-access']);
+  } catch (e) {
+    test.skip(true, `the deployed page cannot post to the local recording endpoint: ${e.message}`);
+  }
+}
+
+// The store a link names for a path on the recording endpoint.
+export function webhook(store, p = '/record') {
+  return { kind: 'webhook', url: store.url(p) };
 }
 
 export function formUrl(base, config) {
