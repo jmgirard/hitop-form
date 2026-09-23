@@ -32,8 +32,9 @@
 //       Authorization: Bearer only for the JWT shape, the fixture body,
 //       after one answered OPTIONS preflight; a 201 with no body is
 //       confirmed
-//  T10: a supabase store answering 401 and one refusing the connection are
-//       each unconfirmed: the file is saved and the screen says so
+//  T10: a supabase store answering 401, one refusing the connection and one
+//       answering 302 are each unconfirmed: the file is saved and the
+//       screen says so; through the twin, no request follows the 302
 //  T11: the committed Supabase export (tests/fixtures/supabase-hitopbr.csv)
 //       has the HiTOP-BR fixture's header and two rows, p001 and p002, whose
 //       item columns equal the fixture's
@@ -161,10 +162,10 @@ function expectBody(row, { fixture, exp, seen, t0, t1 }) {
 // JWT shape, the fixture body, and one OPTIONS preflight the endpoint
 // answered.
 const SUPABASE_WALKS = [
-  { name: 'a JWT-shaped key', key: JWT_SHAPED_KEY, p: '/project', bearer: true },
-  { name: 'a publishable key', key: 'sb_publishable_abc123', p: '/project', bearer: false },
-  { name: 'a project URL ending in a slash', key: 'sb_publishable_abc123', p: '/project/', bearer: false },
-  { name: 'a project URL ending in /rest/v1/', key: 'sb_publishable_abc123', p: '/project/rest/v1/', bearer: false },
+  { name: 'a JWT-shaped key', key: JWT_SHAPED_KEY, p: '', bearer: true },
+  { name: 'a publishable key', key: 'sb_publishable_abc123', p: '', bearer: false },
+  { name: 'a project URL ending in a slash', key: 'sb_publishable_abc123', p: '/', bearer: false },
+  { name: 'a project URL ending in /rest/v1/', key: 'sb_publishable_abc123', p: '/rest/v1/', bearer: false },
 ];
 
 for (const w of SUPABASE_WALKS) {
@@ -189,9 +190,12 @@ for (const w of SUPABASE_WALKS) {
     const sent = recorded.filter((r) => r.method === 'POST');
     expect(sent.length, 'one POST').toBe(1);
     expect(sent[0].server).toBe('store');
-    expect(sent[0].path).toBe('/project/rest/v1/hitopbr_responses');
+    expect(sent[0].path).toBe('/rest/v1/hitopbr_responses');
 
     const { headers } = sent[0];
+    // The page's own headers are exactly these, no others.
+    const own = Object.keys(headers).filter((h) => !BROWSER_SET.test(h) && !SAFELISTED.has(h) || h === 'content-type').sort();
+    expect(own).toEqual(['apikey', ...(w.bearer ? ['authorization'] : []), 'content-type', 'prefer']);
     expect(headers.apikey).toBe(w.key);
     expect(headers['content-type']).toBe('application/json');
     expect(headers.prefer).toBe('return=minimal');
@@ -199,7 +203,7 @@ for (const w of SUPABASE_WALKS) {
     else expect(headers.authorization, 'no Authorization header with a key that is not a JWT').toBeUndefined();
 
     const preflights = recorded.filter((r) => r.method === 'OPTIONS');
-    expect(preflights.map((r) => r.path), 'one preflight, to the insert address').toEqual(['/project/rest/v1/hitopbr_responses']);
+    expect(preflights.map((r) => r.path), 'one preflight, to the insert address').toEqual(['/rest/v1/hitopbr_responses']);
     // The preflight was answered: the POST that followed it is the proof,
     // and its request line asked for the page's own headers.
     expect(preflights[0].headers['access-control-request-method']).toBe('POST');
@@ -258,10 +262,12 @@ for (const u of UNCONFIRMED) {
 }
 
 // T10: a supabase store that answers 401 (a wrong key, or a table the key
-// cannot insert into) and one whose connection is refused are each
+// cannot insert into), one whose connection is refused, and one that
+// answers 302 (not followed: the POST would become a GET) are each
 // unconfirmed: the file is saved and the screen says so.
 const SUPABASE_UNCONFIRMED = [
   { name: 'a 401', make: () => supabase(store(), { table: 'status_401' }), why: 'answered HTTP 401' },
+  { name: 'a 302', make: () => supabase(store(), { table: 'redirect_302' }), why: 'the endpoint redirected the send' },
   {
     name: 'a refused connection',
     make: async () => ({ kind: 'supabase', url: `http://127.0.0.1:${await unusedPort()}`, key: 'sb_publishable_x', table: 'responses' }),
@@ -287,8 +293,12 @@ for (const u of SUPABASE_UNCONFIRMED) {
     if (u.name === 'a 401') {
       // The 401 was the endpoint's answer to the insert, not to the preflight.
       expect(since(from).map((r) => [r.method, r.path])).toEqual([
-        ['OPTIONS', '/project/rest/v1/status_401'], ['POST', '/project/rest/v1/status_401'],
+        ['OPTIONS', '/rest/v1/status_401'], ['POST', '/rest/v1/status_401'],
       ]);
+    }
+    if (u.name === 'a 302') {
+      // Not followed: the twin the 302 pointed at saw no request.
+      expect(since(from).filter((r) => r.server === 'target')).toEqual([]);
     }
 
     const rows = parseCsv(await readFile(await download.path(), 'utf8'));
@@ -308,7 +318,9 @@ test('the committed Supabase export has the fixture header and both walks', asyn
   expect(exported).toHaveLength(3);
   expect(exported.slice(1).map((r) => r[1])).toEqual(['p001', 'p002']);
   for (const r of exported.slice(1)) {
-    expect(r.slice(0, 4)).toEqual(['fixture', r[1], 'hitopbr', fixture[1][3]]);
+    // The export's build date at the hand run, a literal: the other fixture
+    // is regenerated with each new export and would move this.
+    expect(r.slice(0, 4)).toEqual(['fixture', r[1], 'hitopbr', '2026-09-20']);
     expect(r[4]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(r.slice(5)).toEqual(fixture[1].slice(5));
   }

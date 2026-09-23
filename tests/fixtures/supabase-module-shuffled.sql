@@ -27,5 +27,6 @@ create table "module_responses" (
   "hitopsr_380" integer
 );
 alter table "module_responses" enable row level security;
+revoke all on "module_responses" from anon, authenticated;
 grant insert on "module_responses" to anon;
 create policy "anon inserts" on "module_responses" for insert to anon with check (true);

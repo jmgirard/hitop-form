@@ -12,17 +12,23 @@
 //       text, unparsable, http: to a host other than 127.0.0.1 or localhost
 //       (near misses included), or of another scheme; an https: url and an
 //       http: url to 127.0.0.1 or localhost are accepted
-//   G8: a supabase store is refused by name when its url fails the G7 rule,
-//       its key is missing, empty or not text, or its table is missing or
-//       not a lower-case Postgres name (a capital, a leading digit, a
-//       hyphen, the empty string, 64 characters); four table forms and a
-//       url ending in /rest/v1/ accepted
+//   G8: a supabase store is refused by name when its url fails the G7 rule
+//       or is not the project URL alone (a table path, a dashboard page, a
+//       query, a fragment), its key is missing, empty, not text, has a
+//       space, is a secret key or a JWT for a role other than anon, or its
+//       table is missing or not a lower-case Postgres name (a capital, a
+//       leading digit, a hyphen, the empty string, 64 characters); four
+//       table forms, an anon JWT and a url ending in /rest/v1/ accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openForm, begin, walkAll, fetchExport, readDescriptor } from './helpers.mjs';
+import { useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, JWT_SHAPED_KEY } from './helpers.mjs';
+
+// A JWT-shaped key whose payload is {"role":"service_role"}: not a real
+// token, only its middle segment is read.
+const SERVICE_ROLE_KEY = `x.${Buffer.from('{"role":"service_role"}').toString('base64url')}.y`;
 
 const base = useTarget();
 
@@ -148,6 +154,31 @@ const REFUSED_STORES = [
   { name: 'a supabase store whose key is empty', store: { kind: 'supabase', url: 'https://example.supabase.co', key: '  ', table: 'responses' }, names: 'its key is empty.' },
   { name: 'a supabase store whose key is not text', store: { kind: 'supabase', url: 'https://example.supabase.co', key: 7, table: 'responses' }, names: 'its key is not text.' },
   { name: 'a supabase store with no table', store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'k' }, names: 'it names no table.' },
+  ...[
+    'https://example.supabase.co/rest/v1/responses',
+    'https://supabase.com/dashboard/project/example',
+    'https://example.supabase.co/?x=1',
+    'https://example.supabase.co/#x',
+  ].map((url) => ({
+    name: `a supabase store whose url is ${url}`,
+    store: { kind: 'supabase', url, key: 'k', table: 'responses' },
+    names: `its url must be the project URL alone, such as https://abcdefghijkl.supabase.co, and it is ${JSON.stringify(url)}.`,
+  })),
+  {
+    name: 'a supabase store whose key has a space',
+    store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'sb_publishable_a b', table: 'responses' },
+    names: 'its key has a space or a character outside printable ASCII.',
+  },
+  {
+    name: 'a supabase store whose key is a secret key',
+    store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'sb_secret_abc', table: 'responses' },
+    names: 'its key is a secret key (sb_secret_…), which must never be in a study link. Use the publishable key.',
+  },
+  {
+    name: 'a supabase store whose key is a service_role JWT',
+    store: { kind: 'supabase', url: 'https://example.supabase.co', key: SERVICE_ROLE_KEY, table: 'responses' },
+    names: 'its key is a JWT whose role is "service_role", not "anon", so it must never be in a study link. Use the anon or publishable key.',
+  },
   ...['Responses', '1abc', 'a-b', '', 'a'.repeat(64)].map((table) => ({
     name: `a supabase store whose table is ${JSON.stringify(table)}`,
     store: { kind: 'supabase', url: 'https://example.supabase.co', key: 'k', table },
@@ -198,6 +229,15 @@ for (const table of ['a', 'r2_d2', '_x', 'a'.repeat(63)]) {
     await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
   });
 }
+
+test('a supabase store whose key is an anon JWT is accepted', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'g8',
+    store: { kind: 'supabase', url: 'https://example.supabase.co', key: JWT_SHAPED_KEY, table: 'r' },
+  });
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+});
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

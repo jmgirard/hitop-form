@@ -90,7 +90,7 @@ for (const [label, storePath, extra, make] of [
   ['N5', '/redirect', () => [`${store().targetOrigin}/record`], (s) => webhook(s, '/redirect')],
   // N6: a supabase store: the one further address is the insert's, which
   // the preflight and the POST share.
-  ['N6', '/project/rest/v1/net_responses', () => [], (s) => supabase(s, { table: 'net_responses' })],
+  ['N6', '/rest/v1/net_responses', () => [], (s) => supabase(s, { table: 'net_responses' })],
 ]) {
   test(`${label}: the HiTOP-BR walk with a store through ${storePath} requests the store only at Finish`, async ({ page, context }) => {
     await allowLocalStore(context);

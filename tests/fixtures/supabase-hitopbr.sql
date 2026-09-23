@@ -51,5 +51,6 @@ create table "hitopbr_responses" (
   "hitopbr_45" integer
 );
 alter table "hitopbr_responses" enable row level security;
+revoke all on "hitopbr_responses" from anon, authenticated;
 grant insert on "hitopbr_responses" to anon;
 create policy "anon inserts" on "hitopbr_responses" for insert to anon with check (true);

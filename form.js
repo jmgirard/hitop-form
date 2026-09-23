@@ -6,9 +6,10 @@
 // to the store the link names or, with no store, saves them as one CSV to
 // the participant's device. With no store, no answer is transmitted: the
 // only network request after the page's own files is the export fetch. With
-// a store, the requests after Finish are the POST to its address and any
-// redirect it answers with, and the CSV is saved only when that send is not
-// confirmed. (The link's own contents, study, participant, module and store,
+// a store, the requests after Finish are the POST to its address, any
+// redirect a webhook answers with, and the OPTIONS preflight the browser
+// sends before a supabase insert; the CSV is saved only when that send is
+// not confirmed. (The link's own contents, study, participant, module and store,
 // are in the page's address, which the host serving the page sees.)
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
@@ -119,13 +120,43 @@ export function checkStore(store) {
   }
   let url = checkStoreUrl(store.url, bad);
   if (store.kind === 'webhook') return { kind: store.kind, url };
-  // The dashboard shows the project's REST URL ending in /rest/v1, and a
-  // researcher pastes what they see; the path is added again at the send,
-  // so it is dropped here.
-  url = url.replace(/\/rest\/v1\/*$/, '');
+  // The project URL alone. The dashboard shows the REST URL ending in
+  // /rest/v1, and a researcher pastes what they see, so that path is
+  // dropped; anything else after the host (a table endpoint, a dashboard
+  // page, a query or a fragment) would put the send on a wrong address, so
+  // it is refused. The link then carries the origin, one spelling per
+  // project.
+  const u = new URL(url);
+  const rest = u.pathname.replace(/\/rest\/v1\/*$/, '').replace(/\/+$/, '');
+  if (rest !== '' || u.search !== '' || u.hash !== '') {
+    throw bad(
+      `its url must be the project URL alone, such as https://abcdefghijkl.supabase.co, and it is ${JSON.stringify(store.url)}.`,
+    );
+  }
+  url = u.origin;
   if (store.key === undefined) throw bad('it names no key.');
   if (typeof store.key !== 'string') throw bad('its key is not text.');
   if (store.key.trim() === '') throw bad('its key is empty.');
+  // The key goes into a request header: printable ASCII with no spaces, or
+  // the browser refuses the request and the participant sees "the
+  // connection failed".
+  if (!/^[\x21-\x7e]+$/.test(store.key)) {
+    throw bad('its key has a space or a character outside printable ASCII.');
+  }
+  // Only a key meant to be public may sit in a study link. A secret key
+  // (sb_secret_…) and a legacy JWT for any role but anon (service_role)
+  // would give every participant the whole database.
+  if (store.key.startsWith('sb_secret_')) {
+    throw bad('its key is a secret key (sb_secret_…), which must never be in a study link. Use the publishable key.');
+  }
+  if (isJwtShaped(store.key)) {
+    const role = jwtRole(store.key);
+    if (role !== 'anon') {
+      throw bad(
+        `its key is a JWT whose role is ${role === undefined ? 'unreadable' : JSON.stringify(role)}, not "anon", so it must never be in a study link. Use the anon or publishable key.`,
+      );
+    }
+  }
   if (store.table === undefined) throw bad('it names no table.');
   if (typeof store.table !== 'string') throw bad('its table is not text.');
   if (!TABLE_NAME.test(store.table)) {
@@ -203,9 +234,10 @@ function isIntegerArray(x) {
 
 // The SQL that makes the table a supabase store names, for the items in the
 // order the page will show them: the five study fields as text, one integer
-// column per item, row-level security on, and the anon role allowed to
-// insert and nothing else. Shown by link.html; pasted by the researcher into
-// the project's SQL editor.
+// column per item, row-level security on, the project's default grants to
+// the API roles revoked, and the anon role allowed to insert and nothing
+// else. Shown by link.html; pasted by the researcher into the project's SQL
+// editor.
 export function storeSql(table, items) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
@@ -218,6 +250,7 @@ export function storeSql(table, items) {
     columns.join(',\n'),
     ');',
     `alter table ${t} enable row level security;`,
+    `revoke all on ${t} from anon, authenticated;`,
     `grant insert on ${t} to anon;`,
     `create policy "anon inserts" on ${t} for insert to anon with check (true);`,
     '',
@@ -352,6 +385,17 @@ export function isJwtShaped(key) {
   return /^[^.\s]+\.[^.\s]+\.[^.\s]+$/.test(key);
 }
 
+// The `role` claim of a JWT-shaped key, read from its middle segment
+// without checking the signature (the key is public; only its role is
+// asked). Undefined when the segment is not JSON.
+export function jwtRole(key) {
+  try {
+    return JSON.parse(base64urlToUtf8(key.split('.')[1])).role;
+  } catch {
+    return undefined;
+  }
+}
+
 // The request a store takes: its address and the page's own headers.
 export function sendRequest(store) {
   if (store.kind === 'supabase') {
@@ -375,7 +419,10 @@ export function sendRequest(store) {
 // To a supabase store the request is an insert through the project's REST
 // API, with the key in the headers, so the browser sends a preflight first,
 // which the project answers. The insert asks for no row back, and a 2xx
-// status alone confirms it: the API answers 201 with an empty body.
+// status alone confirms it: the API answers 201 with an empty body. A
+// redirect is not followed (the POST would become a GET, and the 200 that
+// followed would confirm a send that stored nothing); it is unconfirmed by
+// name.
 //
 // Anything else, a lost connection and the time limit included, is
 // unconfirmed, and the caller falls back to the device.
@@ -390,7 +437,7 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
         method: 'POST',
         headers,
         body: JSON.stringify(row),
-        redirect: 'follow',
+        redirect: store.kind === 'supabase' ? 'manual' : 'follow',
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
         signal: controller.signal,
@@ -401,6 +448,7 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
         why: e && e.name === 'AbortError' ? `no answer within ${Math.round(timeoutMs / 1000)} seconds` : 'the connection failed',
       };
     }
+    if (res.type === 'opaqueredirect') return { confirmed: false, why: 'the endpoint redirected the send' };
     if (!res.ok) return { confirmed: false, why: `the endpoint answered HTTP ${res.status}` };
     if (store.kind === 'supabase') return { confirmed: true };
     let ack;

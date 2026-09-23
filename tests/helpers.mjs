@@ -99,9 +99,10 @@ export function webhook(store, p = '/record') {
   return { kind: 'webhook', url: store.url(p) };
 }
 
-// A supabase store whose project URL is a path on the recording endpoint
-// (`/project` by default, so the insert goes to /project/rest/v1/<table>).
-export function supabase(store, { key = 'sb_publishable_test', table = 'responses', p = '/project' } = {}) {
+// A supabase store whose project URL is the recording endpoint's origin
+// (plus `p`, for the accepted suffixes), so the insert goes to
+// /rest/v1/<table> there.
+export function supabase(store, { key = 'sb_publishable_test', table = 'responses', p = '' } = {}) {
   return { kind: 'supabase', url: store.url(p), key, table };
 }
 

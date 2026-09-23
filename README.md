@@ -220,8 +220,8 @@ project needs only an account. The page inserts each participant's
 responses as one row of a table you create, with one column per item. The
 request goes to `<project URL>/rest/v1/<table>` with the project's key in
 the `apikey` header and the row as JSON, and asks for no row back. A 2xx
-answer confirms the send. Anything else makes the page save the file
-instead.
+answer confirms the send. Anything else, an answer that redirects
+included, makes the page save the file instead.
 
 1. Create a project at <https://supabase.com/dashboard>. Pick a region
    where your study's data is allowed to be stored.
@@ -240,10 +240,11 @@ instead.
    Copy it, open the dashboard's SQL Editor, paste it in and run it. The
    SQL creates the table with the five study columns and one integer column
    per item, in the order the form shows them. It then turns on row-level
-   security, grants insert to the `anon` role, and adds one policy that
-   lets that role insert. With the publishable key, the API can then insert
-   rows and nothing else. A select returns no rows, and an update or a
-   delete changes none.
+   security, revokes the project's default table privileges from the
+   `anon` and `authenticated` roles, grants insert back to `anon`, and
+   adds one policy that lets that role insert. With the publishable key,
+   the API can then insert rows and nothing else. A select returns no
+   rows, and an update or a delete changes none.
 4. Send the link to the participants.
 
 The table's columns are fixed by the SQL, so a link for a different
@@ -273,6 +274,12 @@ ignored.
 Anyone with the link can insert rows: the key and the table name sit inside
 every study link. Screen the table before scoring, as with a sheet. The page
 never reads the table.
+
+The table stores every value as text or as an integer, so a participant
+code such as `=1+1` is stored as those four characters. A spreadsheet
+program can still read such a cell as a formula when you open the exported
+CSV in it. Read the file in R as shown above, where every column stays
+text, or open it in the spreadsheet as text.
 
 ## Scoring
 

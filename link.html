@@ -85,7 +85,7 @@
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label>Send responses to
-      <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes both.</span>
+      <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
       <select name="storeKind">
         <option value="">A file on the participant's device</option>
         <option value="webhook">A web address</option>
@@ -149,8 +149,22 @@
   kindSelect.addEventListener('change', showKind);
   showKind();
 
+  const makeButton = f.querySelector('button[type="submit"]');
+
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    // A Supabase build waits on the export fetch; a second press meanwhile
+    // could finish first and be overwritten by the stale build.
+    if (makeButton.disabled) return;
+    makeButton.disabled = true;
+    try {
+      await build();
+    } finally {
+      makeButton.disabled = false;
+    }
+  });
+
+  async function build() {
     err.textContent = '';
     out.textContent = '';
     open.textContent = '';
@@ -227,7 +241,7 @@
     open.replaceChildren(a, ` (${url.href.length} characters)`);
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;
-  });
+  }
 
   copySql.addEventListener('click', async () => {
     try {

@@ -13,7 +13,8 @@
 //   L5: a link built with the address set opens a form whose Finish posts
 //       the responses to that address
 //   L6: a Supabase store the form page would refuse (its URL, its key, its
-//       table) is refused here, naming the fault; no link and no SQL
+//       table, a secret key) is refused here, naming the fault; no link and
+//       no SQL, and a refused build clears the link and SQL shown before it
 //   L7: the SQL shown for a Supabase store equals the hand-written fixture
 //       for the HiTOP-BR and for the shuffled module, and the link carries
 //       the store's four fields
@@ -145,6 +146,7 @@ const SUPABASE_FAULTS = [
   { name: 'an http: project URL', url: 'http://abc.supabase.co', key: 'sb_publishable_x', table: 'responses', names: 'its url must start with https://' },
   { name: 'an empty key', url: 'https://abc.supabase.co', key: '   ', table: 'responses', names: 'its key is empty.' },
   { name: 'a table name with a capital', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'Responses', names: 'its table must be a lower-case name of up to 63 letters, digits and underscores, not starting with a digit, and it is "Responses".' },
+  { name: 'a secret key', url: 'https://abc.supabase.co', key: 'sb_secret_x', table: 'responses', names: 'its key is a secret key (sb_secret_…), which must never be in a study link.' },
 ];
 
 for (const fault of SUPABASE_FAULTS) {
@@ -182,10 +184,24 @@ for (const w of [
     expect(sqlShown).toBe(true);
     expect(sql).toBe(await readFixture(w.fixture));
     expect(decodeLink(href).store).toEqual({
-      kind: 'supabase', url: 'https://abc.supabase.co/', key: 'sb_publishable_x', table: w.table,
+      kind: 'supabase', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: w.table,
     });
   });
 }
+
+// L8: a refused build on a page that already shows a link and its SQL
+// clears both.
+test('a refused build clears the link and the SQL of the build before it', async ({ page }) => {
+  const good = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });
+  expect(good.err).toBe('');
+  expect(good.sqlShown).toBe(true);
+  await page.locator('input[name="supabaseTable"]').fill('Responses');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toContainText('its table must be a lower-case name');
+  expect(await page.locator('#out').textContent()).toBe('');
+  await expect(page.locator('#sqlBlock')).toBeHidden();
+  expect(await page.locator('#sql').inputValue()).toBe('');
+});
 
 // L5
 test('a link built with the address set opens a form whose Finish posts to it', async ({ page, context }) => {
