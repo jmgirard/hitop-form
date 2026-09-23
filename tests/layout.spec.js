@@ -1,19 +1,20 @@
 // The item card's layout: a wrapped item's text stays inside its card.
 //
-// A legend is drawn in a fieldset's border notch, with the border at the
-// legend's vertical middle. Before this spec, an item whose text wrapped had
-// the border line running between its lines, with the upper half of the text
-// above the card's top edge. The page now floats the legend at full width, so
-// it renders as a block inside the card under an unbroken border.
+// A legend is drawn in a fieldset's border notch: the top border meets the
+// legend at its vertical middle. Before this spec, a wrapped legend's upper
+// half sat above the card's top edge. The page now floats the legend at full
+// width, so it renders as a block inside the card under an unbroken border.
 //
 //   Y1: on every page of the HiTOP-SR and of the PID-5, at 320 px, 375 px
 //       and Playwright's default width, each item's legend box lies inside
-//       its fieldset's padding box on all four sides (within 0.5 px), and
-//       the legend's text does not overflow its own box (scrollWidth at most
-//       clientWidth); at least one legend per walk is taller than one line,
-//       so the wrapped case is what is measured
+//       its fieldset's padding box on all four sides (within 0.5 px), the
+//       legend's text does not overflow its own box (scrollWidth at most
+//       clientWidth), and the options start below the legend; at least one
+//       legend per walk is taller than one line, so the wrapped case is what
+//       is measured; and no page scrolls sideways
 //   Y2: every item on the first page of each of the five forms is found by
-//       its accessible name, "<position>. <text>", as an exact match
+//       its accessible name, "<position>. <text>", as an exact match, where
+//       the text is that of the export item the card's data-number names
 //   Y3: after Next is refused on a page with a blank item, that item's
 //       fieldset has the error colour on all four borders and its legend
 //       still meets Y1, so the highlight is one unbroken box
@@ -36,6 +37,7 @@ function measureItems(page) {
       const legend = fs.querySelector('legend');
       const f = fs.getBoundingClientRect();
       const l = legend.getBoundingClientRect();
+      const o = fs.querySelector('.options').getBoundingClientRect();
       const cs = getComputedStyle(fs);
       const px = (v) => parseFloat(cs.getPropertyValue(v));
       return {
@@ -48,6 +50,7 @@ function measureItems(page) {
           bottom: f.bottom - px('border-bottom-width') - px('padding-bottom'),
         },
         legend: { top: l.top, left: l.left, right: l.right, bottom: l.bottom, height: l.height },
+        optionsTop: o.top,
         overflow: legend.scrollWidth > legend.clientWidth,
         lineHeight: parseFloat(getComputedStyle(legend).lineHeight),
         borders: [
@@ -69,6 +72,18 @@ function expectInside(m, label) {
   expect(m.legend.right, `${label}: legend right`).toBeLessThanOrEqual(m.inner.right + TOLERANCE);
   expect(m.legend.bottom, `${label}: legend bottom`).toBeLessThanOrEqual(m.inner.bottom + TOLERANCE);
   expect(m.overflow, `${label}: legend text overflows its box`).toBe(false);
+  expect(m.optionsTop, `${label}: options start below the legend`).toBeGreaterThanOrEqual(m.legend.bottom - TOLERANCE);
+}
+
+// The page's width against the viewport's: a card widened past the viewport
+// by an unbreakable word would pass expectInside while the page scrolls
+// sideways.
+async function expectNoSidewaysScroll(page, label) {
+  const { width, viewport } = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    viewport: window.innerWidth,
+  }));
+  expect(width, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(viewport);
 }
 
 // Y1
@@ -83,6 +98,7 @@ for (const instrument of ['hitopsr', 'pid5']) {
         const { page: p, of } = await currentPage(page);
         const measured = await measureItems(page);
         expect(measured.length, `items on page ${p}`).toBeGreaterThan(0);
+        await expectNoSidewaysScroll(page, `${instrument} page ${p}`);
         for (const m of measured) {
           expectInside(m, `${instrument} item ${m.number} (position ${m.position}) on page ${p}`);
           if (m.legend.height > m.lineHeight * 1.5) wrapped += 1;
@@ -103,10 +119,14 @@ for (const instrument of ['hitopsr', 'hitopbr', 'pid5', 'pid5sf', 'pid5bf']) {
     const exp = await fetchExport(instrument);
     await openForm(page, base(), { instrument, study: 'layout', participant: 'y2' });
     await begin(page);
-    const count = await page.locator('fieldset.item').count();
-    expect(count, 'items on the first page').toBeGreaterThan(0);
-    for (let i = 0; i < count; i++) {
-      const it = exp.items[i];
+    // The card's data-number names its export item, so the pairing survives
+    // a display order other than the export's; the position is the card's
+    // index on the first page either way.
+    const numbers = await page.$$eval('fieldset.item', (nodes) => nodes.map((fs) => Number(fs.dataset.number)));
+    expect(numbers.length, 'items on the first page').toBeGreaterThan(0);
+    for (let i = 0; i < numbers.length; i++) {
+      const it = exp.items.find((x) => Number(x.number) === numbers[i]);
+      expect(it, `export item ${numbers[i]}`).toBeDefined();
       const group = page.getByRole('group', { name: `${i + 1}. ${it.text}`, exact: true });
       await expect(group, `item ${it.number}`).toHaveCount(1);
       await expect(group).toHaveAttribute('data-number', String(it.number));
