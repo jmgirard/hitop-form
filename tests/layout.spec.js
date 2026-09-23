@@ -2,9 +2,9 @@
 //
 // A legend is drawn in a fieldset's border notch, with the border at the
 // legend's vertical middle. Before this spec, an item whose text wrapped had
-// the border line running between its lines and the text spilling past the
-// card's right edge. The page now floats the legend at full width, so it
-// renders as a block inside the card under an unbroken border.
+// the border line running between its lines, with the upper half of the text
+// above the card's top edge. The page now floats the legend at full width, so
+// it renders as a block inside the card under an unbroken border.
 //
 //   Y1: on every page of the HiTOP-SR and of the PID-5, at 320 px, 375 px
 //       and Playwright's default width, each item's legend box lies inside
