@@ -174,6 +174,17 @@ for (const url of ['https://example.com/hook', 'http://127.0.0.1:8123/record', '
   });
 }
 
+// A project URL pasted with the REST path the dashboard shows is accepted,
+// and the start screen names the same host either way.
+test('a supabase store whose url ends in /rest/v1/ is accepted', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'g8',
+    store: { kind: 'supabase', url: 'https://example.supabase.co/rest/v1/', key: 'sb_publishable_x', table: 'r' },
+  });
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('p.muted')).toContainText('sent to the study team at example.supabase.co.');
+});
+
 // The accepted table forms: the shortest, one with digits and underscores
 // after the first letter, one starting with an underscore, and the longest.
 for (const table of ['a', 'r2_d2', '_x', 'a'.repeat(63)]) {

@@ -158,6 +158,7 @@ const SUPABASE_WALKS = [
   { name: 'a JWT-shaped key', key: JWT_SHAPED_KEY, p: '/project', bearer: true },
   { name: 'a publishable key', key: 'sb_publishable_abc123', p: '/project', bearer: false },
   { name: 'a project URL ending in a slash', key: 'sb_publishable_abc123', p: '/project/', bearer: false },
+  { name: 'a project URL ending in /rest/v1/', key: 'sb_publishable_abc123', p: '/project/rest/v1/', bearer: false },
 ];
 
 for (const w of SUPABASE_WALKS) {

@@ -156,6 +156,14 @@ for (const fault of SUPABASE_FAULTS) {
   });
 }
 
+// A project URL pasted with the dashboard's /rest/v1 path builds a link
+// whose store url is the project origin, so the send does not double it.
+test('the builder drops a /rest/v1/ suffix from the project URL', async ({ page }) => {
+  const { err, href } = await buildSupabase(page, { url: 'https://abc.supabase.co/rest/v1/', key: 'sb_publishable_x', table: 'r' });
+  expect(err).toBe('');
+  expect(decodeLink(href).store.url).toBe('https://abc.supabase.co');
+});
+
 // L7: the SQL shown for a Supabase store equals the hand-written fixture,
 // for the HiTOP-BR and for the shuffled module, and the link carries the
 // four store fields with the URL in its parsed form.

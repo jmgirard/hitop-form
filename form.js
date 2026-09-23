@@ -117,8 +117,12 @@ export function checkStore(store) {
       `its kind is ${JSON.stringify(store.kind)}, and this page knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
     );
   }
-  const url = checkStoreUrl(store.url, bad);
+  let url = checkStoreUrl(store.url, bad);
   if (store.kind === 'webhook') return { kind: store.kind, url };
+  // The dashboard shows the project's REST URL ending in /rest/v1, and a
+  // researcher pastes what they see; the path is added again at the send,
+  // so it is dropped here.
+  url = url.replace(/\/rest\/v1\/*$/, '');
   if (store.key === undefined) throw bad('it names no key.');
   if (typeof store.key !== 'string') throw bad('its key is not text.');
   if (store.key.trim() === '') throw bad('its key is empty.');
