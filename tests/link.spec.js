@@ -8,11 +8,16 @@
 //   L4: a "Send responses to" address the form page would refuse is refused
 //       here, naming the fault, and no link is built; an empty field builds
 //       a link with no store
+//   L5: a link built with the address set opens a form whose Finish posts
+//       the responses to that address
 
 import { test, expect } from '@playwright/test';
-import { useTarget } from './helpers.mjs';
+import {
+  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport,
+} from './helpers.mjs';
 
 const base = useTarget();
+const store = useStore();
 
 // Stated here rather than read from form.js or the exports, so a change to
 // either shows up as a failure.
@@ -87,6 +92,28 @@ test('an empty "Send responses to" field builds a link with no store', async ({ 
   const { err, href } = await build(page, '   ');
   expect(err).toBe('');
   expect(decodeLink(href)).toEqual({ instrument: 'hitopbr', study: 'link', participant: 'l4' });
+});
+
+// L5
+test('a link built with the address set opens a form whose Finish posts to it', async ({ page, context }) => {
+  await allowLocalStore(context);
+  const exp = await fetchExport('hitopbr');
+  const address = store().url('/record');
+  const { err, href } = await build(page, address);
+  expect(err).toBe('');
+  expect(decodeLink(href).store).toEqual({ kind: 'webhook', url: address });
+
+  const from = store().requests.length;
+  await page.goto(href);
+  await expect(page.locator('p.muted')).toContainText(`sent to the study team at ${new URL(address).host}.`);
+  await begin(page);
+  const seen = await walkAll(page);
+  await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+  const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
+  expect(sent.map((r) => r.path)).toEqual(['/record']);
+  const row = JSON.parse(sent[0].body);
+  expect([row.study, row.participant, row.instrument]).toEqual(['link', 'l4', exp.stem]);
+  expect(Object.keys(row).slice(5)).toEqual(seen.map((s) => exp.items.find((it) => it.number === s.number).name));
 });
 
 test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {

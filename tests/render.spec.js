@@ -13,6 +13,10 @@
 //       items in that order and nothing else
 //   R5: a link carrying a descriptor without itemOrder renders its items in
 //       items order
+//   R6: the start screen's disclosure: without a store it says the answers
+//       are saved to this device and none is sent anywhere; with a store it
+//       names the store address's host as where the answers go and says the
+//       file is saved instead when the send cannot be confirmed
 
 import { test, expect } from '@playwright/test';
 import {
@@ -84,4 +88,23 @@ test('a descriptor without itemOrder renders its items in items order', async ({
   const seen = await walkAll(page);
   // R5
   expect(seen.map((s) => s.number)).toEqual(module.items);
+});
+
+// R6: the two wordings, stated in full. No request leaves for the store on
+// the start screen, so the https: address needs no endpoint.
+test('the start screen without a store says the answers are saved here and none is sent', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'render', participant: 'r6' });
+  await expect(page.locator('p.muted')).toHaveText(
+    '45 items over 3 pages. Your answers are saved to this device as one file when you finish. No answer is sent anywhere.',
+  );
+});
+
+test('the start screen with a store names its host and the fallback', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'render', participant: 'r6',
+    store: { kind: 'webhook', url: 'https://script.google.com/macros/s/AKfycbxyz/exec' },
+  });
+  await expect(page.locator('p.muted')).toHaveText(
+    '45 items over 3 pages. When you finish, your answers are sent to the study team at script.google.com. If the send cannot be confirmed, they are saved as one file in this browser\'s downloads folder instead.',
+  );
 });
