@@ -74,8 +74,10 @@ const CASES = [
   // S10: shuffle: false saves the same file as no shuffle field: five lead
   // columns, no item_order, the export's order. Compared to the same fixture.
   { name: 'hitopbr with shuffle: false', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' }, shuffle: false },
-  // S11 without shuffle, and S14 without shuffle.
-  { name: 'hitopbr under prolific', fixture: 'responses-hitopbr-prolific.csv', config: { instrument: 'hitopbr' }, prolific: true },
+  // S11 without shuffle, and S14 without shuffle. The prolific fixture is
+  // written by rule (see fixtures/README.md), so WRITE_FIXTURES never
+  // overwrites it with a capture.
+  { name: 'hitopbr under prolific', fixture: 'responses-hitopbr-prolific.csv', byRule: true, config: { instrument: 'hitopbr' }, prolific: true },
   { name: 'hitopbr with the Prolific parameters and no prolific field', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' }, extra: prolificQuery() },
   { name: 'hitopsr', fixture: 'responses-hitopsr.csv', config: { instrument: 'hitopsr' } },
   { name: 'shuffled module', fixture: 'responses-module-shuffled.csv', module: 'module-shuffled.json' },
@@ -166,7 +168,7 @@ for (const c of CASES) {
     // S4
     if (!c.fixture) return;
     const fixturePath = path.join(FIXTURES, c.fixture);
-    if (process.env.WRITE_FIXTURES) await writeFile(fixturePath, text);
+    if (process.env.WRITE_FIXTURES && !c.byRule) await writeFile(fixturePath, text);
     const fixture = parseCsv(await readFile(fixturePath, 'utf8'));
     const mask = (r) => r.map((v, i) => (i === 3 || i === 4 ? '<varies>' : v));
     expect(rows.map(mask)).toEqual(fixture.map(mask));
