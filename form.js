@@ -366,8 +366,8 @@ export function planItems(exp, module, shuffle = false) {
 
 // A random rearrangement of `items`: a Fisher–Yates shuffle whose draws come
 // from crypto.getRandomValues. Each draw takes a 32-bit word and rejects the
-// words above the largest multiple of the range, so every position is
-// equally likely. The input is not changed.
+// words at or above the largest multiple of the range that fits in 32 bits,
+// so every position is equally likely. The input is not changed.
 export function shuffleItems(items) {
   const out = items.slice();
   const word = new Uint32Array(1);

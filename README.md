@@ -120,7 +120,8 @@ order, the item columns follow the order the participant saw. With it, a
 sixth lead column, `item_order`, follows `submitted`. It holds the item
 numbers in the order that participant saw them, joined by single spaces
 (`hitopbr_01` is 1). The item columns then follow the instrument's order (a
-module's item numbers ascending). The data row holds the study fields, the
+module's items in the order its descriptor lists them, which
+`write_module()` writes ascending). The data row holds the study fields, the
 export's build date and the time of finishing as an ISO-8601 timestamp in
 UTC. Then comes each answer's numeric value: 1 to 4 on the HiTOP forms and 0
 to 3 on the PID-5 forms, as the export's response options number them. Seven
@@ -270,8 +271,8 @@ included, makes the page save the file instead.
 4. Send the link to the participants.
 
 The table's columns are fixed by the SQL, so a link for a different
-instrument or module, or one that adds or drops the random order, needs a
-table of its own. A row with a key the table
+instrument or module, or a link with the random order sent to a table made
+without it, needs a table of its own. A row with a key the table
 has no column for is refused by the API, and the page then saves the file.
 A row that lacks some of the table's columns is stored with those columns
 empty, because the SQL puts no constraint on any column.
