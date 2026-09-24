@@ -132,6 +132,9 @@ for (const w of WALKS) {
       const t1 = Date.now();
       // T5
       await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      // Without a complete field the sent screen keeps its closing line and offers no link.
+      await expect(page.locator('main')).toContainText('You can close this page.');
+      await expect(page.locator('p.complete')).toHaveCount(0);
       expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
 
       // T1: exactly one POST, to the address the link named.
@@ -386,7 +389,7 @@ function snapshot() {
     cont: document.querySelector('p.complete')?.textContent ?? null,
     href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
     close: document.body.textContent.includes('You can close this page.'),
-    navButtons: document.querySelectorAll('nav button').length,
+    navButtons: document.querySelectorAll('.nav button').length,
   };
 }
 async function observeDocument(page) {
@@ -429,6 +432,8 @@ for (const w of [
     // The request is seen, and held. The document is the sent screen.
     await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
     expect(states.length, 'the observer saw the page walk').toBeGreaterThan(0);
+    // The selector finds the form's buttons, so a count of zero means they are gone.
+    expect(states.some((s) => s.navButtons > 0), 'the observer saw nav buttons on the form').toBe(true);
     const sentScreen = {
       h1: 'Thank you',
       done: 'Your responses were sent to the study team.',

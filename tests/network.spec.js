@@ -134,7 +134,7 @@ test('N7: the HiTOP-BR walk with a store and a complete address requests the sto
     const snapshot = () => ({
       h1: document.querySelector('h1')?.textContent ?? null,
       href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
-      navButtons: document.querySelectorAll('nav button').length,
+      navButtons: document.querySelectorAll('.nav button').length,
     });
     new MutationObserver(() => window.noteState(snapshot())).observe(document.body, { childList: true, subtree: true });
   });
@@ -144,6 +144,7 @@ test('N7: the HiTOP-BR walk with a store and a complete address requests the sto
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
   // The document at the request, as the observer last reported it: a
   // locator or an evaluate would wait on the held navigation (send T15).
+  expect(states.some((s) => s.navButtons > 0), 'the observer saw nav buttons on the form').toBe(true);
   expect(states.at(-1)).toEqual({ h1: 'Thank you', href: COMPLETE_URL, navButtons: 0 });
   release();
   await expect(page).toHaveURL(COMPLETE_URL);
