@@ -949,7 +949,10 @@ function runForm(root, config, exp, plan, prolific) {
   // name, labelled by its host, and navigate nowhere on their own. The
   // address is `completeSaved` when the link carries one, else `complete`.
   // The trail paragraph ends by naming the "Save the file" button below it,
-  // which saves the file again with the name and text saved at Finish.
+  // which saves the file again with the name and text saved at Finish. A
+  // status region under the button is rendered empty, so it exists before
+  // the first press; each press rewrites it with the same sentence, and a
+  // screen reader announces the write while focus stays on the button.
   function showSaved({ name, text }, lead, trail) {
     const address = config.completeSaved ?? config.complete;
     const complete = address === undefined
@@ -959,12 +962,18 @@ function runForm(root, config, exp, plan, prolific) {
           el('a', { href: address, text: new URL(address).host }),
           '.',
         ])];
+    const status = el('p', { class: 'saved-again', role: 'status' });
+    const saveAgain = () => {
+      saveFile(name, text);
+      status.textContent = 'The file was saved again.';
+    };
     root.replaceChildren(
       heading('Thank you'),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
       el('p', { text: `${trail} If the file did not appear, press Save the file.` }),
-      el('button', { type: 'button', text: 'Save the file', onclick: () => saveFile(name, text) }),
+      el('button', { type: 'button', text: 'Save the file', onclick: saveAgain }),
+      status,
       ...complete,
       versionLine(exp),
     );
