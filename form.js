@@ -1,5 +1,5 @@
 // The form page. index.html calls boot(); link.html imports encodeConfig(),
-// the checks, fetchExport(), planItems() and storeSql().
+// the checks, fetchExport(), planItems(), storeSql() and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
