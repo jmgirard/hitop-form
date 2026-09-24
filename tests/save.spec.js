@@ -46,6 +46,8 @@
 //   S16: with a complete address in the link and no store, the saved screen
 //       shows a link to the address after the file name, labelled by its
 //       host, and no request reaches the address within five seconds
+//   S17: without a prolific field, a real PROLIFIC_PID in the address of a
+//       link with no participant leaves the identifier field shown and empty
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -303,3 +305,11 @@ for (const c of [
     expect(rows[1].slice(5, 7)).toEqual([PROLIFIC.study, PROLIFIC.session]);
   });
 }
+
+// S17: without a prolific field, a real PROLIFIC_PID in the address is no
+// identifier: a link with no participant still asks for one.
+test('without a prolific field, a PROLIFIC_PID in the address does not fill the identifier', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture' }, { extra: prolificQuery() });
+  await expect(page.locator('input[name="participant"]')).toBeVisible();
+  await expect(page.locator('input[name="participant"]')).toHaveValue('');
+});

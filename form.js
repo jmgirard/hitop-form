@@ -17,9 +17,10 @@
 // participant identifier from the PROLIFIC_PID parameter of the page's
 // address and writes the STUDY_ID and SESSION_ID parameters into the row and
 // the file. `complete` is an https:// address the page sends the participant
-// to after a confirmed send, and links to after a saved file; with it, the
-// one further request is that navigation, and it is made only after the
-// store confirmed.
+// to after a confirmed send, and links to after a saved file. The page
+// itself makes one further request with it, that navigation, and only
+// after the store confirmed; the saved screens' link is followed by the
+// participant or not at all.
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -225,6 +226,7 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
       `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
     );
   }
+  refuseCredentials(u, url, bad, 'its url');
   return u.href;
 }
 
@@ -240,26 +242,30 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
   if (u.protocol !== 'https:') {
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
+  refuseCredentials(u, url, bad, 'it');
   return u.href;
 }
 
-// The parse the two address checks share: text, a URL, and no user name or
-// password. fetch() refuses a URL that carries one, so such a store address
-// would make every send unconfirmed, and a completion address with one
-// would put a credential in a study link. `what` names the address in the
-// message ("its url", "it").
+// The parse the two address checks share: text, then a URL. `what` names
+// the address in the message ("its url", "it"). Each check then tests the
+// scheme and, last, refuseCredentials(), so an address wrong on both counts
+// is refused for its scheme, as the store check always was.
 function parseAddress(url, bad, what) {
   if (typeof url !== 'string') throw bad(`${what} is not text.`);
-  let u;
   try {
-    u = new URL(url);
+    return new URL(url);
   } catch {
     throw bad(`${what} is not a web address: ${JSON.stringify(url)}.`);
   }
+}
+
+// fetch() refuses a URL that carries a user name or password, so such a
+// store address would make every send unconfirmed, and a completion address
+// with one would put a credential in a study link. Both are refused by name.
+function refuseCredentials(u, url, bad, what) {
   if (u.username !== '' || u.password !== '') {
     throw bad(`${what} must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
   }
-  return u;
 }
 
 // A module descriptor as write_module() writes it: `format` "1.0",

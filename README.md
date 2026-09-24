@@ -55,8 +55,9 @@ the form:
    Paste it as the study URL on Prolific. The page then takes the Prolific
    ID from its address as the participant identifier and asks for none, and
    two more lead columns, `prolific_study` and `prolific_session`, hold the
-   other two. When the address carries no Prolific ID, or still carries the
-   placeholder, the page asks for the identifier as for a link without one.
+   other two. When the address carries no Prolific ID, a blank one, or
+   still the placeholder, the page asks for the identifier as for a link
+   without one.
    A preview on Prolific passes a 24-character ID
    ([Previewing your study](https://researcher-help.prolific.com/en/articles/445131-previewing-your-study)),
    so it walks the form as a participant would.

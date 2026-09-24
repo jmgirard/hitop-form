@@ -134,6 +134,12 @@ const REFUSED_STORES = [
   },
   { name: 'a missing url', store: { kind: 'webhook' }, names: 'it names no url.' },
   { name: 'a url that is not text', store: { kind: 'webhook', url: 7 }, names: 'its url is not text.' },
+  // Wrong on the scheme and the credentials both: refused for the scheme.
+  {
+    name: 'an http url with a user name',
+    store: { kind: 'webhook', url: 'http://user@example.com/hook' },
+    names: 'its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is "http://user@example.com/hook".',
+  },
   {
     name: 'an unparsable url',
     store: { kind: 'webhook', url: 'not a url' },
