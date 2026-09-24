@@ -72,8 +72,10 @@
 //  T19: on each T6 outcome's unconfirmed screen, the trail paragraph ends
 //       with "If the file did not appear, press Save the file.", one "Save
 //       the file" button follows it, and a first and a second click on it
-//       each save the file again under the Finish download's name with its
-//       bytes; with a complete address (the T16 walk) the screen's order is
+//       each save the file again with the Finish download's suggested file
+//       name and its bytes; without a complete address the screen's order is
+//       the heading, the lead, the file name, the trail, the button, the
+//       version line, and with one (the T16 walk) the screen's order is
 //       the heading, the lead, the file name, the trail, the button, the
 //       completion link, the version line
 //  T20: the sent screen has no "Save the file" button: asserted in T5's

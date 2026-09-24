@@ -266,8 +266,8 @@ export function awaitDownload(page) {
 export const SAVE_AGAIN = 'If the file did not appear, press Save the file.';
 
 // The "Save the file" button on a saved-file screen: one button, and a
-// first and a second click each save the file again under the Finish
-// download's name, with its bytes. The download promise is created before
+// first and a second click each save the file again with the Finish
+// download's suggested file name and its bytes. The download promise is created before
 // each click, so a click that saves nothing fails on the wait.
 export async function expectSaveAgain(page, download) {
   const button = page.getByRole('button', { name: 'Save the file' });

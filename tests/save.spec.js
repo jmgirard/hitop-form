@@ -61,8 +61,8 @@
 //   S21: on the HiTOP-BR walk's saved screen, the trail paragraph ends with
 //       "If the file did not appear, press Save the file.", one "Save the
 //       file" button follows it, and a first and a second click on it each
-//       save the file again under the Finish download's name with its
-//       bytes; the screen's order is the heading, the lead, the file name,
+//       save the file again with the Finish download's suggested file name
+//       and its bytes; the screen's order is the heading, the lead, the file name,
 //       the trail, the button, the version line, and with a complete address
 //       (the S16 walk) the completion link sits between the button and the
 //       version line

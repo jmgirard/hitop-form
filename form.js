@@ -856,8 +856,9 @@ function runForm(root, config, exp, plan, prolific) {
   // saves the file and shows the unconfirmed screen naming it. Each saved
   // screen carries a "Save the file" button that saves the same file again
   // from the participant's own click: the unconfirmed screen's download
-  // starts after the send's wait, outside the click's user activation, and
-  // a browser may block it; a download on either screen can be dismissed.
+  // starts only after the send's wait, which can outlast the click's user
+  // activation, and a browser may block it; a download on either screen
+  // can be dismissed.
   async function finish(nav) {
     if (sending) return;
     // ISO-8601 in UTC, to the second: 2026-09-20T21:15:31Z.
