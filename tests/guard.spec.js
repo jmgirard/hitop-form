@@ -32,8 +32,8 @@
 //       or one with a password, or a number; an https:// address is
 //       accepted
 //   G12: a link's completeSaved field is refused by name, with the value
-//       shown, for the G11 forms (http://localhost, a string that is no
-//       URL, a user name only, a password, a number) beside a complete, and
+//       shown, for five of the G11 forms (http://localhost, a string that is
+//       no URL, a user name only, a password, a number) beside a complete, and
 //       when it stands alone with no complete field; an https:// address
 //       beside a complete is accepted
 //

@@ -893,11 +893,11 @@ function runForm(root, config, exp, plan, prolific) {
     finished = true;
     if (outcome.confirmed) {
       // The sent screen is drawn first either way. With a completion
-      // address its last line is a link there in place of "You can close
-      // this page.", and the page then navigates there, as Prolific
-      // recommends: `finished` is already set, so the unload guard lets the
-      // navigation through, and a Back from the address or a navigation
-      // that fails lands on the sent screen, not on a disabled form.
+      // address a link there takes the place of "You can close this
+      // page.", and the page then navigates there, as Prolific recommends:
+      // `finished` is already set, so the unload guard lets the navigation
+      // through, and while the navigation is pending the participant sees
+      // the sent screen rather than a disabled form.
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
