@@ -299,15 +299,15 @@ function isIntegerArray(x) {
 
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (planItems().items): the five study fields as
-// text, an `item_order` text column under `shuffle`, one integer column per
-// item, row-level security on, the project's default grants to the API
-// roles revoked, and the anon role allowed to insert and nothing else.
-// Shown by link.html; pasted by the researcher into the project's SQL
-// editor.
-export function storeSql(table, items, shuffle = false) {
+// text, an `item_order` text column under `shuffle`, the two Prolific text
+// columns under `prolific`, one integer column per item, row-level security
+// on, the project's default grants to the API roles revoked, and the anon
+// role allowed to insert and nothing else. Shown by link.html; pasted by the
+// researcher into the project's SQL editor.
+export function storeSql(table, items, shuffle = false, prolific = false) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
-  const lead = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...(shuffle ? ['item_order'] : [])];
+  const lead = leadColumns({ shuffle, prolific });
   const columns = [
     ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
@@ -449,18 +449,37 @@ function csvField(v) {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// The lead columns of the row, the file and the table, in order: the five
+// study fields, `item_order` under `shuffle`, and the two Prolific columns
+// under `prolific`, so that `item_order` stays sixth in a file that has it.
+export function leadColumns({ shuffle = false, prolific = false } = {}) {
+  return [
+    'study', 'participant', 'instrument', 'form_build', 'submitted',
+    ...(shuffle ? ['item_order'] : []),
+    ...(prolific ? ['prolific_study', 'prolific_session'] : []),
+  ];
+}
+
+// The lead values of one record, in leadColumns() order. `itemOrder`, when
+// given, is the item numbers in the order shown, joined by single spaces.
+// `prolific`, when given, is `{ study, session }` from the address, each
+// written as it was read (the empty string when absent or a placeholder).
+function leadValues({ study, participant, instrument, formBuild, submitted, itemOrder, prolific }) {
+  return [
+    study, participant, instrument, formBuild, submitted,
+    ...(itemOrder !== undefined ? [itemOrder.join(' ')] : []),
+    ...(prolific !== undefined ? [prolific.study, prolific.session] : []),
+  ];
+}
+
 // One header row and one data row. `answers` maps item number to the chosen
-// option value. `items` is the column order; `itemOrder`, when given, is the
-// item numbers in the order shown, written as a sixth lead column after
-// `submitted`, joined by single spaces. Without it the file has five lead
-// columns.
-export function buildCsv({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
-  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
-  const row = [study, participant, instrument, formBuild, submitted];
-  if (itemOrder !== undefined) {
-    header.push('item_order');
-    row.push(itemOrder.join(' '));
-  }
+// option value. `items` is the column order; the lead columns are
+// leadColumns()' for the record's `itemOrder` and `prolific`. Without either
+// the file has five lead columns.
+export function buildCsv(record) {
+  const { items, answers } = record;
+  const header = [...leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined })];
+  const row = leadValues(record);
   header.push(...items.map((it) => it.name));
   row.push(...items.map((it) => answers.get(it.number)));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
@@ -476,13 +495,14 @@ export function fileName({ study, participant, instrument, submitted }) {
 
 export const SEND_TIMEOUT_MS = 30_000;
 
-// One JSON object per finished form: the five study fields, `item_order`
-// when the record carries one, then one key per item in `items` order, each
-// value the chosen option's integer value. The same record buildCsv()
-// writes, key for column.
-export function buildRow({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
-  const row = { study, participant, instrument, form_build: formBuild, submitted };
-  if (itemOrder !== undefined) row.item_order = itemOrder.join(' ');
+// One JSON object per finished form: the lead fields buildCsv() writes as
+// columns, key for column and in the same order, then one key per item in
+// `items` order, each value the chosen option's integer value.
+export function buildRow(record) {
+  const { items, answers } = record;
+  const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
+  const values = leadValues(record);
+  const row = Object.fromEntries(header.map((k, i) => [k, values[i]]));
   for (const it of items) row[it.name] = answers.get(it.number);
   return row;
 }
@@ -823,6 +843,9 @@ function runForm(root, config, exp, plan, prolific) {
       // into `item_order`, and without it the file is as it always was.
       items: plan.items,
       itemOrder: config.shuffle === true ? plan.shown.map((it) => it.number) : undefined,
+      // Under `prolific: true` the two columns are always written, each
+      // empty when the address gave nothing for it.
+      prolific: prolific ? { study: prolific.study, session: prolific.session } : undefined,
       // A copy: the radios stay live during a send, and the file saved on an
       // unconfirmed send must hold the answers the row was posted with.
       answers: new Map(answers),

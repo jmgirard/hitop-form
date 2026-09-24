@@ -43,6 +43,18 @@
 //       item_order, then the items in the export's order, item_order
 //       holding the shown order and each item the answer chosen at the
 //       position it was shown at
+//  T13: a HiTOP-BR walk under prolific: true, with the three parameters in
+//       the address, posts one row to a webhook and to a supabase store
+//       whose keys are the five study fields, prolific_study,
+//       prolific_session, then the items, the participant the PROLIFIC_PID
+//       and the two holding STUDY_ID and SESSION_ID: without shuffle the
+//       body equals responses-hitopbr-prolific.csv as T1 compares, and the
+//       supabase keys equal supabase-hitopbr-prolific.sql's columns; with
+//       shuffle the two follow item_order, the T12 checks apply, and the
+//       supabase keys equal supabase-hitopbr-prolific-shuffle.sql's columns
+//  T14: without a prolific field, the three parameters in the address change
+//       nothing: the row posted to a webhook equals the T1 body without
+//       shuffle and has the T12 shape under it
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -53,13 +65,14 @@ import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
+  leadColumns, PROLIFIC, prolificQuery,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
 
 const base = useTarget();
 const store = useStore();
-const LEAD = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
+const LEAD = leadColumns();
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));
 
@@ -134,11 +147,12 @@ for (const w of WALKS) {
 }
 
 // The posted body against the CSV fixture of the same walk: the keys are the
-// fixture's header (the five lead fields, then the items in the order seen),
+// fixture's header (the lead fields, then the items in the order seen),
 // submitted is a UTC timestamp inside the walk, form_build is the export's
 // build date, and every item value is the fixture's as a JSON integer.
-function expectBody(row, { fixture, exp, seen, t0, t1 }) {
-  expect(Object.keys(row)).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
+// `lead` is the lead fields the walk writes; LEAD's five by default.
+function expectBody(row, { fixture, exp, seen, t0, t1, lead = LEAD }) {
+  expect(Object.keys(row)).toEqual([...lead, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
   expect(Object.keys(row), 'the fixture header').toEqual(fixture[0]);
   const values = fixture[1];
   for (let i = 0; i < fixture[0].length; i++) {
@@ -150,7 +164,7 @@ function expectBody(row, { fixture, exp, seen, t0, t1 }) {
       expect(t).toBeLessThanOrEqual(t1);
     } else if (key === 'form_build') {
       expect(row.form_build).toBe(exp.buildDate);
-    } else if (i < LEAD.length) {
+    } else if (i < lead.length) {
       expect(row[key], key).toBe(values[i]);
     } else {
       expect(Number.isInteger(row[key]), `${key} is a JSON integer`).toBe(true);
@@ -252,6 +266,92 @@ for (const w of [
         .map((l) => /^ {2}"([^"]+)"/.exec(l)[1]);
       expect(columns.length, 'the fixture has column lines').toBe(51);
       expect(Object.keys(row)).toEqual(columns);
+    }
+  });
+}
+
+// T13: the HiTOP-BR walk under prolific through each store kind, with and
+// without shuffle. Without shuffle the body is compared to the by-rule
+// prolific fixture as T1 compares; with shuffle the T12 checks apply with
+// the two Prolific cells after item_order. The supabase keys equal the
+// matching SQL fixture's column lines, so the row the page posts fits the
+// table the builder makes.
+const sqlColumns = async (fixture) => (await readFixture(fixture))
+  .split('\n')
+  .filter((l) => /^ {2}"/.test(l))
+  .map((l) => /^ {2}"([^"]+)"/.exec(l)[1]);
+
+for (const shuffle of [false, true]) {
+  for (const w of [
+    { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
+    { name: 'a supabase store', make: () => supabase(store(), { table: 'hitopbr_prolific' }), path: '/rest/v1/hitopbr_prolific', sql: shuffle ? 'supabase-hitopbr-prolific-shuffle.sql' : 'supabase-hitopbr-prolific.sql' },
+  ]) {
+    test(`a HiTOP-BR walk under prolific${shuffle ? ' and shuffle' : ''} posts one row to ${w.name} with the two Prolific keys`, async ({ page }) => {
+      const exp = await fetchExport('hitopbr');
+      const numbers = exp.items.map((it) => it.number);
+      const lead = leadColumns({ shuffle, prolific: true });
+      const from = store().requests.length;
+      const t0 = Date.now();
+      await openForm(page, base(), {
+        instrument: 'hitopbr', study: 'fixture', prolific: true, ...(shuffle ? { shuffle } : {}), store: w.make(),
+      }, { extra: prolificQuery() });
+      await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+      await begin(page);
+      const seen = await walkAll(page);
+      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      const t1 = Date.now();
+
+      const sent = since(from).filter((r) => r.method === 'POST');
+      expect(sent.map((r) => r.path)).toEqual([w.path]);
+      const row = JSON.parse(sent[0].body);
+      expect([row.study, row.participant, row.instrument, row.form_build]).toEqual(['fixture', PROLIFIC.pid, exp.stem, exp.buildDate]);
+      expect([row.prolific_study, row.prolific_session]).toEqual([PROLIFIC.study, PROLIFIC.session]);
+      if (shuffle) {
+        const shown = seen.map((s) => s.number);
+        expect(shown, 'the walk saw a rearrangement').not.toEqual(numbers);
+        expectShuffled(Object.keys(row), Object.values(row).map(String), {
+          exp, numbers, shown, prolific: { study: PROLIFIC.study, session: PROLIFIC.session },
+        });
+      } else {
+        expectBody(row, { fixture: parseCsv(await readFixture('responses-hitopbr-prolific.csv')), exp, seen, t0, t1, lead });
+      }
+      for (const it of exp.items) expect(Number.isInteger(row[it.name]), `${it.name} is a JSON integer`).toBe(true);
+      if (w.sql) {
+        const columns = await sqlColumns(w.sql);
+        expect(columns.length, 'the fixture has column lines').toBe(lead.length + 45);
+        expect(Object.keys(row)).toEqual(columns);
+      }
+    });
+  }
+}
+
+// T14: the parameters in the address with no prolific field in the link.
+for (const shuffle of [false, true]) {
+  test(`without a prolific field, the Prolific parameters change nothing in the row posted${shuffle ? ' under shuffle' : ''}`, async ({ page }) => {
+    const exp = await fetchExport('hitopbr');
+    const numbers = exp.items.map((it) => it.number);
+    const from = store().requests.length;
+    const t0 = Date.now();
+    await openForm(page, base(), {
+      instrument: 'hitopbr', study: 'fixture', participant: 'p001', ...(shuffle ? { shuffle } : {}), store: webhook(store(), '/record'),
+    }, { extra: prolificQuery() });
+    await begin(page);
+    const seen = await walkAll(page);
+    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    const t1 = Date.now();
+
+    const sent = since(from).filter((r) => r.method === 'POST');
+    expect(sent.map((r) => r.path)).toEqual(['/record']);
+    const row = JSON.parse(sent[0].body);
+    expect(Object.keys(row)).not.toContain('prolific_study');
+    expect(Object.keys(row)).not.toContain('prolific_session');
+    if (shuffle) {
+      const shown = seen.map((s) => s.number);
+      expect(shown, 'the walk saw a rearrangement').not.toEqual(numbers);
+      expectShuffled(Object.keys(row), Object.values(row).map(String), { exp, numbers, shown });
+      expect(row.participant).toBe('p001');
+    } else {
+      expectBody(row, { fixture: parseCsv(await readFixture('responses-hitopbr.csv')), exp, seen, t0, t1 });
     }
   });
 }
