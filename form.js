@@ -951,8 +951,9 @@ function runForm(root, config, exp, plan, prolific) {
   // The trail paragraph ends by naming the "Save the file" button below it,
   // which saves the file again with the name and text saved at Finish. A
   // status region under the button is rendered empty, so it exists before
-  // the first press; each press rewrites it with the same sentence, and a
-  // screen reader announces the write while focus stays on the button.
+  // the first press; each press rewrites it with the same sentence, and
+  // `role="status"` marks the write for a screen reader to announce. Focus
+  // is not moved, so it stays on the button.
   function showSaved({ name, text }, lead, trail) {
     const address = config.completeSaved ?? config.complete;
     const complete = address === undefined
