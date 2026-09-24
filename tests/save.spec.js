@@ -193,6 +193,7 @@ for (const c of CASES) {
     // S21: on the HiTOP-BR walk, the trail paragraph names the button, the
     // screen's order, and two clicks each save the file again.
     if (c.name === 'hitopbr') {
+      await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
       await expect(page.locator('main > p').nth(2)).toHaveText(
         `Please send that file to the study team the way they asked. No answer was sent from this page. ${SAVE_AGAIN}`,
       );
@@ -290,7 +291,11 @@ test('with a complete address and no store, the saved screen links to it after t
   await expect(link).toHaveText('app.prolific.com');
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
-  // S21: the whole screen's order, the button between the trail and the link.
+  // S21: the trail sentence, and the whole screen's order, the button
+  // between the trail and the link.
+  await expect(page.locator('main > p').nth(2)).toHaveText(
+    `Please send that file to the study team the way they asked. No answer was sent from this page. ${SAVE_AGAIN}`,
+  );
   expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);

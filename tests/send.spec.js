@@ -407,7 +407,7 @@ function snapshot() {
     href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
     close: document.body.textContent.includes('You can close this page.'),
     navButtons: document.querySelectorAll('.nav button').length,
-    saveButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Save the file').length,
+    saveButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent.trim().includes('Save the file')).length,
   };
 }
 async function observeDocument(page) {
@@ -548,7 +548,9 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   // The link follows the file name in the document.
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
-  // T19: the whole screen's order, the button between the trail and the link.
+  // T19: the trail sentence, and the whole screen's order, the button
+  // between the trail and the link.
+  await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
   expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);

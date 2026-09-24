@@ -158,8 +158,7 @@ under them. A press saves the same file again, with the same content,
 offered under the same file name (the browser can add a number to keep
 both copies). A second press does so again. The download after an
 unconfirmed send starts only when the wait ends, up to 30 seconds after
-Finish, and a browser can block a download that late. A participant can
-also dismiss the download on either screen.
+Finish, and a participant can dismiss the download on either screen.
 
 With a completion URL in the link, a confirmed send shows the sent screen
 with a "Continue to <host>." link to that address in place of "You can

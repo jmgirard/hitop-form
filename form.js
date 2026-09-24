@@ -632,7 +632,9 @@ function saveFile(name, text) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  // Released after a minute rather than seconds: a save dialog the
+  // participant holds open reads the URL when it closes.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ---- Rendering ------------------------------------------------------------
