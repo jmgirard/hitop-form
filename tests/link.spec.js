@@ -43,10 +43,18 @@
 //  L13: with the Prolific box checked, the SQL shown for a Supabase store
 //       equals supabase-hitopbr-prolific.sql, and with the random-order box
 //       too supabase-hitopbr-prolific-shuffle.sql, byte for byte
+//  L14: the "Completion URL after a saved file" field, whose hint says it
+//       takes the study's completion code for a saved file and that a study
+//       holds one code per outcome, puts completeSaved in the link beside
+//       complete; an http:// address is refused naming the field, and the
+//       field filled beside an empty completion field is refused, and no
+//       link is built either way; the Prolific box's hint says Prolific's
+//       URL-parameters option appends the parameters and the page reads the
+//       filled value
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL,
+  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -332,6 +340,45 @@ test('the Completion URL field puts complete in the link, and an http:// address
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#err')).toHaveText(
     'The completion URL could not be used: it must start with https://, and it is "http://localhost".',
+  );
+  expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+});
+
+// L14: the saved-file completion field.
+test('the Completion URL after a saved file field puts completeSaved in the link, and refuses http:// and an empty completion field', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  const hint = page.locator('label', { hasText: 'Completion URL after a saved file' }).locator('.hint');
+  await expect(hint).toContainText("the study's completion code for a saved file");
+  await expect(hint).toContainText('one code per outcome, each with its own ?cc= address');
+  const prolificHint = page.locator('label.check', { hasText: 'Recruit through Prolific' }).locator('.hint');
+  await expect(prolificHint).toContainText('"I\'ll use URL parameters" option appends the three parameters to the study URL itself');
+  await expect(prolificHint).toContainText('the page then reads the filled value');
+
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l14');
+  await page.locator('input[name="complete"]').fill(COMPLETE_URL);
+  await page.locator('input[name="completeSaved"]').fill(COMPLETE_SAVED_URL);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  expect(await page.locator('#err').textContent()).toBe('');
+  expect(decodeLink(await page.locator('#out').textContent())).toEqual({
+    instrument: 'hitopbr', study: 'link', participant: 'l14', complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+  });
+
+  // One of the forms the page's own check refuses (guard G12).
+  await page.locator('input[name="completeSaved"]').fill('http://localhost');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toHaveText(
+    'The completion URL after a saved file could not be used: it must start with https://, and it is "http://localhost".',
+  );
+  expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+
+  // Filled beside an empty completion field.
+  await page.locator('input[name="completeSaved"]').fill(COMPLETE_SAVED_URL);
+  await page.locator('input[name="complete"]').fill('');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toHaveText(
+    'The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.',
   );
   expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
 });

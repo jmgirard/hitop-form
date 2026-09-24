@@ -93,11 +93,15 @@
     <label class="check">
       <input name="prolific" type="checkbox" value="true">
       Recruit through Prolific
-      <span class="hint">The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</span>
+      <span class="hint">The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. Prolific's "I'll use URL parameters" option appends the three parameters to the study URL itself, so a pasted link carries each parameter once unless that option adds it again, and the page then reads the filled value. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</span>
     </label>
     <label>Completion URL
-      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, and links to after a saved file. For Prolific, the completion URL shown on the study's page.</span>
+      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    <label>Completion URL after a saved file
+      <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
+      <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
@@ -218,6 +222,22 @@
     if (complete !== '') {
       try {
         config.complete = checkCompleteUrl(complete, (why) => new Error(`The completion URL could not be used: ${why}`));
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
+    }
+    // The saved-file completion URL takes the same check under its own
+    // name, and is refused with the completion field empty, as the form
+    // page refuses the link.
+    const completeSaved = data.get('completeSaved').trim();
+    if (completeSaved !== '') {
+      if (complete === '') {
+        err.textContent = 'The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.';
+        return;
+      }
+      try {
+        config.completeSaved = checkCompleteUrl(completeSaved, (why) => new Error(`The completion URL after a saved file could not be used: ${why}`));
       } catch (e) {
         err.textContent = e.message;
         return;
