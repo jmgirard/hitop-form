@@ -308,6 +308,12 @@ export function checkModule(m, instrument) {
     throw bad('its items are not a list of item numbers.');
   }
   if (new Set(m.items).size !== m.items.length) throw bad('an item number repeats.');
+  // The page follows the order of `items` for its columns, which the file
+  // and the reader describe as the instrument's order, so any other order
+  // would score wrong by position. write_module() writes them ascending.
+  if (m.items.some((v, i) => i > 0 && v < m.items[i - 1])) {
+    throw bad('its items are not in ascending order.');
+  }
   if (m.itemOrder !== undefined) {
     if (!isIntegerArray(m.itemOrder)) throw bad('its itemOrder is not a list of item numbers.');
     const a = [...m.items].sort((x, y) => x - y);
