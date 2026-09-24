@@ -35,8 +35,16 @@ the form:
    package's `write_module()` wrote, or that the
    [Module Builder](https://jmgirard.github.io/hitop-builder/) saved beside
    your form. The page then shows only the module's items. When the
-   descriptor records a printed order, the items follow it.
-5. Choose where responses go. "A file on the participant's device" is the
+   descriptor records a printed order, the items follow it, unless the next
+   box is checked.
+5. Optionally check "Show the items in a random order". The page then draws
+   a new order each time it opens, so each participant sees the items in a
+   different order. The row and the file still list the items in the
+   instrument's order under their item names, and a sixth lead column,
+   `item_order`, records the order that participant saw. A module
+   descriptor's printed order is not followed. The next section describes
+   the file.
+6. Choose where responses go. "A file on the participant's device" is the
    default: the page saves a file and sends nothing. "A web address" is the
    `https://` address of an endpoint that accepts one JSON row per
    participant. The web app in
@@ -50,7 +58,7 @@ the form:
    them, and its first character must not be a digit.
 
 Press "Make the link". The link carries the instrument, the study, the
-participant, the module and the store folded into its address, so it needs
+participant, the module, the random-order choice and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
 a module descriptor is a few hundred characters long. If a mail client or a
 course system truncates it, the page reports that the link cannot be read.
@@ -72,7 +80,8 @@ answers are saved to a file on this device. When the link carries no
 participant identifier, the start screen asks for one.
 
 The items follow, 15 to a page, numbered 1, 2, 3 in the order they appear.
-Each item has one set of response options. Every item on a page must be
+Under the random order, that order is drawn when the page opens, and a
+reload draws another. Each item has one set of response options. Every item on a page must be
 answered before the next page opens. If one is blank, the page names it by
 the number printed beside it and by its place on that page. The cursor moves
 to that item, and the page waits.
@@ -106,19 +115,25 @@ the file the way your study collects documents.
 The file has two rows. The header is
 `study,participant,instrument,form_build,submitted` followed by one column
 per item, named as the package names the items (`hitopbr_01`,
-`hitopsr_233`, `pid5_001`, `pid5sf_100`, `pid5bf_25`). The item columns follow
-the order the participant saw. The data row holds the study fields, the
+`hitopsr_233`, `pid5_001`, `pid5sf_100`, `pid5bf_25`). Without the random
+order, the item columns follow the order the participant saw. With it, a
+sixth lead column, `item_order`, follows `submitted`. It holds the item
+numbers in the order that participant saw them, joined by single spaces
+(`hitopbr_01` is 1). The item columns then follow the instrument's order (a
+module's items in the order its descriptor lists them, which
+`write_module()` writes ascending). The data row holds the study fields, the
 export's build date and the time of finishing as an ISO-8601 timestamp in
 UTC. Then comes each answer's numeric value: 1 to 4 on the HiTOP forms and 0
-to 3 on the PID-5 forms, as the export's response options number them. Six
-example files are under `tests/fixtures/`, one per form and one for a
-HiTOP-SR module.
+to 3 on the PID-5 forms, as the export's response options number them. Seven
+example files are under `tests/fixtures/`, one per form, one for a
+HiTOP-SR module and one HiTOP-BR file under the random order.
 
 ## Send responses to a Google Sheet
 
 With a send address, the page posts one JSON object per participant. Its
 keys are the file's columns in the same order: `study`, `participant`,
-`instrument`, `form_build`, `submitted`, then one key per item. Its values
+`instrument`, `form_build`, `submitted`, `item_order` under the random
+order, then one key per item. Its values
 are the same as the file's, with each answer as a JSON integer. The request
 is a POST with the body as `text/plain`, sent from the page's origin. The
 endpoint must answer with the JSON `{"ok":true}` and with an
@@ -196,6 +211,13 @@ an identifier such as `007` keeps its zeros, and a value that starts with
 5. When you change the code later, choose Deploy, then Manage deployments,
    edit the deployment and pick "New version". The `/exec` URL stays the same.
 
+The script builds the sheet's header from the first row it receives. It
+adds a key it has not seen to the end of the header. So start a new sheet
+for a link with the random order. A sheet that already holds rows without
+`item_order` puts that column after the item columns.
+`read_form_responses()` reads it there too, but the download then lacks
+the column order above.
+
 Anyone with the URL can post a row to the sheet, and only you can read it.
 The URL sits inside every study link you send out. So a participant, or
 anyone who sees a link, can post rows the page never made. If that matters
@@ -238,8 +260,9 @@ included, makes the page save the file instead.
    - Table name: a lower-case name such as `responses`.
 3. Press "Make the link". The SQL for the table appears under the link.
    Copy it, open the dashboard's SQL Editor, paste it in and run it. The
-   SQL creates the table with the five study columns and one integer column
-   per item, in the order the form shows them. It then turns on row-level
+   SQL creates the table with the five study columns, a text column
+   `item_order` when the random-order box is checked, and one integer column
+   per item, in the order the file keeps them. It then turns on row-level
    security, revokes the project's default table privileges from the
    `anon` and `authenticated` roles, grants insert back to `anon`, and
    adds one policy that lets that role insert. With the publishable key,
@@ -248,7 +271,8 @@ included, makes the page save the file instead.
 4. Send the link to the participants.
 
 The table's columns are fixed by the SQL, so a link for a different
-instrument or module needs a table of its own. A row with a key the table
+instrument or module, or a link with the random order sent to a table made
+without it, needs a table of its own. A row with a key the table
 has no column for is refused by the API, and the page then saves the file.
 A row that lacks some of the table's columns is stored with those columns
 empty, because the SQL puts no constraint on any column.
@@ -285,7 +309,8 @@ text, or open it in the spreadsheet as text.
 
 Read the files into R and score them with the hitop package.
 `read_form_responses()` reads a folder of files saved for one form into one
-data frame. Pass its item columns to the scoring function for the form:
+data frame, with `item_order` as a character column that is `NA` for a file
+without it. Pass its item columns to the scoring function for the form:
 `score_hitopsr()`, `score_hitopbr()` or `score_pid5()`. For a PID-5 file, set
 `version` to `"FULL"`, `"SF"` or `"BF"` to match the form:
 
@@ -316,12 +341,12 @@ npx playwright test
 
 | Spec | What it checks |
 |---|---|
-| `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order. The start screen's wording with and without a send address |
-| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures |
+| `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order. Under `shuffle: true`, the HiTOP-BR and the module render a rearrangement numbered 1 to n, and two loads differ; `shuffle: false` renders as no shuffle. The start screen's wording with and without a send address |
+| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures, with and without the random-order box. The box's label and hint, the link it builds, and the rearranged page that link opens |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
-| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0` |
-| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Against a recording endpoint the tests start themselves |
-| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, and a Supabase store with a bad address, key or table name |
+| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0`. Under `shuffle: true`, the HiTOP-BR and the module save `item_order` and the item columns in the instrument's order, each value checked at the position its item was shown at, and the committed shuffled capture agrees with its own `item_order`. Under `shuffle: false`, the HiTOP-BR saves the same file as with no shuffle field |
+| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Under `shuffle: true`, the row posted to a web address and to a Supabase table carries `item_order` and the instrument's order, and the Supabase row's keys equal the shuffle SQL fixture's columns. Against a recording endpoint the tests start themselves |
+| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, a Supabase store with a bad address, key or table name, and a `shuffle` field that is not `true` or `false` |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 

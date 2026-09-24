@@ -88,6 +88,14 @@ export function parseLink(search) {
   }
   if (config.module !== undefined) checkModule(config.module, config.instrument);
   if (config.store !== undefined) config.store = checkStore(config.store);
+  // `shuffle` asks for a fresh random order on each load. Only the two
+  // booleans are read; anything else, `null` and the string "true"
+  // included, is refused by name rather than read as one of them.
+  if (config.shuffle !== undefined && config.shuffle !== true && config.shuffle !== false) {
+    throw new Error(
+      `The study link's shuffle field must be true or false, and it is ${JSON.stringify(config.shuffle)}.`,
+    );
+  }
   return config;
 }
 
@@ -232,17 +240,19 @@ function isIntegerArray(x) {
   return Array.isArray(x) && x.every((v) => Number.isInteger(v));
 }
 
-// The SQL that makes the table a supabase store names, for the items in the
-// order the page will show them: the five study fields as text, one integer
-// column per item, row-level security on, the project's default grants to
-// the API roles revoked, and the anon role allowed to insert and nothing
-// else. Shown by link.html; pasted by the researcher into the project's SQL
+// The SQL that makes the table a supabase store names, for `items` in the
+// order the row keeps them (planItems().items): the five study fields as
+// text, an `item_order` text column under `shuffle`, one integer column per
+// item, row-level security on, the project's default grants to the API
+// roles revoked, and the anon role allowed to insert and nothing else.
+// Shown by link.html; pasted by the researcher into the project's SQL
 // editor.
-export function storeSql(table, items) {
+export function storeSql(table, items, shuffle = false) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
+  const lead = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...(shuffle ? ['item_order'] : [])];
   const columns = [
-    ...['study', 'participant', 'instrument', 'form_build', 'submitted'].map((c) => `  ${q(c)} text`),
+    ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
   ];
   return [
@@ -327,21 +337,52 @@ export async function fetchExport(instrument) {
   return checkExport(exp, instrument);
 }
 
-// The items to render, in order: the export's items as exported, or the
-// module's items in `itemOrder` when present and otherwise in `items` order.
-export function planItems(exp, module) {
-  if (!module) return exp.items.slice();
+// The items the page will use, as two lists of the same item objects:
+// `items`, the order the row and the file keep their item columns in, and
+// `shown`, the order the page renders. Without `shuffle` the two are one
+// order: the export's items as exported, or the module's items in
+// `itemOrder` when present and otherwise in `items` order. With `shuffle`
+// the columns keep the export's order (a module's `items` order, its
+// `itemOrder` not followed) and the shown order is a fresh random
+// rearrangement of them, drawn here on each load.
+export function planItems(exp, module, shuffle = false) {
   const byNumber = new Map(exp.items.map((it) => [it.number, it]));
-  const order = module.itemOrder ?? module.items;
-  return order.map((n) => {
-    const it = byNumber.get(n);
-    if (!it) {
-      throw new Error(
-        `The study link's module names item ${n}, which the ${INSTRUMENTS[exp.stem] ?? exp.stem} export does not have.`,
-      );
+  const resolve = (order) =>
+    order.map((n) => {
+      const it = byNumber.get(n);
+      if (!it) {
+        throw new Error(
+          `The study link's module names item ${n}, which the ${INSTRUMENTS[exp.stem] ?? exp.stem} export does not have.`,
+        );
+      }
+      return it;
+    });
+  let items;
+  if (!module) items = exp.items.slice();
+  else if (shuffle) items = resolve(module.items);
+  else items = resolve(module.itemOrder ?? module.items);
+  return { items, shown: shuffle ? shuffleItems(items) : items.slice() };
+}
+
+// A random rearrangement of `items`: a Fisher–Yates shuffle whose draws come
+// from crypto.getRandomValues. Each draw takes a 32-bit word and rejects the
+// words at or above the largest multiple of the range that fits in 32 bits,
+// so every position is equally likely. The input is not changed.
+export function shuffleItems(items) {
+  const out = items.slice();
+  const word = new Uint32Array(1);
+  const draw = (range) => {
+    const limit = Math.floor(2 ** 32 / range) * range;
+    for (;;) {
+      crypto.getRandomValues(word);
+      if (word[0] < limit) return word[0] % range;
     }
-    return it;
-  });
+  };
+  for (let j = out.length - 1; j > 0; j--) {
+    const i = draw(j + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 // ---- The CSV --------------------------------------------------------------
@@ -352,10 +393,19 @@ function csvField(v) {
 }
 
 // One header row and one data row. `answers` maps item number to the chosen
-// option value.
-export function buildCsv({ study, participant, instrument, formBuild, submitted, items, answers }) {
-  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...items.map((it) => it.name)];
-  const row = [study, participant, instrument, formBuild, submitted, ...items.map((it) => answers.get(it.number))];
+// option value. `items` is the column order; `itemOrder`, when given, is the
+// item numbers in the order shown, written as a sixth lead column after
+// `submitted`, joined by single spaces. Without it the file has five lead
+// columns.
+export function buildCsv({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
+  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
+  const row = [study, participant, instrument, formBuild, submitted];
+  if (itemOrder !== undefined) {
+    header.push('item_order');
+    row.push(itemOrder.join(' '));
+  }
+  header.push(...items.map((it) => it.name));
+  row.push(...items.map((it) => answers.get(it.number)));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
 }
 
@@ -369,11 +419,13 @@ export function fileName({ study, participant, instrument, submitted }) {
 
 export const SEND_TIMEOUT_MS = 30_000;
 
-// One JSON object per finished form: the five study fields, then one key per
-// item in the order the page showed them, each value the chosen option's
-// integer value. The same record buildCsv() writes.
-export function buildRow({ study, participant, instrument, formBuild, submitted, items, answers }) {
+// One JSON object per finished form: the five study fields, `item_order`
+// when the record carries one, then one key per item in `items` order, each
+// value the chosen option's integer value. The same record buildCsv()
+// writes, key for column.
+export function buildRow({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
   const row = { study, participant, instrument, form_build: formBuild, submitted };
+  if (itemOrder !== undefined) row.item_order = itemOrder.join(' ');
   for (const it of items) row[it.name] = answers.get(it.number);
   return row;
 }
@@ -536,17 +588,20 @@ export async function boot(root, search) {
     showError(root, e.message);
     return;
   }
-  let items;
+  let plan;
   try {
-    items = planItems(exp, config.module);
+    plan = planItems(exp, config.module, config.shuffle === true);
   } catch (e) {
     showError(root, e.message);
     return;
   }
-  runForm(root, config, exp, items);
+  runForm(root, config, exp, plan);
 }
 
-function runForm(root, config, exp, items) {
+// `plan.shown` is the order the pages render and the positions count in;
+// `plan.items` the order the row and the file keep.
+function runForm(root, config, exp, plan) {
+  const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
@@ -702,7 +757,10 @@ function runForm(root, config, exp, items) {
       instrument: exp.stem,
       formBuild: exp.buildDate,
       submitted,
-      items,
+      // The columns keep `plan.items`; under shuffle the shown order goes
+      // into `item_order`, and without it the file is as it always was.
+      items: plan.items,
+      itemOrder: config.shuffle === true ? plan.shown.map((it) => it.number) : undefined,
       // A copy: the radios stay live during a send, and the file saved on an
       // unconfirmed send must hold the answers the row was posted with.
       answers: new Map(answers),
