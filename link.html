@@ -222,7 +222,7 @@
       // export names them, so the export is read here as the page reads it.
       let items;
       try {
-        items = planItems(await fetchExport(config.instrument), config.module);
+        items = planItems(await fetchExport(config.instrument), config.module).items;
       } catch (e) {
         err.textContent = e.message;
         return;

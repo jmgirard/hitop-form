@@ -17,6 +17,15 @@
 //       are saved to this device and none is sent anywhere; with a store it
 //       names the store address's host as where the answers go and says the
 //       file is saved instead when the send cannot be confirmed
+//   R7: a HiTOP-BR link with shuffle: true renders a rearrangement of the
+//       export's items, numbered 1 to 45 in the shown order, and two loads
+//       of the link render different orders
+//   R8: a link with shuffle: true carrying the descriptor with itemOrder
+//       renders a rearrangement of its items, numbered 1 to 21, and two
+//       loads render different orders
+//   R9: a link with shuffle: false renders as one with no shuffle field:
+//       the export's order for the HiTOP-BR, the descriptor's itemOrder for
+//       the module
 
 import { test, expect } from '@playwright/test';
 import {
@@ -88,6 +97,58 @@ test('a descriptor without itemOrder renders its items in items order', async ({
   const seen = await walkAll(page);
   // R5
   expect(seen.map((s) => s.number)).toEqual(module.items);
+});
+
+// Opens the link, walks the form and returns the item numbers in the order
+// shown, after checking that the positions printed beside them run 1 to n.
+async function shownOrder(page, config, participant) {
+  await openForm(page, base(), config);
+  await begin(page, participant);
+  const seen = await walkAll(page);
+  expect(seen.map((s) => s.position)).toEqual(seen.map((_, i) => i + 1));
+  return seen.map((s) => s.number);
+}
+
+const sorted = (a) => [...a].sort((x, y) => x - y);
+
+// R7 and R8: under shuffle, each load is a rearrangement of the planned
+// items, and two loads differ. Two draws of 45 or 21 items coincide with
+// probability 1 / 45! or 1 / 21!, so an equal pair means the shuffle did not
+// run.
+test('a HiTOP-BR link with shuffle renders a rearrangement, and two loads differ', async ({ page }) => {
+  const exp = await fetchExport('hitopbr');
+  const numbers = exp.items.map((it) => it.number);
+  const config = { instrument: 'hitopbr', study: 'render', participant: 'r7', shuffle: true };
+  const first = await shownOrder(page, config);
+  const second = await shownOrder(page, config);
+  expect(sorted(first)).toEqual(sorted(numbers));
+  expect(sorted(second)).toEqual(sorted(numbers));
+  expect(first).not.toEqual(numbers);
+  expect(second).not.toEqual(first);
+});
+
+test('a module link with shuffle renders a rearrangement of its items, and two loads differ', async ({ page }) => {
+  const module = await readDescriptor('module-shuffled.json');
+  const config = { instrument: module.instrument, study: 'render', shuffle: true, module };
+  const first = await shownOrder(page, config, 'r8');
+  const second = await shownOrder(page, config, 'r8');
+  expect(first).toHaveLength(21);
+  expect(sorted(first)).toEqual(sorted(module.items));
+  expect(sorted(second)).toEqual(sorted(module.items));
+  expect(second).not.toEqual(first);
+});
+
+// R9: shuffle: false is the same as no shuffle field.
+test('a HiTOP-BR link with shuffle: false renders the export order', async ({ page }) => {
+  const exp = await fetchExport('hitopbr');
+  const shown = await shownOrder(page, { instrument: 'hitopbr', study: 'render', participant: 'r9', shuffle: false });
+  expect(shown).toEqual(exp.items.map((it) => it.number));
+});
+
+test('a module link with shuffle: false renders the descriptor\'s itemOrder', async ({ page }) => {
+  const module = await readDescriptor('module-shuffled.json');
+  const shown = await shownOrder(page, { instrument: module.instrument, study: 'render', shuffle: false, module }, 'r9');
+  expect(shown).toEqual(module.itemOrder);
 });
 
 // R6: the two wordings, stated in full. No request leaves for the store on

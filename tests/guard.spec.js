@@ -19,6 +19,9 @@
 //       table is missing or not a lower-case Postgres name (a capital, a
 //       leading digit, a hyphen, the empty string, 64 characters); four
 //       table forms, an anon JWT and a url ending in /rest/v1/ accepted
+//   G9: a link whose shuffle field is the string "true", the number 1 or
+//       null is refused with a message naming the field and the value, and
+//       no form starts
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -238,6 +241,18 @@ test('a supabase store whose key is an anon JWT is accepted', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
   await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
 });
+
+// G9: a shuffle field that is not one of the two booleans.
+for (const shuffle of ['true', 1, null]) {
+  test(`a shuffle field of ${JSON.stringify(shuffle)} is refused, naming the field and the value`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g9', shuffle });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's shuffle field must be true or false, and it is ${JSON.stringify(shuffle)}.`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+}
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

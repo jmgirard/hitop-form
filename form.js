@@ -88,6 +88,14 @@ export function parseLink(search) {
   }
   if (config.module !== undefined) checkModule(config.module, config.instrument);
   if (config.store !== undefined) config.store = checkStore(config.store);
+  // `shuffle` asks for a fresh random order on each load. Only the two
+  // booleans are read; anything else, `null` and the string "true"
+  // included, is refused by name rather than read as one of them.
+  if (config.shuffle !== undefined && config.shuffle !== true && config.shuffle !== false) {
+    throw new Error(
+      `The study link's shuffle field must be true or false, and it is ${JSON.stringify(config.shuffle)}.`,
+    );
+  }
   return config;
 }
 
@@ -327,21 +335,52 @@ export async function fetchExport(instrument) {
   return checkExport(exp, instrument);
 }
 
-// The items to render, in order: the export's items as exported, or the
-// module's items in `itemOrder` when present and otherwise in `items` order.
-export function planItems(exp, module) {
-  if (!module) return exp.items.slice();
+// The items the page will use, as two lists of the same item objects:
+// `items`, the order the row and the file keep their item columns in, and
+// `shown`, the order the page renders. Without `shuffle` the two are one
+// order: the export's items as exported, or the module's items in
+// `itemOrder` when present and otherwise in `items` order. With `shuffle`
+// the columns keep the export's order (a module's `items` order, its
+// `itemOrder` not followed) and the shown order is a fresh random
+// rearrangement of them, drawn here on each load.
+export function planItems(exp, module, shuffle = false) {
   const byNumber = new Map(exp.items.map((it) => [it.number, it]));
-  const order = module.itemOrder ?? module.items;
-  return order.map((n) => {
-    const it = byNumber.get(n);
-    if (!it) {
-      throw new Error(
-        `The study link's module names item ${n}, which the ${INSTRUMENTS[exp.stem] ?? exp.stem} export does not have.`,
-      );
+  const resolve = (order) =>
+    order.map((n) => {
+      const it = byNumber.get(n);
+      if (!it) {
+        throw new Error(
+          `The study link's module names item ${n}, which the ${INSTRUMENTS[exp.stem] ?? exp.stem} export does not have.`,
+        );
+      }
+      return it;
+    });
+  let items;
+  if (!module) items = exp.items.slice();
+  else if (shuffle) items = resolve(module.items);
+  else items = resolve(module.itemOrder ?? module.items);
+  return { items, shown: shuffle ? shuffleItems(items) : items.slice() };
+}
+
+// A random rearrangement of `items`: a Fisher–Yates shuffle whose draws come
+// from crypto.getRandomValues. Each draw takes a 32-bit word and rejects the
+// words above the largest multiple of the range, so every position is
+// equally likely. The input is not changed.
+export function shuffleItems(items) {
+  const out = items.slice();
+  const word = new Uint32Array(1);
+  const draw = (range) => {
+    const limit = Math.floor(2 ** 32 / range) * range;
+    for (;;) {
+      crypto.getRandomValues(word);
+      if (word[0] < limit) return word[0] % range;
     }
-    return it;
-  });
+  };
+  for (let j = out.length - 1; j > 0; j--) {
+    const i = draw(j + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 // ---- The CSV --------------------------------------------------------------
@@ -536,17 +575,20 @@ export async function boot(root, search) {
     showError(root, e.message);
     return;
   }
-  let items;
+  let plan;
   try {
-    items = planItems(exp, config.module);
+    plan = planItems(exp, config.module, config.shuffle === true);
   } catch (e) {
     showError(root, e.message);
     return;
   }
-  runForm(root, config, exp, items);
+  runForm(root, config, exp, plan);
 }
 
-function runForm(root, config, exp, items) {
+// `plan.shown` is the order the pages render and the positions count in;
+// `plan.items` the order the row and the file keep.
+function runForm(root, config, exp, plan) {
+  const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
