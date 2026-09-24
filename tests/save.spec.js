@@ -21,6 +21,8 @@
 //   S9: the committed shuffled HiTOP-BR file (responses-hitopbr-shuffled.csv,
 //       one S8 walk captured) has that shape, and its values agree with its
 //       own item_order cell under the answer pattern
+//   S10: under shuffle: false, the HiTOP-BR saves the file S1 to S4 describe,
+//       equal to the same fixture: no item_order column
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -42,6 +44,9 @@ const LEAD = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
 // the reader depends on (S6) and the link's UTF-8 round trip are exercised.
 const CASES = [
   { name: 'hitopbr', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' } },
+  // S10: shuffle: false saves the same file as no shuffle field: five lead
+  // columns, no item_order, the export's order. Compared to the same fixture.
+  { name: 'hitopbr with shuffle: false', fixture: 'responses-hitopbr.csv', config: { instrument: 'hitopbr' }, shuffle: false },
   { name: 'hitopsr', fixture: 'responses-hitopsr.csv', config: { instrument: 'hitopsr' } },
   { name: 'shuffled module', fixture: 'responses-module-shuffled.csv', module: 'module-shuffled.json' },
   { name: 'pid5', fixture: 'responses-pid5.csv', config: { instrument: 'pid5' }, zeroAt: 4 },
@@ -64,7 +69,9 @@ for (const c of CASES) {
     const exp = await fetchExport(instrument);
     const study = c.study ?? 'fixture';
     const participant = c.participant ?? 'p001';
-    const config = { instrument, study, participant, ...(module ? { module } : {}) };
+    const config = {
+      instrument, study, participant, ...(module ? { module } : {}), ...(c.shuffle !== undefined ? { shuffle: c.shuffle } : {}),
+    };
 
     const byNumber = new Map(exp.items.map((it) => [it.number, it]));
     const order = module ? module.itemOrder ?? module.items : exp.items.map((it) => it.number);
