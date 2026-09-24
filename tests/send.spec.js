@@ -472,6 +472,8 @@ for (const u of UNCONFIRMED) {
     await expect(done).toContainText('The send to the study team could not be confirmed');
     await expect(done).toContainText(u.why);
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+    // Without a complete field the saved screen offers no completion link.
+    await expect(page.locator('p.complete')).toHaveCount(0);
     const text = await page.locator('main').textContent();
     expect(text).not.toContain('No answer');
     expect(text).not.toContain('sent from this page');
@@ -511,6 +513,8 @@ for (const u of SUPABASE_UNCONFIRMED) {
     await expect(done).toContainText('The send to the study team could not be confirmed');
     await expect(done).toContainText(u.why);
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+    // Without a complete field the saved screen offers no completion link.
+    await expect(page.locator('p.complete')).toHaveCount(0);
     if (u.name === 'a 401') {
       // The 401 was the endpoint's answer to the insert, not to the preflight.
       expect(since(from).map((r) => [r.method, r.path])).toEqual([

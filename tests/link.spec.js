@@ -327,10 +327,11 @@ test('the Completion URL field puts complete in the link, and an http:// address
     instrument: 'hitopbr', study: 'link', participant: 'l12', complete: COMPLETE_URL,
   });
 
-  await page.locator('input[name="complete"]').fill('http://example.com/done');
+  // One of the forms the page's own check refuses (guard G11).
+  await page.locator('input[name="complete"]').fill('http://localhost');
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#err')).toHaveText(
-    'The completion URL could not be used: it must start with https://, and it is "http://example.com/done".',
+    'The completion URL could not be used: it must start with https://, and it is "http://localhost".',
   );
   expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
 });

@@ -124,6 +124,9 @@ for (const c of CASES) {
     await walkAll(page);
     const download = await downloading;
     const after = Date.now();
+    // Without a complete field the saved screen offers no completion link.
+    await expect(page.locator('h1')).toHaveText('Thank you');
+    await expect(page.locator('p.complete')).toHaveCount(0);
     const text = await readFile(await download.path(), 'utf8');
     expect(text.endsWith('\r\n'), 'rows end in CRLF').toBe(true);
     const rows = parseCsv(text);

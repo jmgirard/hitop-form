@@ -29,8 +29,8 @@
 //   G11: a link's complete field is refused by name, with the value shown,
 //       when it is http://127.0.0.1, http://localhost, a javascript:
 //       address, a string that is no URL, an address with a user name only
-//       or one with a password, and refused as not text when it is a
-//       number; an https:// address is accepted
+//       or one with a password, or a number; an https:// address is
+//       accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -304,7 +304,7 @@ const REFUSED_COMPLETE = [
     complete,
     names: `it must not carry a user name or password, and it is ${JSON.stringify(complete)}.`,
   })),
-  { complete: 7, names: 'it is not text.' },
+  { complete: 7, names: 'it is not text, and it is 7.' },
 ];
 
 for (const probe of REFUSED_COMPLETE) {

@@ -1,4 +1,5 @@
-// The form page. index.html calls boot(); link.html imports encodeConfig().
+// The form page. index.html calls boot(); link.html imports encodeConfig(),
+// the checks, fetchExport(), planItems() and storeSql().
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -232,6 +233,9 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
 // endpoint, which a completion address never is. link.html runs the same
 // check on the builder's completion field.
 export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
+  // A value that is not text is refused with the value shown, as every
+  // other refusal of this field shows it.
+  if (typeof url !== 'string') throw bad(`it is not text, and it is ${JSON.stringify(url)}.`);
   const u = parseAddress(url, bad, 'it');
   if (u.protocol !== 'https:') {
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
@@ -478,7 +482,7 @@ function leadValues({ study, participant, instrument, formBuild, submitted, item
 // the file has five lead columns.
 export function buildCsv(record) {
   const { items, answers } = record;
-  const header = [...leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined })];
+  const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const row = leadValues(record);
   header.push(...items.map((it) => it.name));
   row.push(...items.map((it) => answers.get(it.number)));
