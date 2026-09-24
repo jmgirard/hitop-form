@@ -11,6 +11,14 @@
 // sends before a supabase insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module and store,
 // are in the page's address, which the host serving the page sees.)
+//
+// Two link fields fit a Prolific study. `prolific: true` takes the
+// participant identifier from the PROLIFIC_PID parameter of the page's
+// address and writes the STUDY_ID and SESSION_ID parameters into the row and
+// the file. `complete` is an https:// address the page sends the participant
+// to after a confirmed send, and links to after a saved file; with it, the
+// one further request is that navigation, and it is made only after the
+// store confirmed.
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -96,7 +104,36 @@ export function parseLink(search) {
       `The study link's shuffle field must be true or false, and it is ${JSON.stringify(config.shuffle)}.`,
     );
   }
+  // `prolific` takes the participant identifier from the address, so a link
+  // that also names one is refused: the two would compete for the column.
+  if (config.prolific !== undefined && config.prolific !== true && config.prolific !== false) {
+    throw new Error(
+      `The study link's prolific field must be true or false, and it is ${JSON.stringify(config.prolific)}.`,
+    );
+  }
+  if (config.prolific === true && config.participant !== undefined) {
+    throw new Error(
+      "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
+    );
+  }
+  if (config.complete !== undefined) config.complete = checkCompleteUrl(config.complete);
   return config;
+}
+
+// The three parameters Prolific fills into a study URL through its
+// placeholders. A parameter still holding a placeholder (`{{%STUDY_ID%}}`, as
+// a preview or a hand-pasted link may carry) reads as absent, as does a
+// missing or blank one: each comes back as the empty string.
+export const PROLIFIC_PARAMS = ['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'];
+
+export function readProlific(search) {
+  const params = new URLSearchParams(search);
+  const read = (name) => {
+    const v = (params.get(name) ?? '').trim();
+    return /^\{\{%.*%\}\}$/.test(v) ? '' : v;
+  };
+  const [pid, study, session] = PROLIFIC_PARAMS.map(read);
+  return { pid, study, session };
 }
 
 // ---- The store ------------------------------------------------------------
@@ -180,25 +217,45 @@ export function checkStore(store) {
 // endpoint needs. Anything else is refused by name.
 export function checkStoreUrl(url, bad = (why) => new Error(`The store address could not be used: ${why}`)) {
   if (url === undefined) throw bad('it names no url.');
-  if (typeof url !== 'string') throw bad('its url is not text.');
-  let u;
-  try {
-    u = new URL(url);
-  } catch {
-    throw bad(`its url is not a web address: ${JSON.stringify(url)}.`);
-  }
+  const u = parseAddress(url, bad, 'its url');
   const loopback = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
   if (u.protocol !== 'https:' && !loopback) {
     throw bad(
       `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
     );
   }
-  // fetch() refuses a URL that carries a user name or password, so such an
-  // address would make every send unconfirmed; refuse it here by name.
-  if (u.username !== '' || u.password !== '') {
-    throw bad(`its url must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
+  return u.href;
+}
+
+// The address a link's `complete` field may name: `https:` to any host, and
+// nothing else. The loopback exception above is for the tests' recording
+// endpoint, which a completion address never is. link.html runs the same
+// check on the builder's completion field.
+export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
+  const u = parseAddress(url, bad, 'it');
+  if (u.protocol !== 'https:') {
+    throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
   return u.href;
+}
+
+// The parse the two address checks share: text, a URL, and no user name or
+// password. fetch() refuses a URL that carries one, so such a store address
+// would make every send unconfirmed, and a completion address with one
+// would put a credential in a study link. `what` names the address in the
+// message ("its url", "it").
+function parseAddress(url, bad, what) {
+  if (typeof url !== 'string') throw bad(`${what} is not text.`);
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    throw bad(`${what} is not a web address: ${JSON.stringify(url)}.`);
+  }
+  if (u.username !== '' || u.password !== '') {
+    throw bad(`${what} must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
+  }
+  return u;
 }
 
 // A module descriptor as write_module() writes it: `format` "1.0",
@@ -595,18 +652,23 @@ export async function boot(root, search) {
     showError(root, e.message);
     return;
   }
-  runForm(root, config, exp, plan);
+  // The three Prolific parameters are read from the address only under
+  // `prolific: true`; any other link ignores them.
+  runForm(root, config, exp, plan, config.prolific === true ? readProlific(search) : undefined);
 }
 
 // `plan.shown` is the order the pages render and the positions count in;
-// `plan.items` the order the row and the file keep.
-function runForm(root, config, exp, plan) {
+// `plan.items` the order the row and the file keep. `prolific`, under
+// `prolific: true`, is the address's three parameters from readProlific():
+// a PROLIFIC_PID that is not empty is the participant identifier, and the
+// start screen then asks for none.
+function runForm(root, config, exp, plan, prolific) {
   const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
   const pageCount = Math.ceil(items.length / PAGE_SIZE);
-  let participant = config.participant;
+  let participant = prolific && prolific.pid !== '' ? prolific.pid : config.participant;
   let page = 0;
   let finished = false;
   let sending = false;

@@ -22,6 +22,14 @@
 //   G9: a link whose shuffle field is the string "true", the number 1 or
 //       null is refused with a message naming the field and the value, and
 //       no form starts
+//   G10: a link whose prolific field is the string "true", the number 1 or
+//       null is refused with a message naming the field and the value; a
+//       link with prolific: true beside a participant identifier is refused
+//       naming both; prolific: false is accepted as no field
+//   G11: a link's complete field is refused by name, with the value shown,
+//       when it is http://127.0.0.1, http://localhost, a javascript:
+//       address, a string that is no URL, an address with a user name only,
+//       one with a password, or a number; an https:// address is accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -253,6 +261,68 @@ for (const shuffle of ['true', 1, null]) {
     await expect(page.locator('fieldset.item')).toHaveCount(0);
   });
 }
+
+// G10: a prolific field that is not one of the two booleans, and the
+// participant conflict.
+for (const prolific of ['true', 1, null]) {
+  test(`a prolific field of ${JSON.stringify(prolific)} is refused, naming the field and the value`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', prolific });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's prolific field must be true or false, and it is ${JSON.stringify(prolific)}.`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+}
+
+test('prolific: true beside a participant identifier is refused, naming both', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g10', prolific: true });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('prolific: false beside a participant identifier is accepted', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g10', prolific: false });
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+});
+
+// G11: the complete field. Its address takes the store address's parse, with
+// https: alone accepted: the loopback exception is the recording endpoint's,
+// and a completion address is never one.
+const REFUSED_COMPLETE = [
+  ...['http://127.0.0.1', 'http://localhost', 'javascript:alert(1)'].map((complete) => ({
+    complete,
+    names: `it must start with https://, and it is ${JSON.stringify(complete)}.`,
+  })),
+  { complete: 'not a url', names: 'it is not a web address: "not a url".' },
+  ...['https://user@example.com/done', 'https://user:pass@example.com/done'].map((complete) => ({
+    complete,
+    names: `it must not carry a user name or password, and it is ${JSON.stringify(complete)}.`,
+  })),
+  { complete: 7, names: 'it is not text.' },
+];
+
+for (const probe of REFUSED_COMPLETE) {
+  test(`a complete field of ${JSON.stringify(probe.complete)} is refused, naming the fault`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g11', complete: probe.complete });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's complete field could not be used: ${probe.names}`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+  });
+}
+
+test('a complete field of an https:// address is accepted', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'g11', complete: 'https://app.prolific.com/submissions/complete?cc=CHHXQERF',
+  });
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+});
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');
