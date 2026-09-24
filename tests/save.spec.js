@@ -48,6 +48,16 @@
 //       host, and no request reaches the address within five seconds
 //   S17: without a prolific field, a real PROLIFIC_PID in the address of a
 //       link with no participant leaves the identifier field shown and empty
+//   S18: under prolific: true, an address carrying PROLIFIC_PID twice, once
+//       filled and once a placeholder in either order, shows no identifier
+//       field and saves the filled ID as the participant; STUDY_ID doubled
+//       the same two ways writes the filled value to prolific_study
+//   S19: readProlific() itself, for each of the three names: blank-then-filled
+//       and filled-then-blank give the filled value, two filled values give
+//       the first
+//   S20: with complete and completeSaved in the link and no store, the saved
+//       screen's link after the file name is completeSaved, labelled by its
+//       host, and no request reaches either address within five seconds
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -59,8 +69,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
-  expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, serveComplete,
+  expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
 } from './helpers.mjs';
+import { readProlific } from '../form.js';
 
 const base = useTarget();
 const LEAD = leadColumns();
@@ -312,4 +323,85 @@ test('without a prolific field, a PROLIFIC_PID in the address does not fill the 
   await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture' }, { extra: prolificQuery() });
   await expect(page.locator('input[name="participant"]')).toBeVisible();
   await expect(page.locator('input[name="participant"]')).toHaveValue('');
+});
+
+// S18: a parameter twice in the address, once filled and once still a
+// placeholder, as when Prolific's own "URL parameters" option appends the
+// three to a link that already ends in the builder's placeholders. The
+// filled value wins in either order.
+const PLACEHOLDER = (name) => `{{%${name}%}}`;
+for (const c of [
+  { name: 'PROLIFIC_PID as placeholder then filled', extra: `${prolificQuery({ pid: PLACEHOLDER('PROLIFIC_PID') })}&PROLIFIC_PID=${PROLIFIC.pid}` },
+  { name: 'PROLIFIC_PID as filled then placeholder', extra: `${prolificQuery()}&PROLIFIC_PID=${PLACEHOLDER('PROLIFIC_PID')}` },
+]) {
+  test(`under prolific, ${c.name} shows no identifier field and saves the filled ID`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', prolific: true }, { extra: c.extra });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+    await begin(page);
+    const downloading = awaitDownload(page);
+    await walkAll(page);
+    const rows = parseCsv(await readFile(await (await downloading).path(), 'utf8'));
+    expect(rows[0].slice(0, 7)).toEqual(leadColumns({ prolific: true }));
+    expect(rows[1].slice(0, 3)).toEqual(['fixture', PROLIFIC.pid, 'hitopbr']);
+    expect(rows[1].slice(5, 7)).toEqual([PROLIFIC.study, PROLIFIC.session]);
+  });
+}
+for (const c of [
+  { name: 'STUDY_ID as placeholder then filled', extra: `${prolificQuery({ study: PLACEHOLDER('STUDY_ID') })}&STUDY_ID=${PROLIFIC.study}` },
+  { name: 'STUDY_ID as filled then placeholder', extra: `${prolificQuery()}&STUDY_ID=${PLACEHOLDER('STUDY_ID')}` },
+]) {
+  test(`under prolific, ${c.name} writes the filled value to prolific_study`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', prolific: true }, { extra: c.extra });
+    await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+    await begin(page);
+    const downloading = awaitDownload(page);
+    await walkAll(page);
+    const rows = parseCsv(await readFile(await (await downloading).path(), 'utf8'));
+    expect(rows[0].slice(0, 7)).toEqual(leadColumns({ prolific: true }));
+    expect(rows[1].slice(0, 3)).toEqual(['fixture', PROLIFIC.pid, 'hitopbr']);
+    expect(rows[1].slice(5, 7)).toEqual([PROLIFIC.study, PROLIFIC.session]);
+  });
+}
+
+// S19: readProlific() on a doubled parameter, for each name: a blank before
+// or after the filled value is skipped, and of two filled values the first
+// is read. Read in Node from form.js, which the page imports unchanged.
+for (const [name, key] of [['PROLIFIC_PID', 'pid'], ['STUDY_ID', 'study'], ['SESSION_ID', 'session']]) {
+  test(`readProlific() reads ${name} as its first filled value when the address carries it twice`, () => {
+    const filled = PROLIFIC[key];
+    const others = { pid: '', study: '', session: '' };
+    expect(readProlific(`?${name}=&${name}=${filled}`), 'blank then filled').toEqual({ ...others, [key]: filled });
+    expect(readProlific(`?${name}=${filled}&${name}=%20`), 'filled then blank').toEqual({ ...others, [key]: filled });
+    expect(readProlific(`?${name}=${filled}&${name}=second`), 'two filled').toEqual({ ...others, [key]: filled });
+    expect(readProlific(`?${name}=&${name}=${encodeURIComponent(PLACEHOLDER(name))}`), 'blank then placeholder').toEqual(others);
+  });
+}
+
+// S20: a completeSaved address beside complete, with no store: the saved
+// screen links to completeSaved, and neither address is requested.
+test('with complete and completeSaved and no store, the saved screen links to completeSaved and does not navigate', async ({ page }) => {
+  const requests = await serveComplete(page);
+  const savedRequests = await serveComplete(page, COMPLETE_SAVED_URL);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'fixture', participant: 'c3', complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+  });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  const download = await downloading;
+
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute('href', COMPLETE_SAVED_URL);
+  await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
+  const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
+  expect(order).toEqual(['CODE', 'A']);
+  await page.waitForTimeout(5000);
+  expect(requests, 'no request to the completion address').toEqual([]);
+  expect(savedRequests, 'no request to the saved-file completion address').toEqual([]);
+  await expect(page).not.toHaveURL(COMPLETE_URL);
+  await expect(page).not.toHaveURL(COMPLETE_SAVED_URL);
 });

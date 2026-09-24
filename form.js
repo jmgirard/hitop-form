@@ -13,12 +13,15 @@
 // not confirmed. (The link's own contents, study, participant, module and store,
 // are in the page's address, which the host serving the page sees.)
 //
-// Two link fields fit a Prolific study. `prolific: true` takes the
+// Three link fields fit a Prolific study. `prolific: true` takes the
 // participant identifier from the PROLIFIC_PID parameter of the page's
 // address and writes the STUDY_ID and SESSION_ID parameters into the row and
 // the file. `complete` is an https:// address the page sends the participant
-// to after a confirmed send, and links to after a saved file. The page
-// itself makes one further request with it, that navigation, and only
+// to after a confirmed send, once the sent screen is drawn, and links to
+// after a saved file. `completeSaved`, allowed only beside `complete`, is a
+// second such address the saved-file screens link to in its place, for a
+// study that gives a saved file its own completion code. The page itself
+// makes one further request with `complete`, that navigation, and only
 // after the store confirmed; the saved screens' link is followed by the
 // participant or not at all.
 
@@ -119,21 +122,33 @@ export function parseLink(search) {
     );
   }
   if (config.complete !== undefined) config.complete = checkCompleteUrl(config.complete);
+  // `completeSaved` takes the same check under its own name, and means
+  // nothing without a `complete` beside it: the saved screens link to it in
+  // place of `complete`, and a confirmed send still goes to `complete`.
+  if (config.completeSaved !== undefined) {
+    const bad = (why) => new Error(`The study link's completeSaved field could not be used: ${why}`);
+    if (config.complete === undefined) {
+      throw bad(`it needs a complete field beside it, and the link carries none; it is ${JSON.stringify(config.completeSaved)}.`);
+    }
+    config.completeSaved = checkCompleteUrl(config.completeSaved, bad);
+  }
   return config;
 }
 
 // The three parameters Prolific fills into a study URL through its
 // placeholders. A parameter still holding a placeholder (`{{%STUDY_ID%}}`, as
 // a preview or a hand-pasted link may carry) reads as absent, as does a
-// missing or blank one: each comes back as the empty string.
+// missing or blank one: each comes back as the empty string. An address may
+// carry a parameter twice, as when Prolific's own "URL parameters" option
+// appends the three to a link that already ends in the builder's
+// placeholders; each reads as its first value that is neither blank nor a
+// placeholder, in whichever order the two arrived.
 export const PROLIFIC_PARAMS = ['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'];
 
 export function readProlific(search) {
   const params = new URLSearchParams(search);
-  const read = (name) => {
-    const v = (params.get(name) ?? '').trim();
-    return /^\{\{%.*%\}\}$/.test(v) ? '' : v;
-  };
+  const filled = (v) => v !== '' && !/^\{\{%.*%\}\}$/.test(v);
+  const read = (name) => params.getAll(name).map((v) => v.trim()).find(filled) ?? '';
   const [pid, study, session] = PROLIFIC_PARAMS.map(read);
   return { pid, study, session };
 }
@@ -877,20 +892,26 @@ function runForm(root, config, exp, plan, prolific) {
     sending = false;
     finished = true;
     if (outcome.confirmed) {
-      // With a completion address the participant goes straight there, as
-      // Prolific recommends, and the sent screen is never drawn: `finished`
-      // is already set, so the unload guard lets the navigation through.
-      if (config.complete !== undefined) {
-        window.location.assign(config.complete);
-        return;
-      }
+      // The sent screen is drawn first either way. With a completion
+      // address a link there takes the place of "You can close this
+      // page.", and the page then navigates there, as Prolific recommends:
+      // `finished` is already set, so the unload guard lets the navigation
+      // through, and while the navigation is pending the participant sees
+      // the sent screen rather than a disabled form.
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
-        el('p', { text: 'You can close this page.' }),
+        config.complete === undefined
+          ? el('p', { text: 'You can close this page.' })
+          : el('p', { class: 'complete' }, [
+              'Continue to ',
+              el('a', { href: config.complete, text: new URL(config.complete).host }),
+              '.',
+            ]),
         versionLine(exp),
       );
       focusHeading(root);
+      if (config.complete !== undefined) window.location.assign(config.complete);
       return;
     }
     showSaved(
@@ -908,13 +929,15 @@ function runForm(root, config, exp, plan, prolific) {
 
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
-  // name, labelled by its host, and navigate nowhere on their own.
+  // name, labelled by its host, and navigate nowhere on their own. The
+  // address is `completeSaved` when the link carries one, else `complete`.
   function showSaved(name, lead, trail) {
-    const complete = config.complete === undefined
+    const address = config.completeSaved ?? config.complete;
+    const complete = address === undefined
       ? []
       : [el('p', { class: 'complete' }, [
           'Then continue to ',
-          el('a', { href: config.complete, text: new URL(config.complete).host }),
+          el('a', { href: address, text: new URL(address).host }),
           '.',
         ])];
     root.replaceChildren(
