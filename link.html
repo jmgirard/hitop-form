@@ -90,6 +90,15 @@
       Show the items in a random order
       <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
     </label>
+    <label class="check">
+      <input name="prolific" type="checkbox" value="true">
+      Recruit through Prolific
+      <span class="hint">The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</span>
+    </label>
+    <label>Completion URL
+      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, and links to after a saved file. For Prolific, the completion URL shown on the study's page.</span>
+      <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
       <select name="storeKind">
@@ -128,14 +137,20 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the Prolific box is checked, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
   </div>
 </main>
 <script type="module">
-  import { encodeConfig, checkModule, checkStore, fetchExport, planItems, storeSql } from './form.js';
+  import {
+    encodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
+  } from './form.js';
+
+  // The three placeholders Prolific fills in, appended to a Prolific link
+  // after the page's own parameter.
+  const PROLIFIC_SUFFIX = PROLIFIC_PARAMS.map((p) => `&${p}={{%${p}%}}`).join('');
 
   const f = document.getElementById('f');
   const err = document.getElementById('err');
@@ -188,6 +203,26 @@
     // The box checked puts `shuffle: true` in the link; unchecked, the link
     // carries no shuffle field, as links made before the box did.
     if (data.get('shuffle') === 'true') config.shuffle = true;
+    // The Prolific box likewise puts `prolific: true` in the link. The form
+    // page refuses that beside a participant, so the builder refuses it
+    // here, at the researcher.
+    const prolific = data.get('prolific') === 'true';
+    if (prolific && participant !== '') {
+      err.textContent = 'The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.';
+      return;
+    }
+    if (prolific) config.prolific = true;
+    // The completion URL takes the form page's own check, with the message
+    // naming the field as the builder shows it.
+    const complete = data.get('complete').trim();
+    if (complete !== '') {
+      try {
+        config.complete = checkCompleteUrl(complete, (why) => new Error(`The completion URL could not be used: ${why}`));
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
+    }
     const text = data.get('module').trim();
     if (text !== '') {
       let m;
@@ -236,18 +271,21 @@
         err.textContent = e.message;
         return;
       }
-      sql.value = storeSql(config.store.table, items, config.shuffle === true);
+      sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific);
       sqlBlock.hidden = false;
     }
     const url = new URL('./', window.location.href);
     url.search = `?c=${encodeConfig(config)}`;
-    out.textContent = url.href;
+    // A Prolific link ends in the three placeholders, appended as text so
+    // that the braces and percent signs reach Prolific as it expects them.
+    const href = url.href + (prolific ? PROLIFIC_SUFFIX : '');
+    out.textContent = href;
     const a = document.createElement('a');
-    a.href = url.href;
+    a.href = href;
     a.textContent = 'Open the link';
     a.target = '_blank';
     a.rel = 'noopener';
-    open.replaceChildren(a, ` (${url.href.length} characters)`);
+    open.replaceChildren(a, ` (${href.length} characters)`);
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;
   }

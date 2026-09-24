@@ -110,15 +110,51 @@ export function supabase(store, { key = 'sb_publishable_test', table = 'response
 // token; only its shape is read.
 export const JWT_SHAPED_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.c2lnbmF0dXJl';
 
-export function formUrl(base, config) {
-  return `${base}?c=${encodeConfig(config)}`;
+// `extra` is appended to the address after the link's own parameter: the
+// Prolific parameters a study URL carries, as `&PROLIFIC_PID=…`.
+export function formUrl(base, config, extra = '') {
+  return `${base}?c=${encodeConfig(config)}${extra}`;
+}
+
+// The three values a Prolific study fills in, of the shape its example ID
+// has (24 hexadecimal characters), and the query that carries them.
+export const PROLIFIC = {
+  pid: '5a9d64f5f6dfdd0001eaa73d',
+  study: '66f3a1b2c3d4e5f60718293a',
+  session: '66f3a1b2c3d4e5f60718294b',
+};
+
+// A value given as null leaves its parameter out of the query.
+export function prolificQuery(given = {}) {
+  const { pid, study, session } = { ...PROLIFIC, ...given };
+  const part = (name, v) => (v === null ? '' : `&${name}=${v}`);
+  return part('PROLIFIC_PID', pid) + part('STUDY_ID', study) + part('SESSION_ID', session);
+}
+
+// A completion address for a link's `complete` field, of the shape Prolific's
+// help center shows, and a route that answers it with a small page and
+// counts the requests that reached it. The address is never fetched for
+// real: Playwright fulfills it inside the browser.
+export const COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=CHHXQERF';
+
+export async function serveComplete(page, url = COMPLETE_URL) {
+  const requests = [];
+  await page.route(url, (route) => {
+    requests.push({ method: route.request().method(), url: route.request().url() });
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><html><head><title>Completed</title></head><body><h1>Submission complete</h1></body></html>',
+    });
+  });
+  return requests;
 }
 
 // Opens the form for a config. `exportBody`, when given, is served in place
 // of the real export (a string, sent as JSON); `exportJson` is an object to
 // send. Either way the request still leaves the page and is seen by any
-// request listener.
-export async function openForm(page, base, config, { exportBody, exportJson } = {}) {
+// request listener. `extra` is formUrl()'s.
+export async function openForm(page, base, config, { exportBody, exportJson, extra } = {}) {
   if (exportBody !== undefined || exportJson !== undefined) {
     await page.route(exportUrl(config.instrument), (route) =>
       route.fulfill({
@@ -128,7 +164,7 @@ export async function openForm(page, base, config, { exportBody, exportJson } = 
       }),
     );
   }
-  await page.goto(formUrl(base, config));
+  await page.goto(formUrl(base, config, extra));
 }
 
 // Presses Begin on the start screen, entering a participant identifier first
@@ -160,23 +196,35 @@ export function chosenIndex(position, optionCount) {
   return (position * 7) % optionCount;
 }
 
+// The lead columns a row or a file carries: the five study fields, then
+// item_order under shuffle, then the two Prolific columns under prolific.
+// Stated here rather than read from form.js.
+export function leadColumns({ shuffle = false, prolific = false } = {}) {
+  return [
+    'study', 'participant', 'instrument', 'form_build', 'submitted',
+    ...(shuffle ? ['item_order'] : []),
+    ...(prolific ? ['prolific_study', 'prolific_session'] : []),
+  ];
+}
+
 // The header and the values a shuffled walk writes, for a file's row or a
 // posted row read back as an array of strings. `numbers` is the column
 // order the file keeps (the export's items, or a module's `items`);
 // `shown` the item numbers in the order the walk saw them, from
-// walkAll(); `exp` the export. Checks the header, the item_order cell, and
-// each item's value against the option chosenIndex() picked at the position
-// that item was shown at.
-export function expectShuffled(header, values, { exp, numbers, shown }) {
+// walkAll(); `exp` the export. `prolific`, when given, is the `{ study,
+// session }` the two Prolific columns must hold, after item_order. Checks
+// the header, the item_order cell, the Prolific cells, and each item's value
+// against the option chosenIndex() picked at the position that item was
+// shown at.
+export function expectShuffled(header, values, { exp, numbers, shown, prolific }) {
   const byNumber = new Map(exp.items.map((it) => [it.number, it]));
-  expect(header).toEqual([
-    'study', 'participant', 'instrument', 'form_build', 'submitted', 'item_order',
-    ...numbers.map((n) => byNumber.get(n).name),
-  ]);
+  const lead = leadColumns({ shuffle: true, prolific: prolific !== undefined });
+  expect(header).toEqual([...lead, ...numbers.map((n) => byNumber.get(n).name)]);
   expect(values[5], 'item_order').toBe(shown.join(' '));
+  if (prolific) expect(values.slice(6, 8), 'the Prolific cells').toEqual([prolific.study, prolific.session]);
   expect([...shown].sort((a, b) => a - b), 'shown is a rearrangement of the columns').toEqual([...numbers].sort((a, b) => a - b));
   const optionCount = exp.instructions.options.length;
-  const items = values.slice(6);
+  const items = values.slice(lead.length);
   expect(items.length).toBe(numbers.length);
   for (let i = 0; i < numbers.length; i++) {
     const position = shown.indexOf(numbers[i]) + 1;

@@ -22,11 +22,14 @@
 //       target
 //   N6: the same walk with a supabase store: after Finish the set equals
 //       the three plus the insert address under the project URL
+//   N7: the N4 walk with a complete address in the link: after Finish the
+//       set equals the three plus the store URL plus the completion address,
+//       reached once, and nothing else
 
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
-  exportUrl, awaitDownload, answerPage, currentPage, nextButton,
+  exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, serveComplete,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -107,6 +110,23 @@ for (const [label, storePath, extra, make] of [
     expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, ...extra()].sort());
   });
 }
+
+test('N7: the HiTOP-BR walk with a store and a complete address requests the store at Finish and then the address, once', async ({ page, context }) => {
+  await allowLocalStore(context);
+  const requests = await serveComplete(page);
+  const sent = store().url('/record');
+  const urls = record(page);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'net', participant: 'n7', store: webhook(store(), '/record'), complete: COMPLETE_URL,
+  });
+  await begin(page);
+  await walkToLast(page);
+  expect([...urls].sort(), 'before Finish').toEqual([...ownFiles('hitopbr')].sort());
+  await nextButton(page).click();
+  await expect(page).toHaveURL(COMPLETE_URL);
+  expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, COMPLETE_URL].sort());
+  expect(requests.map((r) => r.method), 'one navigation to the completion address').toEqual(['GET']);
+});
 
 test('N3: the altered-format refusal requests only its files and the export', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

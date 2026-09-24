@@ -44,7 +44,33 @@ the form:
    `item_order`, records the order that participant saw. A module
    descriptor's printed order is not followed. The next section describes
    the file.
-6. Choose where responses go. "A file on the participant's device" is the
+6. Optionally check "Recruit through Prolific", and leave the participant
+   field empty. Prolific fills a participant's ID, the study's ID and the
+   submission's ID into a study URL through the placeholders
+   `{{%PROLIFIC_PID%}}`, `{{%STUDY_ID%}}` and `{{%SESSION_ID%}}`
+   ([Prolific's API reference, the study object](https://docs.prolific.com/api-reference/studies/the-study-object)),
+   and asks that all three be saved
+   ([What survey / experimental software is compatible with Prolific?](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)).
+   With the box checked, the printed link ends in those three placeholders.
+   Paste it as the study URL on Prolific. The page then takes the Prolific
+   ID from its address as the participant identifier and asks for none, and
+   two more lead columns, `prolific_study` and `prolific_session`, hold the
+   other two. When the address carries no Prolific ID, a blank one, or
+   still the placeholder, the page asks for the identifier as for a link
+   without one.
+   A preview on Prolific passes a 24-character ID
+   ([Previewing your study](https://researcher-help.prolific.com/en/articles/445131-previewing-your-study)),
+   so it walks the form as a participant would.
+7. Optionally give a completion URL: an `https://` address. After a
+   confirmed send the page sends the participant there in place of the sent
+   screen. After a saved file it shows the file name and then a link to the
+   address. For Prolific, use the completion URL on the study's setup page,
+   of the form `https://app.prolific.com/submissions/complete?cc=…`, as
+   [the compatibility article](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)
+   shows under "Returning Participants to Prolific". Redirecting the
+   participant there is the return Prolific recommends
+   ([Data collection](https://researcher-help.prolific.com/en/articles/445127-data-collection)).
+8. Choose where responses go. "A file on the participant's device" is the
    default: the page saves a file and sends nothing. "A web address" is the
    `https://` address of an endpoint that accepts one JSON row per
    participant. The web app in
@@ -58,7 +84,8 @@ the form:
    them, and its first character must not be a digit.
 
 Press "Make the link". The link carries the instrument, the study, the
-participant, the module, the random-order choice and the store folded into its address, so it needs
+participant, the module, the random-order choice, the Prolific choice, the
+completion URL and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
 a module descriptor is a few hundred characters long. If a mail client or a
 course system truncates it, the page reports that the link cannot be read.
@@ -69,7 +96,9 @@ the store, a Supabase key included, reach that host's request logs. The
 answers never do: with a store they go to that store and nowhere else, and
 without one they stay on the participant's device. If the identifier must not reach any
 server, leave it out of the link. The participant then types it on the start
-screen, and it is written only into the row or the file.
+screen, and it is written only into the row or the file. Under the Prolific
+route the three Prolific parameters, the participant's Prolific ID among
+them, reach the host with each page load as the rest of the address does.
 
 ## What the participant sees
 
@@ -77,7 +106,9 @@ The link opens a start screen with the instrument's instructions, the item
 count, and a "Begin" button. The start screen says where the answers go.
 With a send address, it names the address's host. Without one, it says the
 answers are saved to a file on this device. When the link carries no
-participant identifier, the start screen asks for one.
+participant identifier, the start screen asks for one. Under the Prolific
+route the identifier is the Prolific ID in the page's address, and the
+start screen asks only when the address carries none.
 
 The items follow, 15 to a page, numbered 1, 2, 3 in the order they appear.
 Under the random order, that order is drawn when the page opens, and a
@@ -103,6 +134,11 @@ confirmed. It names the file, so the participant can send it by hand.
 Without a send address, pressing Finish saves the file and shows the file
 name. No answer leaves the page.
 
+With a completion URL in the link, a confirmed send takes the participant
+to that address instead of showing the sent screen. Each screen that names
+a saved file shows, after the file name, a link to the address labelled by
+its host, and goes there only when the participant follows it.
+
 ## Where the file lands
 
 Without a send address, and with one when the send is not confirmed, the
@@ -121,19 +157,25 @@ sixth lead column, `item_order`, follows `submitted`. It holds the item
 numbers in the order that participant saw them, joined by single spaces
 (`hitopbr_01` is 1). The item columns then follow the instrument's order (a
 module's items in the order its descriptor lists them, which
-`write_module()` writes ascending). The data row holds the study fields, the
+`write_module()` writes ascending). Under the Prolific route, two more lead
+columns, `prolific_study` and `prolific_session`, follow `submitted`, or
+`item_order` when the file has it. They hold the `STUDY_ID` and `SESSION_ID`
+values from the page's address, and each is empty when the address carried
+none or still carried the placeholder. The data row holds the study fields, the
 export's build date and the time of finishing as an ISO-8601 timestamp in
 UTC. Then comes each answer's numeric value: 1 to 4 on the HiTOP forms and 0
-to 3 on the PID-5 forms, as the export's response options number them. Seven
+to 3 on the PID-5 forms, as the export's response options number them. Nine
 example files are under `tests/fixtures/`, one per form, one for a
-HiTOP-SR module and one HiTOP-BR file under the random order.
+HiTOP-SR module, one HiTOP-BR file under the random order and two under the
+Prolific route.
 
 ## Send responses to a Google Sheet
 
 With a send address, the page posts one JSON object per participant. Its
 keys are the file's columns in the same order: `study`, `participant`,
 `instrument`, `form_build`, `submitted`, `item_order` under the random
-order, then one key per item. Its values
+order, `prolific_study` and `prolific_session` under the Prolific route,
+then one key per item. Its values
 are the same as the file's, with each answer as a JSON integer. The request
 is a POST with the body as `text/plain`, sent from the page's origin. The
 endpoint must answer with the JSON `{"ok":true}` and with an
@@ -261,8 +303,10 @@ included, makes the page save the file instead.
 3. Press "Make the link". The SQL for the table appears under the link.
    Copy it, open the dashboard's SQL Editor, paste it in and run it. The
    SQL creates the table with the five study columns, a text column
-   `item_order` when the random-order box is checked, and one integer column
-   per item, in the order the file keeps them. It then turns on row-level
+   `item_order` when the random-order box is checked, the text columns
+   `prolific_study` and `prolific_session` when the Prolific box is
+   checked, and one integer column per item, in the order the file keeps
+   them. It then turns on row-level
    security, revokes the project's default table privileges from the
    `anon` and `authenticated` roles, grants insert back to `anon`, and
    adds one policy that lets that role insert. With the publishable key,
@@ -271,8 +315,8 @@ included, makes the page save the file instead.
 4. Send the link to the participants.
 
 The table's columns are fixed by the SQL, so a link for a different
-instrument or module, or a link with the random order sent to a table made
-without it, needs a table of its own. A row with a key the table
+instrument or module, or a link with the random order or the Prolific
+route sent to a table made without it, needs a table of its own. A row with a key the table
 has no column for is refused by the API, and the page then saves the file.
 A row that lacks some of the table's columns is stored with those columns
 empty, because the SQL puts no constraint on any column.
@@ -309,8 +353,8 @@ text, or open it in the spreadsheet as text.
 
 Read the files into R and score them with the hitop package.
 `read_form_responses()` reads a folder of files saved for one form into one
-data frame, with `item_order` as a character column that is `NA` for a file
-without it. Pass its item columns to the scoring function for the form:
+data frame, with `item_order`, `prolific_study` and `prolific_session` as
+character columns that are `NA` for a file without them. Pass its item columns to the scoring function for the form:
 `score_hitopsr()`, `score_hitopbr()` or `score_pid5()`. For a PID-5 file, set
 `version` to `"FULL"`, `"SF"` or `"BF"` to match the form:
 
@@ -342,12 +386,12 @@ npx playwright test
 | Spec | What it checks |
 |---|---|
 | `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order. Under `shuffle: true`, the HiTOP-BR and the module render a rearrangement numbered 1 to n, and two loads differ; `shuffle: false` renders as no shuffle. The start screen's wording with and without a send address |
-| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures, with and without the random-order box. The box's label and hint, the link it builds, and the rearranged page that link opens |
+| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures, with and without the random-order box. The box's label and hint, the link it builds, and the rearranged page that link opens. The Prolific box's label and hint, the placeholders on the link it prints, its refusal beside a filled participant field, the completion field and its refusal of an `http://` address, and the SQL under the Prolific box against the two Prolific fixtures |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
-| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0`. Under `shuffle: true`, the HiTOP-BR and the module save `item_order` and the item columns in the instrument's order, each value checked at the position its item was shown at, and the committed shuffled capture agrees with its own `item_order`. Under `shuffle: false`, the HiTOP-BR saves the same file as with no shuffle field |
-| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Under `shuffle: true`, the row posted to a web address and to a Supabase table carries `item_order` and the instrument's order, and the Supabase row's keys equal the shuffle SQL fixture's columns. Against a recording endpoint the tests start themselves |
-| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, a Supabase store with a bad address, key or table name, and a `shuffle` field that is not `true` or `false` |
-| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL |
+| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0`. Under `shuffle: true`, the HiTOP-BR and the module save `item_order` and the item columns in the instrument's order, each value checked at the position its item was shown at, and the committed shuffled capture agrees with its own `item_order`. Under `shuffle: false`, the HiTOP-BR saves the same file as with no shuffle field. Under `prolific: true` with the three parameters in the address, the identifier is the Prolific ID and the two Prolific columns follow `submitted` or `item_order`, against the by-rule fixture and the committed capture; a placeholder or absent parameter writes an empty cell; an absent, blank or placeholder ID shows the identifier field; the parameters without the field change nothing. With a completion URL and no store, the saved screen links to it and does not navigate |
+| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Under `shuffle: true`, the row posted to a web address and to a Supabase table carries `item_order` and the instrument's order, and the Supabase row's keys equal the shuffle SQL fixture's columns. Under `prolific: true`, the row posted to a web address and to a Supabase table carries the two Prolific keys, with and without the random order, and the Supabase keys equal the Prolific SQL fixtures' columns. With a completion URL, a confirmed send navigates there once with no sent screen drawn first, and an unconfirmed send links to it and does not navigate. Against a recording endpoint the tests start themselves |
+| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, a Supabase store with a bad address, key or table name, a `shuffle` or `prolific` field that is not `true` or `false`, `prolific: true` beside a participant, and a `complete` field that is not an `https://` address free of a user name and password |
+| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests

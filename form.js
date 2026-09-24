@@ -1,4 +1,5 @@
-// The form page. index.html calls boot(); link.html imports encodeConfig().
+// The form page. index.html calls boot(); link.html imports encodeConfig(),
+// the checks, fetchExport(), planItems(), storeSql() and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -11,6 +12,15 @@
 // sends before a supabase insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module and store,
 // are in the page's address, which the host serving the page sees.)
+//
+// Two link fields fit a Prolific study. `prolific: true` takes the
+// participant identifier from the PROLIFIC_PID parameter of the page's
+// address and writes the STUDY_ID and SESSION_ID parameters into the row and
+// the file. `complete` is an https:// address the page sends the participant
+// to after a confirmed send, and links to after a saved file. The page
+// itself makes one further request with it, that navigation, and only
+// after the store confirmed; the saved screens' link is followed by the
+// participant or not at all.
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -96,7 +106,36 @@ export function parseLink(search) {
       `The study link's shuffle field must be true or false, and it is ${JSON.stringify(config.shuffle)}.`,
     );
   }
+  // `prolific` takes the participant identifier from the address, so a link
+  // that also names one is refused: the two would compete for the column.
+  if (config.prolific !== undefined && config.prolific !== true && config.prolific !== false) {
+    throw new Error(
+      `The study link's prolific field must be true or false, and it is ${JSON.stringify(config.prolific)}.`,
+    );
+  }
+  if (config.prolific === true && config.participant !== undefined) {
+    throw new Error(
+      "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
+    );
+  }
+  if (config.complete !== undefined) config.complete = checkCompleteUrl(config.complete);
   return config;
+}
+
+// The three parameters Prolific fills into a study URL through its
+// placeholders. A parameter still holding a placeholder (`{{%STUDY_ID%}}`, as
+// a preview or a hand-pasted link may carry) reads as absent, as does a
+// missing or blank one: each comes back as the empty string.
+export const PROLIFIC_PARAMS = ['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'];
+
+export function readProlific(search) {
+  const params = new URLSearchParams(search);
+  const read = (name) => {
+    const v = (params.get(name) ?? '').trim();
+    return /^\{\{%.*%\}\}$/.test(v) ? '' : v;
+  };
+  const [pid, study, session] = PROLIFIC_PARAMS.map(read);
+  return { pid, study, session };
 }
 
 // ---- The store ------------------------------------------------------------
@@ -180,25 +219,53 @@ export function checkStore(store) {
 // endpoint needs. Anything else is refused by name.
 export function checkStoreUrl(url, bad = (why) => new Error(`The store address could not be used: ${why}`)) {
   if (url === undefined) throw bad('it names no url.');
-  if (typeof url !== 'string') throw bad('its url is not text.');
-  let u;
-  try {
-    u = new URL(url);
-  } catch {
-    throw bad(`its url is not a web address: ${JSON.stringify(url)}.`);
-  }
+  const u = parseAddress(url, bad, 'its url');
   const loopback = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
   if (u.protocol !== 'https:' && !loopback) {
     throw bad(
       `its url must start with https:// (http:// is accepted only for 127.0.0.1 or localhost), and it is ${JSON.stringify(url)}.`,
     );
   }
-  // fetch() refuses a URL that carries a user name or password, so such an
-  // address would make every send unconfirmed; refuse it here by name.
-  if (u.username !== '' || u.password !== '') {
-    throw bad(`its url must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
-  }
+  refuseCredentials(u, url, bad, 'its url');
   return u.href;
+}
+
+// The address a link's `complete` field may name: `https:` to any host, and
+// nothing else. The loopback exception above is for the tests' recording
+// endpoint, which a completion address never is. link.html runs the same
+// check on the builder's completion field.
+export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
+  // A value that is not text is refused with the value shown, as every
+  // other refusal of this field shows it.
+  if (typeof url !== 'string') throw bad(`it is not text, and it is ${JSON.stringify(url)}.`);
+  const u = parseAddress(url, bad, 'it');
+  if (u.protocol !== 'https:') {
+    throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
+  }
+  refuseCredentials(u, url, bad, 'it');
+  return u.href;
+}
+
+// The parse the two address checks share: text, then a URL. `what` names
+// the address in the message ("its url", "it"). Each check then tests the
+// scheme and, last, refuseCredentials(), so an address wrong on both counts
+// is refused for its scheme, as the store check always was.
+function parseAddress(url, bad, what) {
+  if (typeof url !== 'string') throw bad(`${what} is not text.`);
+  try {
+    return new URL(url);
+  } catch {
+    throw bad(`${what} is not a web address: ${JSON.stringify(url)}.`);
+  }
+}
+
+// fetch() refuses a URL that carries a user name or password, so such a
+// store address would make every send unconfirmed, and a completion address
+// with one would put a credential in a study link. Both are refused by name.
+function refuseCredentials(u, url, bad, what) {
+  if (u.username !== '' || u.password !== '') {
+    throw bad(`${what} must not carry a user name or password, and it is ${JSON.stringify(url)}.`);
+  }
 }
 
 // A module descriptor as write_module() writes it: `format` "1.0",
@@ -242,15 +309,15 @@ function isIntegerArray(x) {
 
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (planItems().items): the five study fields as
-// text, an `item_order` text column under `shuffle`, one integer column per
-// item, row-level security on, the project's default grants to the API
-// roles revoked, and the anon role allowed to insert and nothing else.
-// Shown by link.html; pasted by the researcher into the project's SQL
-// editor.
-export function storeSql(table, items, shuffle = false) {
+// text, an `item_order` text column under `shuffle`, the two Prolific text
+// columns under `prolific`, one integer column per item, row-level security
+// on, the project's default grants to the API roles revoked, and the anon
+// role allowed to insert and nothing else. Shown by link.html; pasted by the
+// researcher into the project's SQL editor.
+export function storeSql(table, items, shuffle = false, prolific = false) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
-  const lead = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...(shuffle ? ['item_order'] : [])];
+  const lead = leadColumns({ shuffle, prolific });
   const columns = [
     ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
@@ -392,18 +459,37 @@ function csvField(v) {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// The lead columns of the row, the file and the table, in order: the five
+// study fields, `item_order` under `shuffle`, and the two Prolific columns
+// under `prolific`, so that `item_order` stays sixth in a file that has it.
+export function leadColumns({ shuffle = false, prolific = false } = {}) {
+  return [
+    'study', 'participant', 'instrument', 'form_build', 'submitted',
+    ...(shuffle ? ['item_order'] : []),
+    ...(prolific ? ['prolific_study', 'prolific_session'] : []),
+  ];
+}
+
+// The lead values of one record, in leadColumns() order. `itemOrder`, when
+// given, is the item numbers in the order shown, joined by single spaces.
+// `prolific`, when given, is `{ study, session }` from the address, each
+// written as it was read (the empty string when absent or a placeholder).
+function leadValues({ study, participant, instrument, formBuild, submitted, itemOrder, prolific }) {
+  return [
+    study, participant, instrument, formBuild, submitted,
+    ...(itemOrder !== undefined ? [itemOrder.join(' ')] : []),
+    ...(prolific !== undefined ? [prolific.study, prolific.session] : []),
+  ];
+}
+
 // One header row and one data row. `answers` maps item number to the chosen
-// option value. `items` is the column order; `itemOrder`, when given, is the
-// item numbers in the order shown, written as a sixth lead column after
-// `submitted`, joined by single spaces. Without it the file has five lead
-// columns.
-export function buildCsv({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
-  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
-  const row = [study, participant, instrument, formBuild, submitted];
-  if (itemOrder !== undefined) {
-    header.push('item_order');
-    row.push(itemOrder.join(' '));
-  }
+// option value. `items` is the column order; the lead columns are
+// leadColumns()' for the record's `itemOrder` and `prolific`. Without either
+// the file has five lead columns.
+export function buildCsv(record) {
+  const { items, answers } = record;
+  const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
+  const row = leadValues(record);
   header.push(...items.map((it) => it.name));
   row.push(...items.map((it) => answers.get(it.number)));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
@@ -419,13 +505,14 @@ export function fileName({ study, participant, instrument, submitted }) {
 
 export const SEND_TIMEOUT_MS = 30_000;
 
-// One JSON object per finished form: the five study fields, `item_order`
-// when the record carries one, then one key per item in `items` order, each
-// value the chosen option's integer value. The same record buildCsv()
-// writes, key for column.
-export function buildRow({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
-  const row = { study, participant, instrument, form_build: formBuild, submitted };
-  if (itemOrder !== undefined) row.item_order = itemOrder.join(' ');
+// One JSON object per finished form: the lead fields buildCsv() writes as
+// columns, key for column and in the same order, then one key per item in
+// `items` order, each value the chosen option's integer value.
+export function buildRow(record) {
+  const { items, answers } = record;
+  const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
+  const values = leadValues(record);
+  const row = Object.fromEntries(header.map((k, i) => [k, values[i]]));
   for (const it of items) row[it.name] = answers.get(it.number);
   return row;
 }
@@ -595,18 +682,23 @@ export async function boot(root, search) {
     showError(root, e.message);
     return;
   }
-  runForm(root, config, exp, plan);
+  // The three Prolific parameters are read from the address only under
+  // `prolific: true`; any other link ignores them.
+  runForm(root, config, exp, plan, config.prolific === true ? readProlific(search) : undefined);
 }
 
 // `plan.shown` is the order the pages render and the positions count in;
-// `plan.items` the order the row and the file keep.
-function runForm(root, config, exp, plan) {
+// `plan.items` the order the row and the file keep. `prolific`, under
+// `prolific: true`, is the address's three parameters from readProlific():
+// a PROLIFIC_PID that is not empty is the participant identifier, and the
+// start screen then asks for none.
+function runForm(root, config, exp, plan, prolific) {
   const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
   const pageCount = Math.ceil(items.length / PAGE_SIZE);
-  let participant = config.participant;
+  let participant = prolific && prolific.pid !== '' ? prolific.pid : config.participant;
   let page = 0;
   let finished = false;
   let sending = false;
@@ -761,6 +853,9 @@ function runForm(root, config, exp, plan) {
       // into `item_order`, and without it the file is as it always was.
       items: plan.items,
       itemOrder: config.shuffle === true ? plan.shown.map((it) => it.number) : undefined,
+      // Under `prolific: true` the two columns are always written, each
+      // empty when the address gave nothing for it.
+      prolific: prolific ? { study: prolific.study, session: prolific.session } : undefined,
       // A copy: the radios stay live during a send, and the file saved on an
       // unconfirmed send must hold the answers the row was posted with.
       answers: new Map(answers),
@@ -782,6 +877,13 @@ function runForm(root, config, exp, plan) {
     sending = false;
     finished = true;
     if (outcome.confirmed) {
+      // With a completion address the participant goes straight there, as
+      // Prolific recommends, and the sent screen is never drawn: `finished`
+      // is already set, so the unload guard lets the navigation through.
+      if (config.complete !== undefined) {
+        window.location.assign(config.complete);
+        return;
+      }
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
@@ -804,12 +906,23 @@ function runForm(root, config, exp, plan) {
     return name;
   }
 
+  // A saved file must be seen before the participant leaves, so with a
+  // completion address the saved screens offer it as a link after the file
+  // name, labelled by its host, and navigate nowhere on their own.
   function showSaved(name, lead, trail) {
+    const complete = config.complete === undefined
+      ? []
+      : [el('p', { class: 'complete' }, [
+          'Then continue to ',
+          el('a', { href: config.complete, text: new URL(config.complete).host }),
+          '.',
+        ])];
     root.replaceChildren(
       heading('Thank you'),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
       el('p', { text: trail }),
+      ...complete,
       versionLine(exp),
     );
     focusHeading(root);

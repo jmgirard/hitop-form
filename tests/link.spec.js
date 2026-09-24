@@ -27,10 +27,26 @@
 //       printed order is not followed; checked, the link carries
 //       shuffle: true and opens a page that renders a rearrangement;
 //       unchecked, the link carries no shuffle field
+//  L10: the builder has a checkbox "Recruit through Prolific" whose hint
+//       says the Prolific ID in the address is the identifier, that the
+//       participant field stays empty, that the link is pasted as the study
+//       URL with its placeholders, and names the two columns; checked, the
+//       link carries prolific: true and the printed link ends in the three
+//       placeholders, and opened as printed it asks for the identifier
+//       (the placeholders read as absent); unchecked, the link carries no
+//       prolific field and no placeholders
+//  L11: the box checked beside a filled participant field is refused,
+//       naming both, and no link is built
+//  L12: the "Completion URL" field puts complete in the link; an http://
+//       address is refused through the form page's check, naming the fault,
+//       and no link is built
+//  L13: with the Prolific box checked, the SQL shown for a Supabase store
+//       equals supabase-hitopbr-prolific.sql, and with the random-order box
+//       too supabase-hitopbr-prolific-shuffle.sql, byte for byte
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture,
+  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -89,13 +105,15 @@ async function build(page, storeUrl) {
 // The same with the Supabase kind and its three fields, for an instrument
 // and an optional pasted descriptor, the random-order box checked when
 // `shuffle` is set; returns the shown SQL too.
-async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = false, url, key, table }) {
+async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = false, prolific = false, url, key, table }) {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption(instrument);
   await page.locator('input[name="study"]').fill('link');
-  await page.locator('input[name="participant"]').fill('l6');
+  // The Prolific box needs the participant field empty.
+  if (!prolific) await page.locator('input[name="participant"]').fill('l6');
   if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
   if (shuffle) await page.locator('input[name="shuffle"]').check();
+  if (prolific) await page.locator('input[name="prolific"]').check();
   await page.locator('select[name="storeKind"]').selectOption('supabase');
   await page.locator('input[name="supabaseUrl"]').fill(url);
   await page.locator('input[name="supabaseKey"]').fill(key);
@@ -115,6 +133,10 @@ function decodeLink(href) {
   const c = new URL(href).searchParams.get('c');
   return JSON.parse(Buffer.from(c, 'base64url').toString('utf8'));
 }
+
+// The three placeholders a Prolific link ends in, stated here rather than
+// read from form.js.
+const PLACEHOLDERS = '&PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}';
 
 // L4: one builder test per builder fault.
 const BUILDER_FAULTS = [
@@ -212,7 +234,7 @@ test('the random-order box: its label and hint, and the link it builds', async (
   const box = page.getByRole('checkbox', { name: /Show the items in a random order/ });
   await expect(box).toBeVisible();
   await expect(box).not.toBeChecked();
-  const hint = page.locator('label.check .hint');
+  const hint = page.locator('label.check', { hasText: 'Show the items in a random order' }).locator('.hint');
   await expect(hint).toContainText('Each participant sees a new order');
   await expect(hint).toContainText("list the items in the instrument's order under their item names");
   await expect(hint).toContainText('item_order column records the order that participant saw');
@@ -240,6 +262,99 @@ test('the random-order box: its label and hint, and the link it builds', async (
   expect(shown).not.toEqual(numbers);
   expect(seen.map((s) => s.position)).toEqual(numbers.map((_, i) => i + 1));
 });
+
+// L10: the Prolific box. Its hint is checked sentence by sentence; a link
+// built with it checked carries prolific: true and the placeholders, and
+// opened as printed asks for the identifier; one built with it clear
+// carries neither.
+test('the Prolific box: its label and hint, and the link it builds', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  const box = page.getByRole('checkbox', { name: /Recruit through Prolific/ });
+  await expect(box).toBeVisible();
+  await expect(box).not.toBeChecked();
+  const hint = page.locator('label.check', { hasText: 'Recruit through Prolific' }).locator('.hint');
+  await expect(hint).toContainText("takes each participant's Prolific ID from the address as their identifier");
+  await expect(hint).toContainText('leave the participant field empty');
+  await expect(hint).toContainText('Paste the link below, with its three placeholders, as the study URL on Prolific');
+  await expect(hint).toContainText('prolific_study');
+  await expect(hint).toContainText('prolific_session');
+
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const plain = await page.locator('#out').textContent();
+  expect(plain.endsWith(PLACEHOLDERS)).toBe(false);
+  expect(plain).not.toContain('PROLIFIC_PID');
+  expect(decodeLink(plain)).toEqual({ instrument: 'hitopbr', study: 'link' });
+
+  await box.check();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const href = await page.locator('#out').textContent();
+  expect(href.endsWith(PLACEHOLDERS), 'the printed link ends in the placeholders').toBe(true);
+  expect(decodeLink(href)).toEqual({ instrument: 'hitopbr', study: 'link', prolific: true });
+  await expect(page.locator('#open a')).toHaveAttribute('href', href);
+
+  // Opened as printed, the placeholders are no identifier.
+  await page.goto(href);
+  await expect(page.locator('h1')).toHaveText('HiTOP-BR');
+  await expect(page.locator('input[name="participant"]')).toBeVisible();
+});
+
+// L11: the box beside a participant.
+test('the Prolific box beside a filled participant field is refused, naming both', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l11');
+  await page.locator('input[name="prolific"]').check();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toHaveText(
+    "The participant field must be empty when recruiting through Prolific: the page takes each participant's identifier from the Prolific ID in the address.",
+  );
+  expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+});
+
+// L12: the completion field.
+test('the Completion URL field puts complete in the link, and an http:// address is refused', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l12');
+  await page.locator('input[name="complete"]').fill(COMPLETE_URL);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  expect(await page.locator('#err').textContent()).toBe('');
+  expect(decodeLink(await page.locator('#out').textContent())).toEqual({
+    instrument: 'hitopbr', study: 'link', participant: 'l12', complete: COMPLETE_URL,
+  });
+
+  // One of the forms the page's own check refuses (guard G11).
+  await page.locator('input[name="complete"]').fill('http://localhost');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toHaveText(
+    'The completion URL could not be used: it must start with https://, and it is "http://localhost".',
+  );
+  expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+});
+
+// L13: the SQL under the Prolific box, with and without the random order.
+for (const w of [
+  { name: 'the HiTOP-BR under Prolific', fixture: 'supabase-hitopbr-prolific.sql' },
+  { name: 'the HiTOP-BR under Prolific and shuffle', shuffle: true, fixture: 'supabase-hitopbr-prolific-shuffle.sql' },
+]) {
+  test(`${w.name}: the shown SQL equals ${w.fixture}`, async ({ page }) => {
+    const { err, href, sql, sqlShown } = await buildSupabase(page, {
+      shuffle: w.shuffle, prolific: true, url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'hitopbr_responses',
+    });
+    expect(err).toBe('');
+    expect(sqlShown).toBe(true);
+    expect(sql).toBe(await readFixture(w.fixture));
+    const config = decodeLink(href);
+    expect(config.prolific).toBe(true);
+    expect(config.participant).toBeUndefined();
+    expect(config.shuffle).toBe(w.shuffle ? true : undefined);
+    expect(href.endsWith(PLACEHOLDERS)).toBe(true);
+  });
+}
 
 // L8: a refused build on a page that already shows a link and its SQL
 // clears both.
