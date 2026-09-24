@@ -391,10 +391,19 @@ function csvField(v) {
 }
 
 // One header row and one data row. `answers` maps item number to the chosen
-// option value.
-export function buildCsv({ study, participant, instrument, formBuild, submitted, items, answers }) {
-  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...items.map((it) => it.name)];
-  const row = [study, participant, instrument, formBuild, submitted, ...items.map((it) => answers.get(it.number))];
+// option value. `items` is the column order; `itemOrder`, when given, is the
+// item numbers in the order shown, written as a sixth lead column after
+// `submitted`, joined by single spaces. Without it the file has five lead
+// columns.
+export function buildCsv({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
+  const header = ['study', 'participant', 'instrument', 'form_build', 'submitted'];
+  const row = [study, participant, instrument, formBuild, submitted];
+  if (itemOrder !== undefined) {
+    header.push('item_order');
+    row.push(itemOrder.join(' '));
+  }
+  header.push(...items.map((it) => it.name));
+  row.push(...items.map((it) => answers.get(it.number)));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
 }
 
@@ -408,11 +417,13 @@ export function fileName({ study, participant, instrument, submitted }) {
 
 export const SEND_TIMEOUT_MS = 30_000;
 
-// One JSON object per finished form: the five study fields, then one key per
-// item in the order the page showed them, each value the chosen option's
-// integer value. The same record buildCsv() writes.
-export function buildRow({ study, participant, instrument, formBuild, submitted, items, answers }) {
+// One JSON object per finished form: the five study fields, `item_order`
+// when the record carries one, then one key per item in `items` order, each
+// value the chosen option's integer value. The same record buildCsv()
+// writes, key for column.
+export function buildRow({ study, participant, instrument, formBuild, submitted, itemOrder, items, answers }) {
   const row = { study, participant, instrument, form_build: formBuild, submitted };
+  if (itemOrder !== undefined) row.item_order = itemOrder.join(' ');
   for (const it of items) row[it.name] = answers.get(it.number);
   return row;
 }
@@ -744,7 +755,10 @@ function runForm(root, config, exp, plan) {
       instrument: exp.stem,
       formBuild: exp.buildDate,
       submitted,
-      items,
+      // The columns keep `plan.items`; under shuffle the shown order goes
+      // into `item_order`, and without it the file is as it always was.
+      items: plan.items,
+      itemOrder: config.shuffle === true ? plan.shown.map((it) => it.number) : undefined,
       // A copy: the radios stay live during a send, and the file saved on an
       // unconfirmed send must hold the answers the row was posted with.
       answers: new Map(answers),

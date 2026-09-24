@@ -160,6 +160,32 @@ export function chosenIndex(position, optionCount) {
   return (position * 7) % optionCount;
 }
 
+// The header and the values a shuffled walk writes, for a file's row or a
+// posted row read back as an array of strings. `numbers` is the column
+// order the file keeps (the export's items, or a module's `items`);
+// `shown` the item numbers in the order the walk saw them, from
+// walkAll(); `exp` the export. Checks the header, the item_order cell, and
+// each item's value against the option chosenIndex() picked at the position
+// that item was shown at.
+export function expectShuffled(header, values, { exp, numbers, shown }) {
+  const byNumber = new Map(exp.items.map((it) => [it.number, it]));
+  expect(header).toEqual([
+    'study', 'participant', 'instrument', 'form_build', 'submitted', 'item_order',
+    ...numbers.map((n) => byNumber.get(n).name),
+  ]);
+  expect(values[5], 'item_order').toBe(shown.join(' '));
+  expect([...shown].sort((a, b) => a - b), 'shown is a rearrangement of the columns').toEqual([...numbers].sort((a, b) => a - b));
+  const optionCount = exp.instructions.options.length;
+  const items = values.slice(6);
+  expect(items.length).toBe(numbers.length);
+  for (let i = 0; i < numbers.length; i++) {
+    const position = shown.indexOf(numbers[i]) + 1;
+    const expected = exp.instructions.options[chosenIndex(position, optionCount)].value;
+    expect(Number(items[i]), `item ${numbers[i]}, shown at ${position}`).toBe(expected);
+    expect(items[i], 'an integer').toMatch(/^-?\d+$/);
+  }
+}
+
 // Answers every item on the current page, except those whose position on the
 // page (1-based) is in `skip`.
 export async function answerPage(page, { skip = [] } = {}) {

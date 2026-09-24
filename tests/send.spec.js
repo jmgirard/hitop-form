@@ -38,6 +38,11 @@
 //  T11: the committed Supabase export (tests/fixtures/supabase-hitopbr.csv)
 //       has the HiTOP-BR fixture's header and two rows, p001 and p002, whose
 //       item columns equal the fixture's
+//  T12: a HiTOP-BR walk under shuffle: true posts one row, to a webhook and
+//       to a supabase store, whose keys are the five study fields,
+//       item_order, then the items in the export's order, item_order
+//       holding the shown order and each item the answer chosen at the
+//       position it was shown at
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -47,7 +52,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
-  fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS,
+  fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -210,6 +215,33 @@ for (const w of SUPABASE_WALKS) {
     expect(preflights[0].headers['access-control-request-headers']).toContain('apikey');
 
     expectBody(JSON.parse(sent[0].body), { fixture, exp, seen, t0, t1 });
+  });
+}
+
+// T12: the shuffled HiTOP-BR walk through each store kind. The row's keys
+// and values are read as a header and a row of strings, so the file's
+// check applies; the item values are also JSON integers.
+for (const w of [
+  { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
+  { name: 'a supabase store', make: () => supabase(store(), { table: 'hitopbr_shuffled' }), path: '/rest/v1/hitopbr_shuffled' },
+]) {
+  test(`a shuffled HiTOP-BR walk posts one row to ${w.name} in the export's order with item_order`, async ({ page }) => {
+    const exp = await fetchExport('hitopbr');
+    const numbers = exp.items.map((it) => it.number);
+    const from = store().requests.length;
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'send', participant: 's12', shuffle: true, store: w.make() });
+    await begin(page);
+    const seen = await walkAll(page);
+    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+
+    const sent = since(from).filter((r) => r.method === 'POST');
+    expect(sent.map((r) => r.path)).toEqual([w.path]);
+    const row = JSON.parse(sent[0].body);
+    const shown = seen.map((s) => s.number);
+    expect(shown, 'the walk saw a rearrangement').not.toEqual(numbers);
+    expectShuffled(Object.keys(row), Object.values(row).map(String), { exp, numbers, shown });
+    expect([row.study, row.participant, row.instrument, row.form_build]).toEqual(['send', 's12', exp.stem, exp.buildDate]);
+    for (const it of exp.items) expect(Number.isInteger(row[it.name]), `${it.name} is a JSON integer`).toBe(true);
   });
 }
 

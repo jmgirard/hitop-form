@@ -12,16 +12,26 @@
 //   S5: the suggested file name is <instrument>_<study>_<participant>_<stamp>.csv
 //   S7: on a form whose options start at 0, the item at position 4, where
 //       the answer pattern picks the first option, is written as 0
+//   S8: under shuffle: true, the saved file has the five lead columns, then
+//       item_order holding the shown order as item numbers joined by single
+//       spaces, then the item columns in the export's order (a module's
+//       items order, its itemOrder not followed), each holding the answer
+//       chosen at the position that item was shown at; walked for the
+//       HiTOP-BR and the shuffled module
+//   S9: the committed shuffled HiTOP-BR file (responses-hitopbr-shuffled.csv,
+//       one S8 walk captured) has that shape, and its values agree with its
+//       own item_order cell under the answer pattern
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
-// the three PID-5 forms.
+// the three PID-5 forms, then the HiTOP-BR and the module under shuffle.
 
 import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
+  expectShuffled, readFixture,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -116,3 +126,51 @@ for (const c of CASES) {
     expect(rows.map(mask)).toEqual(fixture.map(mask));
   });
 }
+
+// S8: the shuffled walks. The order differs on every load, so no fixture
+// is compared; each value is checked against the pattern at the position
+// its item was shown at. The HiTOP-BR walk's file is captured as
+// responses-hitopbr-shuffled.csv under WRITE_FIXTURES, for S9 and for the
+// hitop package's reader test.
+const SHUFFLED = [
+  { name: 'hitopbr', config: { instrument: 'hitopbr' }, fixture: 'responses-hitopbr-shuffled.csv' },
+  { name: 'shuffled module', module: 'module-shuffled.json' },
+];
+
+for (const c of SHUFFLED) {
+  test(`${c.name} under shuffle: the saved CSV keeps the instrument order and records the shown order`, async ({ page }) => {
+    const module = c.module ? await readDescriptor(c.module) : undefined;
+    const instrument = module ? module.instrument : c.config.instrument;
+    const exp = await fetchExport(instrument);
+    const config = { instrument, study: 'fixture', participant: 'p001', shuffle: true, ...(module ? { module } : {}) };
+    const numbers = module ? module.items : exp.items.map((it) => it.number);
+
+    await openForm(page, base(), config);
+    await begin(page);
+    const downloading = awaitDownload(page);
+    const seen = await walkAll(page);
+    const download = await downloading;
+    const text = await readFile(await download.path(), 'utf8');
+    const rows = parseCsv(text);
+    expect(rows.length, 'a header and one data row').toBe(2);
+    const shown = seen.map((s) => s.number);
+    expect(shown, 'the walk saw a rearrangement').not.toEqual(numbers);
+    expectShuffled(rows[0], rows[1], { exp, numbers, shown });
+    expect(rows[1].slice(0, 4)).toEqual(['fixture', 'p001', exp.stem, exp.buildDate]);
+    if (c.fixture && process.env.WRITE_FIXTURES) await writeFile(path.join(FIXTURES, c.fixture), text);
+  });
+}
+
+// S9: the committed capture agrees with itself. Its item_order cell is the
+// order that walk saw, so the values are checked against it as S8 checks a
+// live walk against the order it saw.
+test('the committed shuffled HiTOP-BR file has the shuffle shape and agrees with its item_order', async () => {
+  const exp = await fetchExport('hitopbr');
+  const rows = parseCsv(await readFixture('responses-hitopbr-shuffled.csv'));
+  expect(rows.length).toBe(2);
+  const numbers = exp.items.map((it) => it.number);
+  const shown = rows[1][5].split(' ').map(Number);
+  expect(shown, 'the capture saw a rearrangement').not.toEqual(numbers);
+  expectShuffled(rows[0], rows[1], { exp, numbers, shown });
+  expect(rows[1].slice(0, 3)).toEqual(['fixture', 'p001', 'hitopbr']);
+});
