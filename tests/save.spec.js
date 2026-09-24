@@ -430,6 +430,10 @@ test('with complete and completeSaved and no store, the saved screen links to co
   await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
+  // S21: the whole screen's order and the empty status region, as on the
+  // screen that links to `complete`.
+  expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
+  await expectStatusEmpty(page);
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   expect(savedRequests, 'no request to the saved-file completion address').toEqual([]);

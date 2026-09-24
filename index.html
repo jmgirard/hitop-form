@@ -137,6 +137,9 @@
     margin: 0 0 var(--s4);
   }
   [role="alert"]:empty { display: none; }
+  /* The status region under "Save the file" stays in the accessibility tree
+     while empty (never display: none), but adds no space before a press. */
+  .saved-again:empty { margin: 0; }
   .progress { color: var(--muted); font-size: var(--t-small); margin: 0 0 var(--s4); }
   code { font-family: var(--mono); font-size: .95em; }
 </style>

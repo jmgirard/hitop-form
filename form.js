@@ -953,7 +953,7 @@ function runForm(root, config, exp, plan, prolific) {
   // status region under the button is rendered empty, so it exists before
   // the first press; each press rewrites it with the same sentence, and
   // `role="status"` marks the write for a screen reader to announce. Focus
-  // is not moved, so it stays on the button.
+  // is not moved, so after a keyboard press it stays on the button.
   function showSaved({ name, text }, lead, trail) {
     const address = config.completeSaved ?? config.complete;
     const complete = address === undefined
