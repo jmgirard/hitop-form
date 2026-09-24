@@ -132,9 +132,10 @@ test('a blank participant identifier in the link is asked for on the start scree
   await expect(page.locator('.progress')).toHaveCount(0);
 });
 
-// G13: a descriptor whose items are not in ascending order. The page follows
-// the order of `items` for its columns, so an order other than ascending
-// would score wrong by position; it is refused by name, and no form starts.
+// G13: a descriptor whose items are not in ascending order. With no
+// `itemOrder`, as here, the page follows the order of `items` for its
+// columns, so an order other than ascending would score wrong by position;
+// it is refused by name, and no form starts.
 for (const entry of NOT_ASCENDING) {
   test(`a descriptor whose items are ${entry.name} is refused`, async ({ page }) => {
     const module = await notAscendingDescriptor(entry);

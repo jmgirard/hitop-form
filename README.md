@@ -37,8 +37,8 @@ the form:
    your form. The page then shows only the module's items. When the
    descriptor records a printed order, the items follow it, unless the next
    box is checked. The descriptor's `items` must be in ascending order, as
-   both writers list them: the page and the builder refuse a descriptor
-   whose items are not, naming the fault.
+   both writers list them: the page and the link builder refuse a
+   descriptor whose items are not, naming the fault.
 5. Optionally check "Show the items in a random order". The page then draws
    a new order each time it opens, so each participant sees the items in a
    different order. The row and the file still list the items in the
