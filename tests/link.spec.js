@@ -17,7 +17,16 @@
 //       no SQL, and a refused build clears the link and SQL shown before it
 //   L7: the SQL shown for a Supabase store equals the hand-written fixture
 //       for the HiTOP-BR and for the shuffled module, and the link carries
-//       the store's four fields
+//       the store's four fields; with the random-order box checked it
+//       equals the two shuffle fixtures, whose item_order column follows
+//       submitted and whose item columns are in the instrument's order
+//   L9: the builder has a checkbox "Show the items in a random order" whose
+//       hint says each participant sees a new order, that the file and the
+//       table list the items in the instrument's order under their item
+//       names, that item_order records the order seen, and that a module's
+//       printed order is not followed; checked, the link carries
+//       shuffle: true and opens a page that renders a rearrangement;
+//       unchecked, the link carries no shuffle field
 
 import { test, expect } from '@playwright/test';
 import {
@@ -78,13 +87,15 @@ async function build(page, storeUrl) {
 }
 
 // The same with the Supabase kind and its three fields, for an instrument
-// and an optional pasted descriptor; returns the shown SQL too.
-async function buildSupabase(page, { instrument = 'hitopbr', module, url, key, table }) {
+// and an optional pasted descriptor, the random-order box checked when
+// `shuffle` is set; returns the shown SQL too.
+async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = false, url, key, table }) {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption(instrument);
   await page.locator('input[name="study"]').fill('link');
   await page.locator('input[name="participant"]').fill('l6');
   if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  if (shuffle) await page.locator('input[name="shuffle"]').check();
   await page.locator('select[name="storeKind"]').selectOption('supabase');
   await page.locator('input[name="supabaseUrl"]').fill(url);
   await page.locator('input[name="supabaseKey"]').fill(key);
@@ -173,11 +184,13 @@ test('the builder drops a /rest/v1/ suffix from the project URL', async ({ page 
 for (const w of [
   { name: 'the HiTOP-BR', table: 'hitopbr_responses', fixture: 'supabase-hitopbr.sql' },
   { name: 'the shuffled module', module: 'module-shuffled.json', table: 'module_responses', fixture: 'supabase-module-shuffled.sql' },
+  { name: 'the HiTOP-BR under shuffle', shuffle: true, table: 'hitopbr_responses', fixture: 'supabase-hitopbr-shuffle.sql' },
+  { name: 'the shuffled module under shuffle', shuffle: true, module: 'module-shuffled.json', table: 'module_responses', fixture: 'supabase-module-shuffle.sql' },
 ]) {
   test(`${w.name}: the shown SQL equals ${w.fixture}`, async ({ page }) => {
     const module = w.module ? await readDescriptor(w.module) : undefined;
     const { err, href, sql, sqlShown } = await buildSupabase(page, {
-      instrument: module ? module.instrument : 'hitopbr', module,
+      instrument: module ? module.instrument : 'hitopbr', module, shuffle: w.shuffle,
       url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: w.table,
     });
     expect(err).toBe('');
@@ -186,8 +199,47 @@ for (const w of [
     expect(decodeLink(href).store).toEqual({
       kind: 'supabase', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: w.table,
     });
+    expect(decodeLink(href).shuffle).toBe(w.shuffle ? true : undefined);
   });
 }
+
+// L9: the random-order box. Its hint is checked sentence by sentence; a
+// link built with it checked carries shuffle: true and renders a
+// rearrangement of the HiTOP-BR's 45 items; one built with it clear carries
+// no shuffle field.
+test('the random-order box: its label and hint, and the link it builds', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  const box = page.getByRole('checkbox', { name: /Show the items in a random order/ });
+  await expect(box).toBeVisible();
+  await expect(box).not.toBeChecked();
+  const hint = page.locator('label.check .hint');
+  await expect(hint).toContainText('Each participant sees a new order');
+  await expect(hint).toContainText("list the items in the instrument's order under their item names");
+  await expect(hint).toContainText('item_order column records the order that participant saw');
+  await expect(hint).toContainText("A module's printed order is not followed");
+
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  await page.locator('input[name="participant"]').fill('l9');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const plain = await page.locator('#out').textContent();
+  expect(decodeLink(plain)).toEqual({ instrument: 'hitopbr', study: 'link', participant: 'l9' });
+
+  await box.check();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const href = await page.locator('#out').textContent();
+  expect(decodeLink(href)).toEqual({ instrument: 'hitopbr', study: 'link', participant: 'l9', shuffle: true });
+
+  const exp = await fetchExport('hitopbr');
+  const numbers = exp.items.map((it) => it.number);
+  await page.goto(href);
+  await begin(page);
+  const seen = await walkAll(page);
+  const shown = seen.map((s) => s.number);
+  expect([...shown].sort((a, b) => a - b)).toEqual(numbers);
+  expect(shown).not.toEqual(numbers);
+  expect(seen.map((s) => s.position)).toEqual(numbers.map((_, i) => i + 1));
+});
 
 // L8: a refused build on a page that already shows a link and its SQL
 // clears both.

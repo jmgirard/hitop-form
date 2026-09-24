@@ -240,17 +240,19 @@ function isIntegerArray(x) {
   return Array.isArray(x) && x.every((v) => Number.isInteger(v));
 }
 
-// The SQL that makes the table a supabase store names, for the items in the
-// order the page will show them: the five study fields as text, one integer
-// column per item, row-level security on, the project's default grants to
-// the API roles revoked, and the anon role allowed to insert and nothing
-// else. Shown by link.html; pasted by the researcher into the project's SQL
+// The SQL that makes the table a supabase store names, for `items` in the
+// order the row keeps them (planItems().items): the five study fields as
+// text, an `item_order` text column under `shuffle`, one integer column per
+// item, row-level security on, the project's default grants to the API
+// roles revoked, and the anon role allowed to insert and nothing else.
+// Shown by link.html; pasted by the researcher into the project's SQL
 // editor.
-export function storeSql(table, items) {
+export function storeSql(table, items, shuffle = false) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
+  const lead = ['study', 'participant', 'instrument', 'form_build', 'submitted', ...(shuffle ? ['item_order'] : [])];
   const columns = [
-    ...['study', 'participant', 'instrument', 'form_build', 'submitted'].map((c) => `  ${q(c)} text`),
+    ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
   ];
   return [

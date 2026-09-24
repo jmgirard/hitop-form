@@ -34,6 +34,7 @@
   .muted { color: var(--muted); font-size: .875rem; }
   label { display: block; margin: 0 0 var(--s4); font-weight: 600; }
   label .hint { display: block; font-weight: 400; color: var(--muted); font-size: .875rem; }
+  label.check input { display: inline; width: auto; margin: 0 var(--s2) 0 0; vertical-align: middle; }
   input, select, textarea {
     display: block; width: 100%; margin-top: var(--s1); font: inherit;
     padding: var(--s2) var(--s3); border: 1px solid var(--line-strong);
@@ -84,6 +85,11 @@
       <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the Module Builder saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
+    <label class="check">
+      <input name="shuffle" type="checkbox" value="true">
+      Show the items in a random order
+      <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
+    </label>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
       <select name="storeKind">
@@ -122,7 +128,7 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns and one column per item in the order the form shows them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -179,6 +185,9 @@
     }
     const participant = data.get('participant').trim();
     if (participant !== '') config.participant = participant;
+    // The box checked puts `shuffle: true` in the link; unchecked, the link
+    // carries no shuffle field, as links made before the box did.
+    if (data.get('shuffle') === 'true') config.shuffle = true;
     const text = data.get('module').trim();
     if (text !== '') {
       let m;
@@ -222,12 +231,12 @@
       // export names them, so the export is read here as the page reads it.
       let items;
       try {
-        items = planItems(await fetchExport(config.instrument), config.module).items;
+        items = planItems(await fetchExport(config.instrument), config.module, config.shuffle === true).items;
       } catch (e) {
         err.textContent = e.message;
         return;
       }
-      sql.value = storeSql(config.store.table, items);
+      sql.value = storeSql(config.store.table, items, config.shuffle === true);
       sqlBlock.hidden = false;
     }
     const url = new URL('./', window.location.href);

@@ -242,6 +242,17 @@ for (const w of [
     expectShuffled(Object.keys(row), Object.values(row).map(String), { exp, numbers, shown });
     expect([row.study, row.participant, row.instrument, row.form_build]).toEqual(['send', 's12', exp.stem, exp.buildDate]);
     for (const it of exp.items) expect(Number.isInteger(row[it.name]), `${it.name} is a JSON integer`).toBe(true);
+    if (w.name === 'a supabase store') {
+      // The posted keys are the columns of the SQL the builder shows for a
+      // HiTOP-BR table under shuffle, in its order: the fixture's column
+      // lines, each `  "name" type,`.
+      const columns = (await readFixture('supabase-hitopbr-shuffle.sql'))
+        .split('\n')
+        .filter((l) => /^ {2}"/.test(l))
+        .map((l) => /^ {2}"([^"]+)"/.exec(l)[1]);
+      expect(columns.length, 'the fixture has column lines').toBe(51);
+      expect(Object.keys(row)).toEqual(columns);
+    }
   });
 }
 
