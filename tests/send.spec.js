@@ -92,7 +92,7 @@ import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
   leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
-  SAVE_AGAIN, expectSaveAgain, savedScreenOrder, screenOrder,
+  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -548,10 +548,11 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   // The link follows the file name in the document.
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
-  // T19: the trail sentence, and the whole screen's order, the button
-  // between the trail and the link.
+  // T19: the trail sentence, and the whole screen's order, the button and
+  // the empty status region between the trail and the link.
   await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
   expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
+  await expectStatusEmpty(page);
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   await expect(page).not.toHaveURL(COMPLETE_URL);
@@ -605,10 +606,12 @@ for (const u of UNCONFIRMED) {
     expect(rows[0]).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
     expect(rows[1].slice(0, 4)).toEqual(['send', 'u1', exp.stem, exp.buildDate]);
 
-    // T19: the trail paragraph names the button, the screen's order, and
-    // two clicks each save the file again.
+    // T19: the trail paragraph names the button, the screen's order with
+    // the empty status region, and two presses each save the file again
+    // and write the status.
     await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
     expect(await screenOrder(page)).toEqual(savedScreenOrder());
+    await expectStatusEmpty(page);
     await expectSaveAgain(page, download);
   });
 }
