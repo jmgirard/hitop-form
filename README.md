@@ -189,7 +189,8 @@ sixth lead column, `item_order`, follows `submitted`. It holds the item
 numbers in the order that participant saw them, joined by single spaces
 (`hitopbr_01` is 1). The item columns then follow the instrument's order (a
 module's items in the order its descriptor lists them, which
-`write_module()` writes ascending). Under the Prolific route, two more lead
+`write_module()` writes ascending and the page requires ascending). Under
+the Prolific route, two more lead
 columns, `prolific_study` and `prolific_session`, follow `submitted`, or
 `item_order` when the file has it. They hold the `STUDY_ID` and `SESSION_ID`
 values from the page's address, and each is empty when the address carried
