@@ -632,7 +632,9 @@ function saveFile(name, text) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  // Released after a minute rather than seconds: a save dialog the
+  // participant holds open reads the URL when it closes.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ---- Rendering ------------------------------------------------------------
@@ -853,7 +855,12 @@ function runForm(root, config, exp, plan, prolific) {
   // a store: the nav buttons are disabled from this first press until an
   // outcome screen shows, so a second press cannot send a second row; a
   // confirmed send shows the sent screen and saves nothing; anything else
-  // saves the file and shows the unconfirmed screen naming it.
+  // saves the file and shows the unconfirmed screen naming it. Each saved
+  // screen carries a "Save the file" button that saves the same file again
+  // from the participant's own click: the unconfirmed screen's download
+  // starts only after the send's wait, which can outlast the click's user
+  // activation, and a browser may block it; a download on either screen
+  // can be dismissed.
   async function finish(nav) {
     if (sending) return;
     // ISO-8601 in UTC, to the second: 2026-09-20T21:15:31Z.
@@ -921,17 +928,22 @@ function runForm(root, config, exp, plan, prolific) {
     );
   }
 
+  // Saves the file and returns its name and text, so the saved screen's
+  // button can save the same bytes again.
   function saveCsv(record) {
     const name = fileName(record);
-    saveFile(name, buildCsv(record));
-    return name;
+    const text = buildCsv(record);
+    saveFile(name, text);
+    return { name, text };
   }
 
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
   // name, labelled by its host, and navigate nowhere on their own. The
   // address is `completeSaved` when the link carries one, else `complete`.
-  function showSaved(name, lead, trail) {
+  // The trail paragraph ends by naming the "Save the file" button below it,
+  // which saves the file again with the name and text saved at Finish.
+  function showSaved({ name, text }, lead, trail) {
     const address = config.completeSaved ?? config.complete;
     const complete = address === undefined
       ? []
@@ -944,7 +956,8 @@ function runForm(root, config, exp, plan, prolific) {
       heading('Thank you'),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
-      el('p', { text: trail }),
+      el('p', { text: `${trail} If the file did not appear, press Save the file.` }),
+      el('button', { type: 'button', text: 'Save the file', onclick: () => saveFile(name, text) }),
       ...complete,
       versionLine(exp),
     );

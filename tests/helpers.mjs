@@ -261,6 +261,42 @@ export function awaitDownload(page) {
   return page.waitForEvent('download', { timeout: 110 * 1000 });
 }
 
+// The sentence a saved-file screen's trail paragraph ends with, naming the
+// button below it.
+export const SAVE_AGAIN = 'If the file did not appear, press Save the file.';
+
+// The "Save the file" button on a saved-file screen: one button, and a
+// first and a second click each save the file again with the Finish
+// download's suggested file name and its bytes. The download promise is
+// created before each click with a short timeout of its own, so a click that
+// saves nothing fails on that wait, named, rather than on the test's limit.
+export async function expectSaveAgain(page, download) {
+  const button = page.getByRole('button', { name: 'Save the file' });
+  await expect(button).toHaveCount(1);
+  const bytes = await readFile(await download.path(), 'utf8');
+  for (const click of ['first', 'second']) {
+    const again = page.waitForEvent('download', { timeout: 15 * 1000 });
+    await button.click();
+    const d = await again;
+    expect(d.suggestedFilename(), `the ${click} click's file name`).toBe(download.suggestedFilename());
+    expect(await readFile(await d.path(), 'utf8'), `the ${click} click's bytes`).toBe(bytes);
+  }
+}
+
+// The saved-file screen's children in document order, each as its tag and
+// class, the file name's paragraph marked by its code child so a swap with
+// the trail paragraph is seen: the heading, the lead paragraph, the file
+// name's paragraph, the trail paragraph, the button, the completion link's
+// paragraph when the link carries an address, then the version line.
+export function savedScreenOrder({ complete = false } = {}) {
+  return ['H1', 'P.done', 'P>CODE.filename', 'P', 'BUTTON', ...(complete ? ['P.complete'] : []), 'P.version'];
+}
+
+export function screenOrder(page) {
+  return page.$$eval('main > *', (nodes) => nodes.map((n) =>
+    n.tagName + (n.className ? `.${n.className}` : '') + (n.querySelector('code.filename') ? '>CODE.filename' : '')));
+}
+
 // RFC 4180: fields separated by commas, quoted when they hold a comma, a
 // quote or a line break, a quote inside doubled; rows end in CRLF.
 export function parseCsv(text) {
