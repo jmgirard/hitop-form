@@ -84,10 +84,19 @@
     background: var(--bg);
   }
   fieldset.item.unanswered { border-color: var(--error); }
+  /* A legend is drawn in the border's notch: the top border meets the legend
+     at its vertical middle, so a wrapped legend's upper half sits above the
+     card's top edge. Floating the legend takes it out of the notch: it renders
+     as a block inside the card, under an unbroken top border, and stays the
+     fieldset's accessible name. */
   fieldset.item legend {
-    padding: 0 var(--s2);
+    float: left;
+    width: 100%;
+    padding: 0;
+    margin: 0 0 var(--s2);
     font-weight: 600;
   }
+  fieldset.item .options { clear: both; }
   fieldset.item legend .pos { color: var(--muted); font-weight: 400; margin-right: var(--s2); }
   .options { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-top: var(--s2); }
   .options label {

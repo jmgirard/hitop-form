@@ -614,8 +614,11 @@ function runForm(root, config, exp, items) {
       'data-position': String(position),
     });
     fs.append(
+      // The space is a text node, so the fieldset's accessible name reads
+      // "1. I felt…" rather than the two spans run together.
       el('legend', {}, [
         el('span', { class: 'pos', text: `${position}.` }),
+        ' ',
         el('span', { class: 'text', text: it.text }),
       ]),
     );
