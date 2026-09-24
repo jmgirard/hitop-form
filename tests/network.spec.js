@@ -111,21 +111,44 @@ for (const [label, storePath, extra, make] of [
   });
 }
 
-test('N7: the HiTOP-BR walk with a store and a complete address requests the store at Finish and then the address, once', async ({ page, context }) => {
+test('N7: the HiTOP-BR walk with a store and a complete address requests the store at Finish, draws the sent screen, then the address, once', async ({ page, context }) => {
   await allowLocalStore(context);
-  const requests = await serveComplete(page);
   const sent = store().url('/record');
   const urls = record(page);
+  // The address's route holds the request open while the document is read.
+  const requests = [];
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route(COMPLETE_URL, async (route) => {
+    requests.push(route.request().method());
+    await held;
+    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<h1>Submission complete</h1>' });
+  });
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'net', participant: 'n7', store: webhook(store(), '/record'), complete: COMPLETE_URL,
   });
   await begin(page);
+  const states = [];
+  await page.exposeFunction('noteState', (s) => states.push(s));
+  await page.evaluate(() => {
+    const snapshot = () => ({
+      h1: document.querySelector('h1')?.textContent ?? null,
+      href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+      navButtons: document.querySelectorAll('nav button').length,
+    });
+    new MutationObserver(() => window.noteState(snapshot())).observe(document.body, { childList: true, subtree: true });
+  });
   await walkToLast(page);
   expect([...urls].sort(), 'before Finish').toEqual([...ownFiles('hitopbr')].sort());
   await nextButton(page).click();
+  await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  // The document at the request, as the observer last reported it: a
+  // locator or an evaluate would wait on the held navigation (send T15).
+  expect(states.at(-1)).toEqual({ h1: 'Thank you', href: COMPLETE_URL, navButtons: 0 });
+  release();
   await expect(page).toHaveURL(COMPLETE_URL);
   expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, COMPLETE_URL].sort());
-  expect(requests.map((r) => r.method), 'one navigation to the completion address').toEqual(['GET']);
+  expect(requests, 'one navigation to the completion address').toEqual(['GET']);
 });
 
 test('N3: the altered-format refusal requests only its files and the export', async ({ page }) => {

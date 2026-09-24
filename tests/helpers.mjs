@@ -136,6 +136,9 @@ export function prolificQuery(given = {}) {
 // counts the requests that reached it. The address is never fetched for
 // real: Playwright fulfills it inside the browser.
 export const COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=CHHXQERF';
+// A second code of the same shape, for a link's `completeSaved` field: on a
+// second host, so a link labelled by its host tells the two apart.
+export const COMPLETE_SAVED_URL = 'https://saved.example.org/submissions/complete?cc=SAVED123';
 
 export async function serveComplete(page, url = COMPLETE_URL) {
   const requests = [];

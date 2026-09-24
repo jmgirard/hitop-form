@@ -31,6 +31,11 @@
 //       address, a string that is no URL, an address with a user name only
 //       or one with a password, or a number; an https:// address is
 //       accepted
+//   G12: a link's completeSaved field is refused by name, with the value
+//       shown, for the G11 forms (http://localhost, a string that is no
+//       URL, a user name only, a password, a number) beside a complete, and
+//       when it stands alone with no complete field; an https:// address
+//       beside a complete is accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -326,6 +331,51 @@ for (const probe of REFUSED_COMPLETE) {
 test('a complete field of an https:// address is accepted', async ({ page }) => {
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'guard', participant: 'g11', complete: 'https://app.prolific.com/submissions/complete?cc=CHHXQERF',
+  });
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+});
+
+// G12: the completeSaved field. The same check as G11 under its own name,
+// each probe beside a complete address the page accepts, then the field
+// alone. The message names completeSaved and shows the value.
+const COMPLETE_OK = 'https://app.prolific.com/submissions/complete?cc=CHHXQERF';
+const REFUSED_COMPLETE_SAVED = [
+  { completeSaved: 'http://localhost', names: 'it must start with https://, and it is "http://localhost".' },
+  { completeSaved: 'not a url', names: 'it is not a web address: "not a url".' },
+  ...['https://user@example.com/saved', 'https://user:pass@example.com/saved'].map((completeSaved) => ({
+    completeSaved,
+    names: `it must not carry a user name or password, and it is ${JSON.stringify(completeSaved)}.`,
+  })),
+  { completeSaved: 7, names: 'it is not text, and it is 7.' },
+];
+
+for (const probe of REFUSED_COMPLETE_SAVED) {
+  test(`a completeSaved field of ${JSON.stringify(probe.completeSaved)} is refused, naming the field`, async ({ page }) => {
+    await openForm(page, base(), {
+      instrument: 'hitopbr', study: 'guard', participant: 'g12', complete: COMPLETE_OK, completeSaved: probe.completeSaved,
+    });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's completeSaved field could not be used: ${probe.names}`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+  });
+}
+
+test('a completeSaved field with no complete field is refused, naming the field', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'g12', completeSaved: 'https://app.prolific.com/submissions/complete?cc=SAVED123',
+  });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link\'s completeSaved field could not be used: it needs a complete field beside it, and the link carries none; it is "https://app.prolific.com/submissions/complete?cc=SAVED123".',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('a completeSaved field of an https:// address beside a complete is accepted', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'g12', complete: COMPLETE_OK,
+    completeSaved: 'https://app.prolific.com/submissions/complete?cc=SAVED123',
   });
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
   await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);

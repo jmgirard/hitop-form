@@ -55,13 +55,20 @@
 //  T14: without a prolific field, the three parameters in the address change
 //       nothing: the row posted to a webhook equals the T1 body without
 //       shuffle and has the T12 shape under it
-//  T15: with a complete address in the link, a confirmed send issues one
-//       navigation request to it, and at the time of that request the page's
-//       heading is still the form's, not the sent screen's; the row still
-//       reaches the store, and no file is saved
+//  T15: with a complete address in the link, a confirmed send draws the
+//       sent screen before it issues the one navigation request to it: while
+//       the request is held open, the heading is "Thank you", the paragraph
+//       says the responses were sent, a "Continue to <host>." paragraph
+//       links to the address, and no nav button is in the document; the row
+//       still reaches the store, and no file is saved
 //  T16: with a complete address, an unconfirmed send shows the saved screen
 //       with a link to the address after the file name, labelled by its
 //       host, and no request reaches the address within five seconds
+//  T17: with complete and completeSaved, a confirmed send's one navigation
+//       request goes to complete and none reaches completeSaved
+//  T18: with complete and completeSaved, an unconfirmed send's saved screen
+//       links to completeSaved after the file name, and no request reaches
+//       either address within five seconds
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -72,7 +79,7 @@ import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
-  leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, serveComplete,
+  leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -364,42 +371,79 @@ for (const shuffle of [false, true]) {
 }
 
 // T15: the completion address on a confirmed send, through a webhook and a
-// supabase store. A mutation observer planted on the form's document
-// reports every heading the page draws to the test through an exposed
-// function, which outlives the navigation; the sent screen's "Thank you"
-// heading must never be among them, since the navigation is asked for in
-// its place.
+// supabase store. The route for the address holds its one request open
+// while the test reads the document, so what it reads is the page's state
+// at the moment the navigation was asked for: the sent screen, with its
+// link to the address and no nav button left. Then the route answers. A
+// locator or an evaluate waits on the pending navigation, so the document
+// reaches the test through a mutation observer that reports its state on
+// every change through an exposed function; the last report before the
+// request is the document at that request.
+function snapshot() {
+  return {
+    h1: document.querySelector('h1')?.textContent ?? null,
+    done: document.querySelector('.done')?.textContent ?? null,
+    cont: document.querySelector('p.complete')?.textContent ?? null,
+    href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+    close: document.body.textContent.includes('You can close this page.'),
+    navButtons: document.querySelectorAll('nav button').length,
+  };
+}
+async function observeDocument(page) {
+  const states = [];
+  await page.exposeFunction('noteState', (s) => states.push(s));
+  await page.evaluate(`(() => {
+    const snapshot = ${snapshot.toString()};
+    new MutationObserver(() => window.noteState(snapshot())).observe(document.body, { childList: true, subtree: true });
+  })()`);
+  return states;
+}
 for (const w of [
   { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
   { name: 'a supabase store', make: () => supabase(store(), { table: 'complete_responses' }), path: '/rest/v1/complete_responses' },
 ]) {
-  test(`with a complete address, a confirmed send to ${w.name} navigates there once, before any sent screen`, async ({ page }) => {
+  test(`with a complete address, a confirmed send to ${w.name} draws the sent screen, then navigates there once`, async ({ page }) => {
     const exp = await fetchExport('hitopbr');
     const downloads = [];
     page.on('download', (d) => downloads.push(d));
-    const requests = await serveComplete(page);
-    const headings = [];
-    await page.exposeFunction('noteHeading', (text) => headings.push(text));
+    const requests = [];
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await page.route(COMPLETE_URL, async (route) => {
+      requests.push({ method: route.request().method(), url: route.request().url() });
+      await held;
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: '<!doctype html><html><head><title>Completed</title></head><body><h1>Submission complete</h1></body></html>',
+      });
+    });
 
     const from = store().requests.length;
     await openForm(page, base(), {
       instrument: 'hitopbr', study: 'send', participant: 'c1', store: w.make(), complete: COMPLETE_URL,
     });
     await begin(page);
-    await page.evaluate(() => {
-      new MutationObserver(() => {
-        const h = document.querySelector('h1');
-        if (h) window.noteHeading(h.textContent);
-      }).observe(document.body, { childList: true, subtree: true });
-    });
+    const states = await observeDocument(page);
     await walkAll(page);
+    // The request is seen, and held. The document is the sent screen.
+    await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+    expect(states.length, 'the observer saw the page walk').toBeGreaterThan(0);
+    const sentScreen = {
+      h1: 'Thank you',
+      done: 'Your responses were sent to the study team.',
+      cont: `Continue to ${new URL(COMPLETE_URL).host}.`,
+      href: COMPLETE_URL,
+      close: false,
+      navButtons: 0,
+    };
+    expect(states.at(-1), 'the document at the request').toEqual(sentScreen);
+    expect(states.filter((s) => s.h1 === 'Thank you'), 'the sent screen was drawn once, whole').toEqual([sentScreen]);
+    release();
     await expect(page).toHaveURL(COMPLETE_URL);
     await expect(page.locator('h1')).toHaveText('Submission complete');
 
     expect(requests.map((r) => r.method), 'one navigation request').toEqual(['GET']);
-    expect(headings.length, 'the observer saw the page walk').toBeGreaterThan(0);
-    expect(headings, 'no sent screen was drawn').not.toContain('Thank you');
-    expect(new Set(headings), 'only the form heading').toEqual(new Set(['HiTOP-BR']));
     expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
     const sent = since(from).filter((r) => r.method === 'POST');
     expect(sent.map((r) => r.path)).toEqual([w.path]);
@@ -407,6 +451,56 @@ for (const w of [
     expect([row.study, row.participant, row.instrument, row.form_build]).toEqual(['send', 'c1', exp.stem, exp.buildDate]);
   });
 }
+
+// T17: with both addresses, a confirmed send goes to complete alone.
+test('with complete and completeSaved, a confirmed send navigates to complete and requests nothing of completeSaved', async ({ page }) => {
+  const requests = await serveComplete(page);
+  const savedRequests = await serveComplete(page, COMPLETE_SAVED_URL);
+  const navigations = [];
+  page.on('request', (r) => { if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navigations.push(r.url()); });
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'send', participant: 'c4', store: webhook(store(), '/record'),
+    complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+  });
+  await begin(page);
+  await walkAll(page);
+  await expect(page).toHaveURL(COMPLETE_URL);
+  await expect(page.locator('h1')).toHaveText('Submission complete');
+  expect(requests.map((r) => r.method), 'one request to complete').toEqual(['GET']);
+  expect(savedRequests, 'no request to completeSaved').toEqual([]);
+  // The one navigation after the page's own is to complete.
+  expect(navigations.filter((u) => !u.startsWith(base()))).toEqual([COMPLETE_URL]);
+});
+
+// T18: with both addresses, an unconfirmed send's saved screen links to
+// completeSaved.
+test('with complete and completeSaved, an unconfirmed send links to completeSaved and does not navigate', async ({ page }) => {
+  const requests = await serveComplete(page);
+  const savedRequests = await serveComplete(page, COMPLETE_SAVED_URL);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'send', participant: 'c5', store: webhook(store(), '/status/500'),
+    complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+  });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  const download = await downloading;
+
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute('href', COMPLETE_SAVED_URL);
+  await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
+  const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
+  expect(order).toEqual(['CODE', 'A']);
+  await page.waitForTimeout(5000);
+  expect(requests, 'no request to complete').toEqual([]);
+  expect(savedRequests, 'no request to completeSaved').toEqual([]);
+  await expect(page).not.toHaveURL(COMPLETE_URL);
+  await expect(page).not.toHaveURL(COMPLETE_SAVED_URL);
+});
 
 // T16: the completion address on an unconfirmed send: a link, and no
 // navigation.
