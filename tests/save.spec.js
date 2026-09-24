@@ -58,6 +58,14 @@
 //   S20: with complete and completeSaved in the link and no store, the saved
 //       screen's link after the file name is completeSaved, labelled by its
 //       host, and no request reaches either address within five seconds
+//   S21: on the HiTOP-BR walk's saved screen, the trail paragraph ends with
+//       "If the file did not appear, press Save the file.", one "Save the
+//       file" button follows it, and a first and a second click on it each
+//       save the file again under the Finish download's name with its
+//       bytes; the screen's order is the heading, the lead, the file name,
+//       the trail, the button, the version line, and with a complete address
+//       (the S16 walk) the completion link sits between the button and the
+//       version line
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -70,6 +78,7 @@ import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
   expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
+  SAVE_AGAIN, expectSaveAgain, savedScreenOrder, screenOrder,
 } from './helpers.mjs';
 import { readProlific } from '../form.js';
 
@@ -181,6 +190,16 @@ for (const c of CASES) {
       expect(values[c.zeroAt - 1], `the answer at position ${c.zeroAt}`).toBe('0');
     }
 
+    // S21: on the HiTOP-BR walk, the trail paragraph names the button, the
+    // screen's order, and two clicks each save the file again.
+    if (c.name === 'hitopbr') {
+      await expect(page.locator('main > p').nth(2)).toHaveText(
+        `Please send that file to the study team the way they asked. No answer was sent from this page. ${SAVE_AGAIN}`,
+      );
+      expect(await screenOrder(page)).toEqual(savedScreenOrder());
+      await expectSaveAgain(page, download);
+    }
+
     // S4
     if (!c.fixture) return;
     const fixturePath = path.join(FIXTURES, c.fixture);
@@ -271,6 +290,8 @@ test('with a complete address and no store, the saved screen links to it after t
   await expect(link).toHaveText('app.prolific.com');
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
+  // S21: the whole screen's order, the button between the trail and the link.
+  expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   await expect(page).not.toHaveURL(COMPLETE_URL);

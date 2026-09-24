@@ -69,6 +69,16 @@
 //  T18: with complete and completeSaved, an unconfirmed send's saved screen
 //       links to completeSaved after the file name, and no request reaches
 //       either address within five seconds
+//  T19: on each T6 outcome's unconfirmed screen, the trail paragraph ends
+//       with "If the file did not appear, press Save the file.", one "Save
+//       the file" button follows it, and a first and a second click on it
+//       each save the file again under the Finish download's name with its
+//       bytes; with a complete address (the T16 walk) the screen's order is
+//       the heading, the lead, the file name, the trail, the button, the
+//       completion link, the version line
+//  T20: the sent screen has no "Save the file" button: asserted in T5's
+//       walks and the supabase walks after the screen shows, and in T15's
+//       document at the held request
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -80,6 +90,7 @@ import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
   leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
+  SAVE_AGAIN, expectSaveAgain, savedScreenOrder, screenOrder,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -135,6 +146,8 @@ for (const w of WALKS) {
       // Without a complete field the sent screen keeps its closing line and offers no link.
       await expect(page.locator('main')).toContainText('You can close this page.');
       await expect(page.locator('p.complete')).toHaveCount(0);
+      // T20
+      await expect(page.getByRole('button', { name: 'Save the file' })).toHaveCount(0);
       expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
 
       // T1: exactly one POST, to the address the link named.
@@ -220,6 +233,8 @@ for (const w of SUPABASE_WALKS) {
     await expect(page.locator('h1')).toHaveText('Thank you');
     const t1 = Date.now();
     await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    // T20
+    await expect(page.getByRole('button', { name: 'Save the file' })).toHaveCount(0);
     expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
 
     const recorded = since(from);
@@ -390,6 +405,7 @@ function snapshot() {
     href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
     close: document.body.textContent.includes('You can close this page.'),
     navButtons: document.querySelectorAll('.nav button').length,
+    saveButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent === 'Save the file').length,
   };
 }
 async function observeDocument(page) {
@@ -441,6 +457,8 @@ for (const w of [
       href: COMPLETE_URL,
       close: false,
       navButtons: 0,
+      // T20
+      saveButtons: 0,
     };
     expect(states.at(-1), 'the document at the request').toEqual(sentScreen);
     expect(states.filter((s) => s.h1 === 'Thank you'), 'the sent screen was drawn once, whole').toEqual([sentScreen]);
@@ -528,6 +546,8 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   // The link follows the file name in the document.
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
+  // T19: the whole screen's order, the button between the trail and the link.
+  expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   await expect(page).not.toHaveURL(COMPLETE_URL);
@@ -580,6 +600,12 @@ for (const u of UNCONFIRMED) {
     const rows = parseCsv(await readFile(await download.path(), 'utf8'));
     expect(rows[0]).toEqual([...LEAD, ...seen.map((s) => exp.items.find((it) => it.number === s.number).name)]);
     expect(rows[1].slice(0, 4)).toEqual(['send', 'u1', exp.stem, exp.buildDate]);
+
+    // T19: the trail paragraph names the button, the screen's order, and
+    // two clicks each save the file again.
+    await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
+    expect(await screenOrder(page)).toEqual(savedScreenOrder());
+    await expectSaveAgain(page, download);
   });
 }
 
