@@ -55,6 +55,13 @@
 //  T14: without a prolific field, the three parameters in the address change
 //       nothing: the row posted to a webhook equals the T1 body without
 //       shuffle and has the T12 shape under it
+//  T15: with a complete address in the link, a confirmed send issues one
+//       navigation request to it, and at the time of that request the page's
+//       heading is still the form's, not the sent screen's; the row still
+//       reaches the store, and no file is saved
+//  T16: with a complete address, an unconfirmed send shows the saved screen
+//       with a link to the address after the file name, labelled by its
+//       host, and no request reaches the address within five seconds
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -65,7 +72,7 @@ import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
-  leadColumns, PROLIFIC, prolificQuery,
+  leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, serveComplete,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -355,6 +362,77 @@ for (const shuffle of [false, true]) {
     }
   });
 }
+
+// T15: the completion address on a confirmed send, through a webhook and a
+// supabase store. A mutation observer planted on the form's document
+// reports every heading the page draws to the test through an exposed
+// function, which outlives the navigation; the sent screen's "Thank you"
+// heading must never be among them, since the navigation is asked for in
+// its place.
+for (const w of [
+  { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
+  { name: 'a supabase store', make: () => supabase(store(), { table: 'complete_responses' }), path: '/rest/v1/complete_responses' },
+]) {
+  test(`with a complete address, a confirmed send to ${w.name} navigates there once, before any sent screen`, async ({ page }) => {
+    const exp = await fetchExport('hitopbr');
+    const downloads = [];
+    page.on('download', (d) => downloads.push(d));
+    const requests = await serveComplete(page);
+    const headings = [];
+    await page.exposeFunction('noteHeading', (text) => headings.push(text));
+
+    const from = store().requests.length;
+    await openForm(page, base(), {
+      instrument: 'hitopbr', study: 'send', participant: 'c1', store: w.make(), complete: COMPLETE_URL,
+    });
+    await begin(page);
+    await page.evaluate(() => {
+      new MutationObserver(() => {
+        const h = document.querySelector('h1');
+        if (h) window.noteHeading(h.textContent);
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    await walkAll(page);
+    await expect(page).toHaveURL(COMPLETE_URL);
+    await expect(page.locator('h1')).toHaveText('Submission complete');
+
+    expect(requests.map((r) => r.method), 'one navigation request').toEqual(['GET']);
+    expect(headings.length, 'the observer saw the page walk').toBeGreaterThan(0);
+    expect(headings, 'no sent screen was drawn').not.toContain('Thank you');
+    expect(new Set(headings), 'only the form heading').toEqual(new Set(['HiTOP-BR']));
+    expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
+    const sent = since(from).filter((r) => r.method === 'POST');
+    expect(sent.map((r) => r.path)).toEqual([w.path]);
+    const row = JSON.parse(sent[0].body);
+    expect([row.study, row.participant, row.instrument, row.form_build]).toEqual(['send', 'c1', exp.stem, exp.buildDate]);
+  });
+}
+
+// T16: the completion address on an unconfirmed send: a link, and no
+// navigation.
+test('with a complete address, an unconfirmed send shows the saved screen with a link to it and does not navigate', async ({ page }) => {
+  const requests = await serveComplete(page);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'send', participant: 'c2', store: webhook(store(), '/status/500'), complete: COMPLETE_URL,
+  });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  const download = await downloading;
+
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveAttribute('href', COMPLETE_URL);
+  await expect(link).toHaveText('app.prolific.com');
+  // The link follows the file name in the document.
+  const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
+  expect(order).toEqual(['CODE', 'A']);
+  await page.waitForTimeout(5000);
+  expect(requests, 'no request to the completion address').toEqual([]);
+  await expect(page).not.toHaveURL(COMPLETE_URL);
+});
 
 // T6: each unconfirmed outcome saves the file and says so.
 const UNCONFIRMED = [

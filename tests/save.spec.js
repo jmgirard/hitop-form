@@ -43,6 +43,9 @@
 //       has the S8 shape under it
 //   S15: the committed prolific capture (responses-hitopbr-prolific-shuffled.csv)
 //       has the S11 shape and agrees with its own item_order cell
+//   S16: with a complete address in the link and no store, the saved screen
+//       shows a link to the address after the file name, labelled by its
+//       host, and no request reaches the address within five seconds
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -54,7 +57,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
-  expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery,
+  expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, serveComplete,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -233,6 +236,27 @@ for (const c of [
     expect(rows[1].slice(0, 3)).toEqual(['fixture', c.participant, 'hitopbr']);
   });
 }
+
+// S16: the completion address with no store: a link, and no navigation.
+test('with a complete address and no store, the saved screen links to it after the file name and does not navigate', async ({ page }) => {
+  const requests = await serveComplete(page);
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', participant: 'c1', complete: COMPLETE_URL });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  const download = await downloading;
+
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveAttribute('href', COMPLETE_URL);
+  await expect(link).toHaveText('app.prolific.com');
+  const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
+  expect(order).toEqual(['CODE', 'A']);
+  await page.waitForTimeout(5000);
+  expect(requests, 'no request to the completion address').toEqual([]);
+  await expect(page).not.toHaveURL(COMPLETE_URL);
+});
 
 // S12: a placeholder STUDY_ID and an absent SESSION_ID each write the empty
 // string, with a real PROLIFIC_PID as the identifier.

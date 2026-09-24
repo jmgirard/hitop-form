@@ -131,6 +131,25 @@ export function prolificQuery(given = {}) {
   return part('PROLIFIC_PID', pid) + part('STUDY_ID', study) + part('SESSION_ID', session);
 }
 
+// A completion address for a link's `complete` field, of the shape Prolific's
+// help center shows, and a route that answers it with a small page and
+// counts the requests that reached it. The address is never fetched for
+// real: Playwright fulfills it inside the browser.
+export const COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=CHHXQERF';
+
+export async function serveComplete(page, url = COMPLETE_URL) {
+  const requests = [];
+  await page.route(url, (route) => {
+    requests.push({ method: route.request().method(), url: route.request().url() });
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><html><head><title>Completed</title></head><body><h1>Submission complete</h1></body></html>',
+    });
+  });
+  return requests;
+}
+
 // Opens the form for a config. `exportBody`, when given, is served in place
 // of the real export (a string, sent as JSON); `exportJson` is an object to
 // send. Either way the request still leaves the page and is seen by any

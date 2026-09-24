@@ -867,6 +867,13 @@ function runForm(root, config, exp, plan, prolific) {
     sending = false;
     finished = true;
     if (outcome.confirmed) {
+      // With a completion address the participant goes straight there, as
+      // Prolific recommends, and the sent screen is never drawn: `finished`
+      // is already set, so the unload guard lets the navigation through.
+      if (config.complete !== undefined) {
+        window.location.assign(config.complete);
+        return;
+      }
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
@@ -889,12 +896,23 @@ function runForm(root, config, exp, plan, prolific) {
     return name;
   }
 
+  // A saved file must be seen before the participant leaves, so with a
+  // completion address the saved screens offer it as a link after the file
+  // name, labelled by its host, and navigate nowhere on their own.
   function showSaved(name, lead, trail) {
+    const complete = config.complete === undefined
+      ? []
+      : [el('p', { class: 'complete' }, [
+          'Then continue to ',
+          el('a', { href: config.complete, text: new URL(config.complete).host }),
+          '.',
+        ])];
     root.replaceChildren(
       heading('Thank you'),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
       el('p', { text: trail }),
+      ...complete,
       versionLine(exp),
     );
     focusHeading(root);
