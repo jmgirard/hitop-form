@@ -39,6 +39,30 @@ export async function readDescriptor(name) {
   return JSON.parse(await readFixture(name));
 }
 
+// Two alterations of a descriptor's items that are not in ascending order:
+// the list reversed, and the list with its last two entries swapped. Each
+// takes the items and returns the altered list. The form page and the link
+// builder refuse both with NOT_ASCENDING_MESSAGE.
+export const NOT_ASCENDING = [
+  { name: 'reversed', alter: (items) => [...items].reverse() },
+  {
+    name: 'with its last two swapped',
+    alter: (items) => {
+      const a = [...items];
+      const n = a.length;
+      [a[n - 2], a[n - 1]] = [a[n - 1], a[n - 2]];
+      return a;
+    },
+  },
+];
+export const NOT_ASCENDING_MESSAGE = 'The module descriptor could not be used: its items are not in ascending order.';
+
+// module-plain.json with its items altered by one NOT_ASCENDING entry.
+export async function notAscendingDescriptor(entry) {
+  const plain = await readDescriptor('module-plain.json');
+  return { ...plain, items: entry.alter(plain.items) };
+}
+
 export function encodeConfig(config) {
   return Buffer.from(JSON.stringify(config), 'utf8').toString('base64url');
 }

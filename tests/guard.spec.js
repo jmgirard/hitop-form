@@ -36,12 +36,18 @@
 //       no URL, a user name only, a password, a number) beside a complete, and
 //       when it stands alone with no complete field; an https:// address
 //       beside a complete is accepted
+//   G13: a descriptor whose items are not in ascending order, reversed or
+//       with its last two swapped, is refused with a message naming the
+//       fault, and no form starts
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, JWT_SHAPED_KEY } from './helpers.mjs';
+import {
+  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, JWT_SHAPED_KEY,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor,
+} from './helpers.mjs';
 
 // A JWT-shaped key whose payload is {"role":"service_role"}: not a real
 // token, only its middle segment is read.
@@ -125,6 +131,18 @@ test('a blank participant identifier in the link is asked for on the start scree
   await expect(page.locator('[role=alert]')).toHaveText('Please enter your participant identifier before starting.');
   await expect(page.locator('.progress')).toHaveCount(0);
 });
+
+// G13: a descriptor whose items are not in ascending order. The page follows
+// the order of `items` for its columns, so an order other than ascending
+// would score wrong by position; it is refused by name, and no form starts.
+for (const entry of NOT_ASCENDING) {
+  test(`a descriptor whose items are ${entry.name} is refused`, async ({ page }) => {
+    const module = await notAscendingDescriptor(entry);
+    await openForm(page, base(), { instrument: module.instrument, study: 'guard', module });
+    await expect(page.locator('[role=alert]')).toHaveText(NOT_ASCENDING_MESSAGE);
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+  });
+}
 
 // G7: the store guard. Each refused form names its fault; no request is sent
 // before Finish, so the accepted forms need no endpoint to open.

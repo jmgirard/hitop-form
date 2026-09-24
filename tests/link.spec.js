@@ -51,10 +51,14 @@
 //       link is built either way; the Prolific box's hint says Prolific's
 //       URL-parameters option appends the parameters and the page reads the
 //       filled value
+//  L15: a pasted descriptor whose items are not in ascending order,
+//       reversed or with its last two swapped, is refused with the form
+//       page's message, and no link is built
 
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -445,3 +449,19 @@ test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   const hint = page.locator('label', { hasText: 'Module descriptor' }).locator('.hint');
   await expect(hint).toContainText('Optional, HiTOP-SR only.');
 });
+
+// L15: a pasted descriptor whose items are not in ascending order is refused
+// here, at the researcher, with the form page's own message.
+for (const entry of NOT_ASCENDING) {
+  test(`the builder refuses a descriptor whose items are ${entry.name}`, async ({ page }) => {
+    const module = await notAscendingDescriptor(entry);
+    await page.goto(`${base()}link.html`);
+    await page.locator('select[name="instrument"]').selectOption(module.instrument);
+    await page.locator('input[name="study"]').fill('link');
+    await page.locator('input[name="participant"]').fill('l15');
+    await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    await expect(page.locator('#err')).toHaveText(NOT_ASCENDING_MESSAGE);
+    await expect(page.locator('#out')).toHaveText('');
+  });
+}
