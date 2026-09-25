@@ -54,11 +54,30 @@
 //  L15: a pasted descriptor whose items are not in ascending order,
 //       reversed or with its last two swapped, is refused with the form
 //       page's message, and no link is built
+//  L16: link.html?c=<p> fills each control from the config <p> encodes,
+//       shows the chosen store kind's field group with the other hidden,
+//       and "Make the link" then builds a link whose c decodes to a config
+//       deep-equal to the one opened: once per store choice (none, a web
+//       address, a Supabase table), one run with a participant, another
+//       under Prolific with none, every run with a module, the random
+//       order and both completion URLs
+//  L17: a c carrying only the instrument selects it and leaves every other
+//       control as a load with no c leaves it; one carrying the instrument
+//       and a module also fills the module textarea with JSON that parses
+//       to the descriptor
+//  L18: a c that cannot be decoded, one that is not a plain object, and one
+//       naming an instrument the select does not offer each write a message
+//       naming the c parameter into #err and leave every control at its
+//       no-c value, over seven loads; a load with no c leaves #err empty
+//  L19: above the form, an ordered list of three steps names, in order,
+//       choosing the instrument, where the responses go, and making the
+//       link; the module hint links the Module Builder and the page links
+//       the online-collection tutorial
 
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -465,3 +484,149 @@ for (const entry of NOT_ASCENDING) {
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+// ---- Opening the builder with a c parameter ------------------------------
+
+// Every control of the builder's form as {name, value}: a checkbox's checked
+// state, every other control's value. Read from the form's own elements so a
+// control added later is compared too.
+function controls(page) {
+  return page.$$eval('#f input, #f select, #f textarea', (nodes) =>
+    nodes.map((n) => ({ name: n.name, value: n.type === 'checkbox' ? n.checked : n.value })),
+  );
+}
+
+// Opens link.html with `c` set to the encoding of `config`, or with no c
+// when `config` is undefined, or with `c` set verbatim when `raw` is given.
+async function openBuilder(page, { config, raw } = {}) {
+  const query = raw !== undefined ? `?c=${raw}` : config !== undefined ? `?c=${encodeConfig(config)}` : '';
+  await page.goto(`${base()}link.html${query}`);
+}
+
+// L16: three configs, one per store choice, each with a module, the random
+// order and both completion URLs; the first and third with a participant,
+// the second under Prolific with none. Every URL and text value is in the
+// form the builder itself writes (trimmed, https://, a project origin with
+// no path), so the round trip has nothing to normalise.
+const PREFILL_STORES = [
+  { name: 'no store, with a participant', participant: 'l16' },
+  { name: 'a web address, under Prolific', prolific: true, store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' } },
+  {
+    name: 'a Supabase table, with a participant',
+    participant: 'l16s',
+    store: { kind: 'supabase', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'prefill_responses' },
+  },
+];
+
+for (const w of PREFILL_STORES) {
+  test(`a c parameter fills the builder and round-trips: ${w.name}`, async ({ page }) => {
+    const module = await readDescriptor('module-plain.json');
+    const config = { instrument: module.instrument, study: 'prefill', module, shuffle: true, complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL };
+    if (w.participant) config.participant = w.participant;
+    if (w.prolific) config.prolific = true;
+    if (w.store) config.store = w.store;
+    await openBuilder(page, { config });
+    await expect(page.locator('#err')).toHaveText('');
+
+    // Each control holds its field of the config.
+    await expect(page.locator('select[name="instrument"]')).toHaveValue(config.instrument);
+    await expect(page.locator('input[name="study"]')).toHaveValue('prefill');
+    await expect(page.locator('input[name="participant"]')).toHaveValue(w.participant ?? '');
+    await expect(page.locator('input[name="shuffle"]')).toBeChecked();
+    if (w.prolific) await expect(page.locator('input[name="prolific"]')).toBeChecked();
+    else await expect(page.locator('input[name="prolific"]')).not.toBeChecked();
+    await expect(page.locator('input[name="complete"]')).toHaveValue(COMPLETE_URL);
+    await expect(page.locator('input[name="completeSaved"]')).toHaveValue(COMPLETE_SAVED_URL);
+    expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
+    const kind = w.store ? w.store.kind : '';
+    await expect(page.locator('select[name="storeKind"]')).toHaveValue(kind);
+    // The chosen kind's field group shows and the other is hidden.
+    await expect(page.locator('#webhookFields')).toBeVisible({ visible: kind === 'webhook' });
+    await expect(page.locator('#supabaseFields')).toBeVisible({ visible: kind === 'supabase' });
+    if (kind === 'webhook') await expect(page.locator('input[name="store"]')).toHaveValue(w.store.url);
+    if (kind === 'supabase') {
+      await expect(page.locator('input[name="supabaseUrl"]')).toHaveValue(w.store.url);
+      await expect(page.locator('input[name="supabaseKey"]')).toHaveValue(w.store.key);
+      await expect(page.locator('input[name="supabaseTable"]')).toHaveValue(w.store.table);
+    }
+
+    // The link the filled builder makes carries the config it was opened with.
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    await expect(page.locator('#err, #out').filter({ hasText: /./ }).first()).toBeVisible();
+    expect(await page.locator('#err').textContent()).toBe('');
+    const href = await page.locator('#out').textContent();
+    expect(href.endsWith(PLACEHOLDERS)).toBe(w.prolific === true);
+    expect(decodeLink(href)).toEqual(config);
+  });
+}
+
+// L17: the instrument alone, against a load with no c.
+test('a c carrying only the instrument selects it and leaves every other control at its no-c value', async ({ page }) => {
+  await openBuilder(page);
+  const plain = await controls(page);
+  expect(plain.find((c) => c.name === 'instrument').value, 'the no-c load selects the first instrument').toBe('hitopsr');
+  await openBuilder(page, { config: { instrument: 'pid5sf' } });
+  await expect(page.locator('#err')).toHaveText('');
+  const filled = await controls(page);
+  expect(filled.find((c) => c.name === 'instrument').value).toBe('pid5sf');
+  expect(filled.filter((c) => c.name !== 'instrument')).toEqual(plain.filter((c) => c.name !== 'instrument'));
+});
+
+test('a c carrying the instrument and a module fills the module textarea with the descriptor', async ({ page }) => {
+  const module = await readDescriptor('module-shuffled.json');
+  await openBuilder(page);
+  const plain = await controls(page);
+  await openBuilder(page, { config: { instrument: module.instrument, module } });
+  await expect(page.locator('#err')).toHaveText('');
+  expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
+  const filled = await controls(page);
+  const untouched = (c) => c.name !== 'instrument' && c.name !== 'module';
+  expect(filled.find((c) => c.name === 'instrument').value).toBe(module.instrument);
+  expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
+});
+
+// L18: seven loads. Each of the six faults writes a message naming the c
+// parameter and leaves every control as the no-c load leaves it.
+const BAD_C = [
+  { name: 'a string that is not base64url', raw: '%%%not-base64url%%%' },
+  { name: 'a base64url string that is not JSON', raw: Buffer.from('not json', 'utf8').toString('base64url') },
+  { name: 'a JSON array', config: [] },
+  { name: 'JSON null', config: null },
+  { name: 'a JSON string', config: 'x' },
+  { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' } },
+];
+
+for (const bad of BAD_C) {
+  test(`a c parameter that is ${bad.name} is refused by name and fills nothing`, async ({ page }) => {
+    await openBuilder(page);
+    const plain = await controls(page);
+    await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
+    await expect(page.locator('#err')).toContainText('c parameter');
+    expect(await controls(page)).toEqual(plain);
+  });
+}
+
+test('a load with no c leaves #err empty', async ({ page }) => {
+  await openBuilder(page);
+  await expect(page.locator('#err')).toHaveText('');
+  await expect(page.locator('#err')).toBeHidden();
+});
+
+// L19: the three steps above the form and the two links.
+test('the three steps above the form, the builder link in the module hint, and the tutorial link', async ({ page }) => {
+  await openBuilder(page);
+  const items = page.locator('main ol li');
+  await expect(items).toHaveCount(3);
+  const texts = await items.allTextContents();
+  expect(texts[0]).toContain('Choose the instrument');
+  expect(texts[1]).toContain('where the responses go');
+  expect(texts[2]).toContain('Make the link');
+  const list = page.locator('main ol');
+  const form = page.locator('#f');
+  const listBox = await list.boundingBox();
+  const formBox = await form.boundingBox();
+  expect(listBox.y + listBox.height, 'the list sits above the form').toBeLessThanOrEqual(formBox.y);
+  const hint = page.locator('label', { hasText: 'Module descriptor' }).locator('.hint');
+  await expect(hint.locator('a[href="https://jmgirard.github.io/hitop-builder/"]')).toHaveCount(1);
+  await expect(page.locator('a[href="https://jmgirard.github.io/hitop/articles/online-collection.html"]')).toHaveCount(1);
+});

@@ -149,7 +149,7 @@
 </main>
 <script type="module">
   import {
-    encodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
+    encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -172,6 +172,62 @@
     document.getElementById('supabaseFields').hidden = kindSelect.value !== 'supabase';
   }
   kindSelect.addEventListener('change', showKind);
+
+  // A study link's own `c` parameter, opened on this page, fills the
+  // controls from the config it encodes, so a link can be edited here and
+  // another page can hand a module over. The parameter is read as the form
+  // page reads it, and three faults are refused by name: a `c` that cannot
+  // be decoded, one that is not a plain object, and an instrument the
+  // select does not offer. A field of another type than its control takes
+  // is skipped and the rest are filled; the form page's own checks refuse
+  // such a link when it is opened. Nothing is fetched.
+  function prefill() {
+    const c = new URLSearchParams(window.location.search).get('c');
+    if (c === null) return;
+    const refuse = (what) => {
+      err.textContent = `The link's c parameter ${what} Fill in the form below to make a new link.`;
+    };
+    let config;
+    try {
+      config = decodeConfig(c);
+    } catch {
+      refuse('could not be read.');
+      return;
+    }
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+      refuse('does not hold a form.');
+      return;
+    }
+    const offered = [...f.elements.instrument.options].map((o) => o.value);
+    if (!offered.includes(config.instrument)) {
+      refuse(`names an instrument this page does not offer: ${JSON.stringify(config.instrument)}.`);
+      return;
+    }
+    f.elements.instrument.value = config.instrument;
+    const text = (name, v) => {
+      if (typeof v === 'string') f.elements[name].value = v;
+    };
+    text('study', config.study);
+    text('participant', config.participant);
+    text('complete', config.complete);
+    text('completeSaved', config.completeSaved);
+    f.elements.shuffle.checked = config.shuffle === true;
+    f.elements.prolific.checked = config.prolific === true;
+    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (isPlainObject(config.module)) f.elements.module.value = JSON.stringify(config.module, null, 2);
+    const store = config.store;
+    if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
+      kindSelect.value = store.kind;
+      if (store.kind === 'webhook') {
+        text('store', store.url);
+      } else {
+        text('supabaseUrl', store.url);
+        text('supabaseKey', store.key);
+        text('supabaseTable', store.table);
+      }
+    }
+  }
+  prefill();
   showKind();
 
   const makeButton = f.querySelector('button[type="submit"]');

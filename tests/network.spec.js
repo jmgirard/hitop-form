@@ -25,23 +25,30 @@
 //   N7: the N4 walk with a complete address in the link: after Finish the
 //       set equals the three plus the store URL plus the completion address,
 //       reached once, and nothing else
+//
+// The link builder opened with a c parameter fills its fields from it and
+// fetches nothing to do so:
+//
+//   N8: link.html opened with a Supabase config in its c requests only
+//       link.html and form.js from navigation to the first network idle
 
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
-  exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, serveComplete,
+  exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig,
 } from './helpers.mjs';
 
 const base = useTarget();
 const store = useStore();
 
-// The page's own address carries the study link as its query string, which
-// is dropped; any other request keeps its query, so an answer smuggled onto
-// a request for one of the page's own files fails the walk too.
+// The page's own address, and the link builder's, carry the study link as
+// their query string, which is dropped; any other request keeps its query,
+// so an answer smuggled onto a request for one of the page's own files
+// fails the walk too.
 function recorded(u) {
   const url = new URL(u);
   const bare = `${url.origin}${url.pathname}`;
-  return bare === base() ? bare : u;
+  return bare === base() || bare === `${base()}link.html` ? bare : u;
 }
 
 function record(page) {
@@ -150,6 +157,22 @@ test('N7: the HiTOP-BR walk with a store and a complete address requests the sto
   await expect(page).toHaveURL(COMPLETE_URL);
   expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, COMPLETE_URL].sort());
   expect(requests, 'one navigation to the completion address').toEqual(['GET']);
+});
+
+// N8: the builder's prefill reads the parameter and fetches nothing; the
+// Supabase config is the one L16 round-trips, whose build later fetches the
+// export, so the window is bounded at the first network idle.
+test('N8: link.html opened with a Supabase config in its c requests only link.html and form.js', async ({ page }) => {
+  const module = await readDescriptor('module-plain.json');
+  const config = {
+    instrument: module.instrument, study: 'prefill', participant: 'n8', module, shuffle: true,
+    complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+    store: { kind: 'supabase', url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'prefill_responses' },
+  };
+  const urls = record(page);
+  await page.goto(`${base()}link.html?c=${encodeConfig(config)}`, { waitUntil: 'networkidle' });
+  await expect(page.locator('input[name="supabaseTable"]')).toHaveValue('prefill_responses');
+  expect([...urls].sort()).toEqual([`${base()}link.html`, `${base()}form.js`].sort());
 });
 
 test('N3: the altered-format refusal requests only its files and the export', async ({ page }) => {
