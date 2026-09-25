@@ -187,10 +187,10 @@
 
   // A study link's own `c` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
-  // another page can hand a module over. The parameter is read as the form
-  // page reads it, and three faults are refused by name: a `c` that cannot
-  // be decoded, one that is not a plain object, and an instrument the
-  // select does not offer. A field of another type than its control takes
+  // another page can hand a module over. The parameter is decoded as the
+  // form page decodes it, and three faults are refused by name: a `c` that
+  // cannot be decoded, one that is not a plain object, and an instrument
+  // the select does not offer. A field of another type than its control takes
   // is skipped and the rest are filled; the form page's own checks refuse
   // such a link when it is opened. Nothing is fetched.
   function prefill() {

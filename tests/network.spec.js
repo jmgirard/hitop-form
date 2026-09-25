@@ -159,9 +159,10 @@ test('N7: the HiTOP-BR walk with a store and a complete address requests the sto
   expect(requests, 'one navigation to the completion address').toEqual(['GET']);
 });
 
-// N8: the builder's prefill reads the parameter and fetches nothing; the
-// Supabase config is the one L16 round-trips, whose build later fetches the
-// export, so the window is bounded at the first network idle.
+// N8: the builder's prefill reads the parameter and fetches nothing. The
+// config is L16's Supabase run with another participant. "Make the link" on
+// it would fetch the export, and the test does not press it; the requests
+// are read after the first network idle and one field check.
 test('N8: link.html opened with a Supabase config in its c requests only link.html and form.js', async ({ page }) => {
   const module = await readDescriptor('module-plain.json');
   const config = {

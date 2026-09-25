@@ -55,12 +55,12 @@
 //       reversed or with its last two swapped, is refused with the form
 //       page's message, and no link is built
 //  L16: link.html?c=<p> fills each control from the config <p> encodes,
-//       shows the chosen store kind's field group with the other hidden,
-//       and "Make the link" then builds a link whose c decodes to a config
-//       deep-equal to the one opened: once per store choice (none, a web
-//       address, a Supabase table), one run with a participant, another
-//       under Prolific with none, every run with a module, the random
-//       order and both completion URLs
+//       shows the chosen store kind's field group and hides the other (both
+//       for no store), and "Make the link" then builds a link whose c
+//       decodes to a config deep-equal to the one opened: once per store
+//       choice (none, a web address, a Supabase table), two runs with a
+//       participant and one under Prolific with none, every run with a
+//       module, the random order and both completion URLs
 //  L17: a c carrying only the instrument selects it and leaves every other
 //       control as a load with no c leaves it; one carrying the instrument
 //       and a module also fills the module textarea with JSON that parses
@@ -68,7 +68,7 @@
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
 //       naming an instrument the select does not offer each write a message
 //       naming the c parameter into #err and leave every control at its
-//       no-c value, over seven loads; a load with no c leaves #err empty
+//       no-c value, over six values of c; a load with no c leaves #err empty
 //  L19: above the form, an ordered list of three steps names, in order,
 //       choosing the instrument, where the responses go, and making the
 //       link; the module hint links the Module Builder and the page links
@@ -540,7 +540,7 @@ for (const w of PREFILL_STORES) {
     expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
     const kind = w.store ? w.store.kind : '';
     await expect(page.locator('select[name="storeKind"]')).toHaveValue(kind);
-    // The chosen kind's field group shows and the other is hidden.
+    // The chosen kind's field group shows and any other is hidden.
     await expect(page.locator('#webhookFields')).toBeVisible({ visible: kind === 'webhook' });
     await expect(page.locator('#supabaseFields')).toBeVisible({ visible: kind === 'supabase' });
     if (kind === 'webhook') await expect(page.locator('input[name="store"]')).toHaveValue(w.store.url);
@@ -585,8 +585,9 @@ test('a c carrying the instrument and a module fills the module textarea with th
   expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
 });
 
-// L18: seven loads. Each of the six faults writes a message naming the c
-// parameter and leaves every control as the no-c load leaves it.
+// L18: six bad values of c over the three faults, and a load with no c. Each
+// bad value writes a message naming the c parameter and leaves every control
+// as the no-c load leaves it.
 const BAD_C = [
   { name: 'a string that is not base64url', raw: '%%%not-base64url%%%' },
   { name: 'a base64url string that is not JSON', raw: Buffer.from('not json', 'utf8').toString('base64url') },

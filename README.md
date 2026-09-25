@@ -119,7 +119,7 @@ hand a module over the same way: a `c` that carries only `instrument` and
 `module` fills those two fields and leaves the rest for you. A `c` the
 page cannot read, one that does not hold a form, or one naming an
 instrument the builder does not offer is refused in a message naming the
-`c` parameter, and every field stays empty.
+`c` parameter, and no field is filled from it.
 
 The page's host, GitHub Pages, sees the address when the page is requested.
 So the study name, the participant identifier, the module composition and
