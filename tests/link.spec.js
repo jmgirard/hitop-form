@@ -66,9 +66,11 @@
 //       and a module also fills the module textarea with JSON that parses
 //       to the descriptor
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
-//       naming an instrument the select does not offer each write a message
-//       naming the c parameter into #err and leave every control at its
-//       no-c value, over six values of c; a load with no c leaves #err empty
+//       naming an instrument the select does not offer each write their
+//       fault's message, naming the c parameter, into #err and leave every
+//       control at its no-c value, over seven values of c, one that throws
+//       past the three checks among them, and the submit handler still
+//       runs; a load with no c leaves #err empty
 //  L19: above the form, an ordered list of three steps names, in order,
 //       choosing the instrument, where the responses go, and making the
 //       link; the module hint links the Module Builder and the page links
@@ -585,25 +587,56 @@ test('a c carrying the instrument and a module fills the module textarea with th
   expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
 });
 
-// L18: six bad values of c over the three faults, and a load with no c. Each
-// bad value writes a message naming the c parameter and leaves every control
-// as the no-c load leaves it.
+// L18: seven bad values of c over the three faults, and a load with no c.
+// Each bad value writes its fault's message, naming the c parameter, and
+// leaves every control as the no-c load leaves it. The seventh passes the
+// three checks and makes JSON.stringify throw while the module is written,
+// which the page turns into the first message with the form reset, so the
+// script still reaches its submit handler. A module nested some six
+// thousand deep throws that way in V8, but its c runs to 16 KB, past what
+// the test server and a page host accept in an address, so the throw is
+// provoked by an init script that makes JSON.stringify throw on a marked
+// module instead.
+const COULD_NOT_BE_READ = 'could not be read.';
+const NOT_A_FORM = 'does not hold a form.';
+const throwOnMarkedModule = () => {
+  const stringify = JSON.stringify;
+  JSON.stringify = (value, ...rest) => {
+    if (value !== null && typeof value === 'object' && value.throwOnStringify === true) {
+      throw new RangeError('Maximum call stack size exceeded');
+    }
+    return stringify(value, ...rest);
+  };
+};
 const BAD_C = [
-  { name: 'a string that is not base64url', raw: '%%%not-base64url%%%' },
-  { name: 'a base64url string that is not JSON', raw: Buffer.from('not json', 'utf8').toString('base64url') },
-  { name: 'a JSON array', config: [] },
-  { name: 'JSON null', config: null },
-  { name: 'a JSON string', config: 'x' },
-  { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' } },
+  { name: 'a string that is not base64url', raw: '%%%not-base64url%%%', message: COULD_NOT_BE_READ },
+  { name: 'a base64url string that is not JSON', raw: Buffer.from('not json', 'utf8').toString('base64url'), message: COULD_NOT_BE_READ },
+  { name: 'a JSON array', config: [], message: NOT_A_FORM },
+  { name: 'JSON null', config: null, message: NOT_A_FORM },
+  { name: 'a JSON string', config: 'x', message: NOT_A_FORM },
+  { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' }, message: 'names an instrument this page does not offer: "hitophsum".' },
+  {
+    name: 'a module that makes JSON.stringify throw after the study is filled',
+    config: { instrument: 'hitopbr', study: 'deep', module: { throwOnStringify: true } },
+    message: COULD_NOT_BE_READ,
+    init: throwOnMarkedModule,
+  },
 ];
 
 for (const bad of BAD_C) {
   test(`a c parameter that is ${bad.name} is refused by name and fills nothing`, async ({ page }) => {
     await openBuilder(page);
     const plain = await controls(page);
+    if (bad.init) await page.addInitScript(bad.init);
     await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
-    await expect(page.locator('#err')).toContainText('c parameter');
+    await expect(page.locator('#err')).toHaveText(`The link's c parameter ${bad.message} Fill in the form above to make a new link.`);
     expect(await controls(page)).toEqual(plain);
+    // The script reached its submit handler: a press with the study empty
+    // is the handler's own refusal, not a native submit that would put every
+    // field into the address.
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    await expect(page.locator('#err')).toHaveText('Give the study a name.');
+    expect(new URL(page.url()).searchParams.has('instrument'), 'no native submit').toBe(false);
   });
 }
 

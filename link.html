@@ -192,13 +192,16 @@
   // cannot be decoded, one that is not a plain object, and an instrument
   // the select does not offer. A field of another type than its control takes
   // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched.
+  // such a link when it is opened. Nothing is fetched. A throw past the
+  // three checks (a module nested deep enough to stop JSON.stringify) is
+  // the first refusal with the form reset, so the script reaches its submit
+  // handler and no field keeps a part of the config.
+  const refuse = (what) => {
+    err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
+  };
   function prefill() {
     const c = new URLSearchParams(window.location.search).get('c');
     if (c === null) return;
-    const refuse = (what) => {
-      err.textContent = `The link's c parameter ${what} Fill in the form below to make a new link.`;
-    };
     let config;
     try {
       config = decodeConfig(c);
@@ -239,7 +242,12 @@
       }
     }
   }
-  prefill();
+  try {
+    prefill();
+  } catch {
+    f.reset();
+    refuse('could not be read.');
+  }
   showKind();
 
   const makeButton = f.querySelector('button[type="submit"]');

@@ -1,5 +1,6 @@
-// The page transmits nothing: over three recorded walks, every request the
-// page makes is one of its own files or the one export fetch.
+// The page transmits nothing: over the recorded walks N1 to N7, every request
+// the page makes is one of its own files, the one export fetch, or the store
+// and completion addresses the link names; N8 covers the link builder.
 //
 //   N1: the full HiTOP-BR through save
 //   N2: the shuffled module through save
