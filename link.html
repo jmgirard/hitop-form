@@ -57,12 +57,24 @@
          padding: var(--s3) var(--s4); word-break: break-all; font-family: var(--mono);
          font-size: .875rem; }
   #out:empty { display: none; }
+  .upnav { margin: 0 0 var(--s4); font-size: .875rem; }
+  .upnav a { color: var(--muted); }
+  ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
+  ol.steps li { margin: 0 0 var(--s2); }
 </style>
 </head>
 <body>
 <main>
+  <nav class="upnav">
+    <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
+  </nav>
   <h1>Make a study link</h1>
   <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. For a Supabase table it downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <ol class="steps">
+    <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
+    <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
+    <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
+  </ol>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -82,7 +94,7 @@
       <input name="participant" type="text" autocomplete="off">
     </label>
     <label>Module descriptor
-      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the Module Builder saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
+      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
@@ -149,7 +161,7 @@
 </main>
 <script type="module">
   import {
-    encodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
+    encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -172,6 +184,70 @@
     document.getElementById('supabaseFields').hidden = kindSelect.value !== 'supabase';
   }
   kindSelect.addEventListener('change', showKind);
+
+  // A study link's own `c` parameter, opened on this page, fills the
+  // controls from the config it encodes, so a link can be edited here and
+  // another page can hand a module over. The parameter is decoded as the
+  // form page decodes it, and three faults are refused by name: a `c` that
+  // cannot be decoded, one that is not a plain object, and an instrument
+  // the select does not offer. A field of another type than its control takes
+  // is skipped and the rest are filled; the form page's own checks refuse
+  // such a link when it is opened. Nothing is fetched. A throw past the
+  // three checks (a module nested deep enough to stop JSON.stringify) is
+  // the first refusal with the form reset, so the script reaches its submit
+  // handler and no field keeps a part of the config.
+  const refuse = (what) => {
+    err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
+  };
+  function prefill() {
+    const c = new URLSearchParams(window.location.search).get('c');
+    if (c === null) return;
+    let config;
+    try {
+      config = decodeConfig(c);
+    } catch {
+      refuse('could not be read.');
+      return;
+    }
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+      refuse('does not hold a form.');
+      return;
+    }
+    const offered = [...f.elements.instrument.options].map((o) => o.value);
+    if (!offered.includes(config.instrument)) {
+      refuse(`names an instrument this page does not offer: ${JSON.stringify(config.instrument)}.`);
+      return;
+    }
+    f.elements.instrument.value = config.instrument;
+    const text = (name, v) => {
+      if (typeof v === 'string') f.elements[name].value = v;
+    };
+    text('study', config.study);
+    text('participant', config.participant);
+    text('complete', config.complete);
+    text('completeSaved', config.completeSaved);
+    f.elements.shuffle.checked = config.shuffle === true;
+    f.elements.prolific.checked = config.prolific === true;
+    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (isPlainObject(config.module)) f.elements.module.value = JSON.stringify(config.module, null, 2);
+    const store = config.store;
+    if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
+      kindSelect.value = store.kind;
+      if (store.kind === 'webhook') {
+        text('store', store.url);
+      } else {
+        text('supabaseUrl', store.url);
+        text('supabaseKey', store.key);
+        text('supabaseTable', store.table);
+      }
+    }
+  }
+  try {
+    prefill();
+  } catch {
+    f.reset();
+    refuse('could not be read.');
+  }
   showKind();
 
   const makeButton = f.querySelector('button[type="submit"]');
