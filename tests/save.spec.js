@@ -78,7 +78,7 @@ import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
   expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
-  SAVE_AGAIN, expectSaveAgain, savedScreenOrder, screenOrder,
+  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder,
 } from './helpers.mjs';
 import { readProlific } from '../form.js';
 
@@ -191,13 +191,15 @@ for (const c of CASES) {
     }
 
     // S21: on the HiTOP-BR walk, the trail paragraph names the button, the
-    // screen's order, and two clicks each save the file again.
+    // screen's order with the empty status region, and two presses each
+    // save the file again and write the status.
     if (c.name === 'hitopbr') {
       await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
       await expect(page.locator('main > p').nth(2)).toHaveText(
         `Please send that file to the study team the way they asked. No answer was sent from this page. ${SAVE_AGAIN}`,
       );
       expect(await screenOrder(page)).toEqual(savedScreenOrder());
+      await expectStatusEmpty(page);
       await expectSaveAgain(page, download);
     }
 
@@ -291,12 +293,15 @@ test('with a complete address and no store, the saved screen links to it after t
   await expect(link).toHaveText('app.prolific.com');
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
-  // S21: the trail sentence, and the whole screen's order, the button
-  // between the trail and the link.
+  // S21: the trail sentence, and the whole screen's order, the button and
+  // the empty status region between the trail and the link; two presses
+  // each save the file again and write the status.
   await expect(page.locator('main > p').nth(2)).toHaveText(
     `Please send that file to the study team the way they asked. No answer was sent from this page. ${SAVE_AGAIN}`,
   );
   expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
+  await expectStatusEmpty(page);
+  await expectSaveAgain(page, download);
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   await expect(page).not.toHaveURL(COMPLETE_URL);
@@ -425,6 +430,10 @@ test('with complete and completeSaved and no store, the saved screen links to co
   await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
+  // S21: the whole screen's order and the empty status region, as on the
+  // screen that links to `complete`.
+  expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
+  await expectStatusEmpty(page);
   await page.waitForTimeout(5000);
   expect(requests, 'no request to the completion address').toEqual([]);
   expect(savedRequests, 'no request to the saved-file completion address').toEqual([]);

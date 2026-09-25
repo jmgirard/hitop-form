@@ -289,31 +289,68 @@ export function awaitDownload(page) {
 // button below it.
 export const SAVE_AGAIN = 'If the file did not appear, press Save the file.';
 
+// The sentence the status region under the button holds after a press.
+export const SAVED_AGAIN = 'The file was saved again.';
+
+// The status region under the "Save the file" button before any press: one
+// `p.saved-again` with `role="status"` and no text, so the live region
+// exists before the first press.
+export async function expectStatusEmpty(page) {
+  const status = page.locator('p.saved-again');
+  await expect(status).toHaveCount(1);
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect(status).toHaveText('');
+}
+
 // The "Save the file" button on a saved-file screen: one button, and a
-// first and a second click each save the file again with the Finish
-// download's suggested file name and its bytes. The download promise is
-// created before each click with a short timeout of its own, so a click that
-// saves nothing fails on that wait, named, rather than on the test's limit.
+// first and a second press each save the file again with the Finish
+// download's suggested file name and its bytes. The first press is made from
+// the keyboard (the button focused, then Enter) and leaves focus on the
+// button; each press writes SAVED_AGAIN into the status region, the second
+// as a fresh write, seen by a mutation observer installed before it. The
+// download promise is created before each press with a short timeout of its
+// own, so a press that saves nothing fails on that wait, named, rather than
+// on the test's limit.
 export async function expectSaveAgain(page, download) {
   const button = page.getByRole('button', { name: 'Save the file' });
   await expect(button).toHaveCount(1);
+  const status = page.locator('p.saved-again');
   const bytes = await readFile(await download.path(), 'utf8');
-  for (const click of ['first', 'second']) {
+  for (const press of ['first', 'second']) {
     const again = page.waitForEvent('download', { timeout: 15 * 1000 });
-    await button.click();
+    if (press === 'first') {
+      await button.focus();
+      await page.keyboard.press('Enter');
+    } else {
+      await page.evaluate(() => {
+        window.__savedAgainWrites = 0;
+        new MutationObserver((records) => { window.__savedAgainWrites += records.length; })
+          .observe(document.querySelector('p.saved-again'), { childList: true, characterData: true, subtree: true });
+      });
+      await button.click();
+    }
     const d = await again;
-    expect(d.suggestedFilename(), `the ${click} click's file name`).toBe(download.suggestedFilename());
-    expect(await readFile(await d.path(), 'utf8'), `the ${click} click's bytes`).toBe(bytes);
+    expect(d.suggestedFilename(), `the ${press} press's file name`).toBe(download.suggestedFilename());
+    expect(await readFile(await d.path(), 'utf8'), `the ${press} press's bytes`).toBe(bytes);
+    if (press === 'first') {
+      const focused = await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.textContent]);
+      expect(focused, 'focus after the keyboard press').toEqual(['BUTTON', 'Save the file']);
+    }
+    await expect(status, `the status after the ${press} press`).toHaveText(SAVED_AGAIN);
+    if (press === 'second') {
+      expect(await page.evaluate(() => window.__savedAgainWrites), 'the second press rewrote the region').toBeGreaterThan(0);
+    }
   }
 }
 
 // The saved-file screen's children in document order, each as its tag and
 // class, the file name's paragraph marked by its code child so a swap with
 // the trail paragraph is seen: the heading, the lead paragraph, the file
-// name's paragraph, the trail paragraph, the button, the completion link's
-// paragraph when the link carries an address, then the version line.
+// name's paragraph, the trail paragraph, the button, the status region, the
+// completion link's paragraph when the link carries an address, then the
+// version line.
 export function savedScreenOrder({ complete = false } = {}) {
-  return ['H1', 'P.done', 'P>CODE.filename', 'P', 'BUTTON', ...(complete ? ['P.complete'] : []), 'P.version'];
+  return ['H1', 'P.done', 'P>CODE.filename', 'P', 'BUTTON', 'P.saved-again', ...(complete ? ['P.complete'] : []), 'P.version'];
 }
 
 export function screenOrder(page) {
