@@ -57,12 +57,24 @@
          padding: var(--s3) var(--s4); word-break: break-all; font-family: var(--mono);
          font-size: .875rem; }
   #out:empty { display: none; }
+  .upnav { margin: 0 0 var(--s4); font-size: .875rem; }
+  .upnav a { color: var(--muted); }
+  ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
+  ol.steps li { margin: 0 0 var(--s2); }
 </style>
 </head>
 <body>
 <main>
+  <nav class="upnav">
+    <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
+  </nav>
   <h1>Make a study link</h1>
   <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. For a Supabase table it downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <ol class="steps">
+    <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
+    <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
+    <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
+  </ol>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -82,7 +94,7 @@
       <input name="participant" type="text" autocomplete="off">
     </label>
     <label>Module descriptor
-      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the Module Builder saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
+      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
