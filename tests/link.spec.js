@@ -77,13 +77,13 @@
 //       link; the module hint links the Module Builder and the page links
 //       the online-collection tutorial
 //  L20: a c filling any of the four address fields (Address, Project URL,
-//       Completion URL, Completion URL after a saved file) with a non-empty
-//       string lists each filled one, after its label name, in a notice
-//       between the steps and the form, as the field holds it: each field
-//       alone, the most one c can carry once per store kind, and an address
-//       over two lines, listed joined; a load with no c, a c filling no
-//       address (seven shapes, two an address that is only a line break)
-//       and every refused L18 load show no notice
+//       Completion URL, Completion URL after a saved file) with a string
+//       that leaves the field non-empty lists each filled one, after its
+//       label name, in a notice between the steps and the form, as the
+//       field holds it: each field alone, the most one c can carry once per
+//       store kind, and an address over two lines, listed joined; a load
+//       with no c, a c filling no address (seven shapes, two an address
+//       that is only a line break) and every refused L18 load show no notice
 //  L21: markup and an entity in each address show verbatim in the notice,
 //       which holds the same elements as for plain addresses and no img
 //  L22: "Make the link" empties and hides the notice, on a built link and
@@ -713,8 +713,9 @@ async function noticeLines(page) {
   return page.locator('#prefilled li').allTextContents();
 }
 
-// L20: each of the four address fields filled alone, and the most one c can
-// carry (both completion URLs and one store address, once per store kind).
+// L20: each of the four address fields filled alone, the most one c can
+// carry (both completion URLs and one store address, once per store kind),
+// and an address over two lines.
 const NOTICE_SHOWN = [
   { name: 'the completion URL alone', fields: { complete: COMPLETE_URL }, lines: [`Completion URL: ${COMPLETE_URL}`] },
   {
