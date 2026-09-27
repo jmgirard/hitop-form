@@ -151,7 +151,7 @@
         <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
       </label>
     </div>
-    <p role="alert" id="err"></p>
+    <p role="alert" id="err" tabindex="-1"></p>
     <p>
       <button type="submit">Make the link</button>
       <button type="button" class="secondary" id="copy" hidden>Copy</button>
@@ -277,6 +277,11 @@
     refuse('could not be read.');
   }
   showKind();
+  // Both messages are written before the page has loaded, and a screen
+  // reader may not announce a live region that already holds text at load.
+  // Focus is read out, so it goes to whichever message holds text.
+  if (err.textContent !== '') err.focus();
+  else if (!notice.hidden) notice.focus();
 
   const makeButton = f.querySelector('button[type="submit"]');
 

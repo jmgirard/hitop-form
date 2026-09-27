@@ -86,6 +86,10 @@
 //       which holds the same elements as for plain addresses and no img
 //  L22: "Make the link" empties and hides the notice, on a built link and
 //       on the refusal of an empty study
+//  L23: after load, focus is on #err for every refused L18 load, on the
+//       notice for every L20 load that shows it, and on no element for
+//       every L20 silent load; this is focus in Chromium, not what a screen
+//       reader speaks
 
 import { test, expect } from '@playwright/test';
 import {
@@ -509,6 +513,11 @@ function controls(page) {
   );
 }
 
+// The id of the element holding focus, or 'body' when nothing does.
+function focused(page) {
+  return page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement.id));
+}
+
 // Opens link.html with `c` set to the encoding of `config`, or with no c
 // when `config` is undefined, or with `c` set verbatim when `raw` is given.
 async function openBuilder(page, { config, raw } = {}) {
@@ -652,6 +661,8 @@ for (const bad of BAD_C) {
     // L20: a refused c lists no address, even one filled before a throw.
     await expect(page.locator('#prefilled')).toBeHidden();
     await expect(page.locator('#prefilled li')).toHaveCount(0);
+    // L23: focus is on the refusal.
+    expect(await focused(page)).toBe('err');
     // The script reached its submit handler: a press with the study empty
     // is the handler's own refusal, not a native submit that would put every
     // field into the address.
@@ -734,6 +745,8 @@ for (const w of NOTICE_SHOWN) {
     await expect(page.locator('#prefilled')).toBeVisible();
     await expect(page.locator('#prefilled p')).toHaveText(NOTICE_TEXT);
     expect(await noticeLines(page)).toEqual(w.lines);
+    // L23: focus is on the notice.
+    expect(await focused(page)).toBe('prefilled');
     const list = await page.locator('main ol.steps').boundingBox();
     const notice = await page.locator('#prefilled').boundingBox();
     const form = await page.locator('#f').boundingBox();
@@ -764,6 +777,8 @@ for (const w of NOTICE_SILENT) {
     await expect(page.locator('#err')).toHaveText('');
     expect(await noticeLines(page)).toBeNull();
     await expect(page.locator('#prefilled li')).toHaveCount(0);
+    // L23: nothing takes focus.
+    expect(await focused(page)).toBe('body');
   });
 }
 
