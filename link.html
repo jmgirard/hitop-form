@@ -208,9 +208,9 @@
   // handler and no field keeps a part of the config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
   // responses go, where the participant is sent or pointed at the end) is
-  // listed in a
-  // notice above the form, as text, for the researcher to check. The notice
-  // is written only once prefill() has returned, so a throw leaves none.
+  // listed in a notice above the form, as text, for the researcher to check.
+  // The notice is written only once prefill() has returned, so a throw
+  // leaves none.
   const refuse = (what) => {
     err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
   };

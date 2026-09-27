@@ -122,8 +122,8 @@ instrument the builder does not offer is refused in a message naming the
 `c` parameter, and no field is filled from it.
 
 Anyone can send a link, so a `c` can fill in addresses you did not choose.
-When a `c` fills the web address, the Supabase project URL, the completion
-URL or the completion URL after a saved file with a non-empty address, a
+When a `c` puts a non-empty address in the web address, the Supabase
+project URL, the completion URL or the completion URL after a saved file, a
 notice between the three steps and the form lists each one after its
 field's name. Check them before you make a link. The notice goes when you
 press "Make the link". When the page opens, focus moves to the refusal or
