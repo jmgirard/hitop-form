@@ -79,9 +79,11 @@
 //  L20: a c filling any of the four address fields (Address, Project URL,
 //       Completion URL, Completion URL after a saved file) with a non-empty
 //       string lists each filled one, after its label name, in a notice
-//       between the steps and the form: each field alone and the most one
-//       c can carry, once per store kind; a load with no c, a c filling no
-//       address (five shapes) and every refused L18 load show no notice
+//       between the steps and the form, as the field holds it: each field
+//       alone, the most one c can carry once per store kind, and an address
+//       over two lines, listed joined; a load with no c, a c filling no
+//       address (seven shapes, two an address that is only a line break)
+//       and every refused L18 load show no notice
 //  L21: markup and an entity in each address show verbatim in the notice,
 //       which holds the same elements as for plain addresses and no img
 //  L22: "Make the link" empties and hides the notice, on a built link and
@@ -736,6 +738,14 @@ const NOTICE_SHOWN = [
     },
     lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Project URL: ${SUPABASE_URL}`],
   },
+  // A text field drops line breaks from the value it is given, so this
+  // address fills the field as one joined string, and the notice lists that.
+  {
+    name: 'a completion URL written over two lines',
+    fields: { complete: 'https://c.test/one\nhttps://c.test/two' },
+    lines: ['Completion URL: https://c.test/onehttps://c.test/two'],
+    held: { complete: 'https://c.test/onehttps://c.test/two' },
+  },
 ];
 
 for (const w of NOTICE_SHOWN) {
@@ -745,6 +755,9 @@ for (const w of NOTICE_SHOWN) {
     await expect(page.locator('#prefilled')).toBeVisible();
     await expect(page.locator('#prefilled p')).toHaveText(NOTICE_TEXT);
     expect(await noticeLines(page)).toEqual(w.lines);
+    for (const [name, value] of Object.entries(w.held ?? {})) {
+      await expect(page.locator(`#f [name="${name}"]`)).toHaveValue(value);
+    }
     // L23: focus is on the notice.
     expect(await focused(page)).toBe('prefilled');
     const list = await page.locator('main ol.steps').boundingBox();
@@ -764,6 +777,9 @@ const NOTICE_SILENT = [
   { name: 'a Supabase store with a key and a table and no url', config: { instrument: 'hitopbr', store: { kind: 'supabase', key: 'sb_publishable_x', table: 't' } } },
   { name: 'a web store whose url is not a string', config: { instrument: 'hitopbr', store: { kind: 'webhook', url: 123 } } },
   { name: 'empty completion URLs', config: { instrument: 'hitopbr', complete: '', completeSaved: '' } },
+  // A text field drops line breaks, so each of these leaves its field empty.
+  { name: 'a completion URL that is only a line break', config: { instrument: 'hitopbr', complete: '\n' } },
+  { name: 'a web store whose url is only a line break', config: { instrument: 'hitopbr', store: { kind: 'webhook', url: '\r\n' } } },
 ];
 
 for (const w of NOTICE_SILENT) {

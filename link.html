@@ -214,8 +214,8 @@
   const refuse = (what) => {
     err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
   };
-  // Returns the addresses filled, each as [label, address] in the form's
-  // order, the label named as the form shows it.
+  // Returns the addresses filled, each as [label, the field's value] in the
+  // form's order, the label named as the form shows it.
   function prefill() {
     const filled = [];
     const c = new URLSearchParams(window.location.search).get('c');
@@ -240,9 +240,12 @@
     const text = (name, v) => {
       if (typeof v === 'string') f.elements[name].value = v;
     };
+    // Listed as the field holds it: a text field drops line breaks from the
+    // value it is given, so the config's string can differ from the field's.
     const address = (name, label, v) => {
       text(name, v);
-      if (typeof v === 'string' && v !== '') filled.push([label, v]);
+      const held = f.elements[name].value;
+      if (typeof v === 'string' && held !== '') filled.push([label, held]);
     };
     text('study', config.study);
     text('participant', config.participant);
@@ -278,10 +281,9 @@
     refuse('could not be read.');
   }
   showKind();
-  // Both messages are written before the page has loaded, and a screen
-  // reader may not announce a live region that already holds text at load.
-  // Focus is read out, so it goes to the refusal when it holds text, else to
-  // the notice when it shows.
+  // Both messages are written before the page has loaded, so their live
+  // regions' own announcement is not relied on. Focus goes to the refusal
+  // when it holds text, else to the notice when it shows.
   if (err.textContent !== '') err.focus();
   else if (!notice.hidden) notice.focus();
 
