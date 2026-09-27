@@ -68,13 +68,30 @@
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
 //       naming an instrument the select does not offer each write their
 //       fault's message, naming the c parameter, into #err and leave every
-//       control at its no-c value, over seven values of c, one that throws
-//       past the three checks among them, and the submit handler still
-//       runs; a load with no c leaves #err empty
+//       control at its no-c value, over eight values of c, two that throw
+//       past the three checks among them (one after a completion URL is
+//       filled), and the submit handler still runs; a load with no c leaves
+//       #err empty
 //  L19: above the form, an ordered list of three steps names, in order,
 //       choosing the instrument, where the responses go, and making the
 //       link; the module hint links the Module Builder and the page links
 //       the online-collection tutorial
+//  L20: a c filling any of the four address fields (Address, Project URL,
+//       Completion URL, Completion URL after a saved file) with a string
+//       that leaves the field non-empty lists each filled one, after its
+//       label name, in a notice between the steps and the form, as the
+//       field holds it: each field alone, the most one c can carry once per
+//       store kind, and an address over two lines, listed joined; a load
+//       with no c, a c filling no address (seven shapes, two an address
+//       that is only a line break) and every refused L18 load show no notice
+//  L21: markup and an entity in each address show verbatim in the notice,
+//       which holds the same elements as for plain addresses and no img
+//  L22: "Make the link" empties and hides the notice, on a built link and
+//       on the refusal of an empty study
+//  L23: after load, focus is on #err for every refused L18 load, on the
+//       notice for every L20 load that shows it, and on no element for
+//       every L20 silent load; this is focus in Chromium, not what a screen
+//       reader speaks
 
 import { test, expect } from '@playwright/test';
 import {
@@ -498,6 +515,11 @@ function controls(page) {
   );
 }
 
+// The id of the element holding focus, or 'body' when nothing does.
+function focused(page) {
+  return page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement.id));
+}
+
 // Opens link.html with `c` set to the encoding of `config`, or with no c
 // when `config` is undefined, or with `c` set verbatim when `raw` is given.
 async function openBuilder(page, { config, raw } = {}) {
@@ -587,10 +609,11 @@ test('a c carrying the instrument and a module fills the module textarea with th
   expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
 });
 
-// L18: seven bad values of c over the three faults, and a load with no c.
+// L18: eight bad values of c over the three faults, and a load with no c.
 // Each bad value writes its fault's message, naming the c parameter, and
-// leaves every control as the no-c load leaves it. The seventh passes the
-// three checks and makes JSON.stringify throw while the module is written,
+// leaves every control as the no-c load leaves it. The seventh and eighth
+// pass the three checks and make JSON.stringify throw while the module is
+// written, the eighth after a completion URL is filled,
 // which the page turns into the first message with the form reset, so the
 // script still reaches its submit handler. A module nested some six
 // thousand deep throws that way in V8, but its c runs to 16 KB, past what
@@ -621,6 +644,12 @@ const BAD_C = [
     message: COULD_NOT_BE_READ,
     init: throwOnMarkedModule,
   },
+  {
+    name: 'a module that makes JSON.stringify throw after a completion URL is filled',
+    config: { instrument: 'hitopbr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
+    message: COULD_NOT_BE_READ,
+    init: throwOnMarkedModule,
+  },
 ];
 
 for (const bad of BAD_C) {
@@ -631,6 +660,11 @@ for (const bad of BAD_C) {
     await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
     await expect(page.locator('#err')).toHaveText(`The link's c parameter ${bad.message} Fill in the form above to make a new link.`);
     expect(await controls(page)).toEqual(plain);
+    // L20: a refused c lists no address, even one filled before a throw.
+    await expect(page.locator('#prefilled')).toBeHidden();
+    await expect(page.locator('#prefilled li')).toHaveCount(0);
+    // L23: focus is on the refusal.
+    expect(await focused(page)).toBe('err');
     // The script reached its submit handler: a press with the study empty
     // is the handler's own refusal, not a native submit that would put every
     // field into the address.
@@ -663,4 +697,148 @@ test('the three steps above the form, the builder link in the module hint, and t
   const hint = page.locator('label', { hasText: 'Module descriptor' }).locator('.hint');
   await expect(hint.locator('a[href="https://jmgirard.github.io/hitop-builder/"]')).toHaveCount(1);
   await expect(page.locator('a[href="https://jmgirard.github.io/hitop/articles/online-collection.html"]')).toHaveCount(1);
+});
+
+// ---- The notice of the addresses a c filled --------------------------------
+
+// Stated here rather than read from link.html, so a change to the notice's
+// wording or to a field's label name shows up as a failure.
+const NOTICE_TEXT = 'The link you opened filled in these addresses. Check each one before you make a link.';
+const WEB_URL = 'https://script.google.com/macros/s/abc/exec';
+const SUPABASE_URL = 'https://abc.supabase.co';
+
+// The notice's lines, or null when it is hidden.
+async function noticeLines(page) {
+  if (await page.locator('#prefilled').isHidden()) return null;
+  return page.locator('#prefilled li').allTextContents();
+}
+
+// L20: each of the four address fields filled alone, the most one c can
+// carry (both completion URLs and one store address, once per store kind),
+// and an address over two lines.
+const NOTICE_SHOWN = [
+  { name: 'the completion URL alone', fields: { complete: COMPLETE_URL }, lines: [`Completion URL: ${COMPLETE_URL}`] },
+  {
+    name: 'the completion URL after a saved file alone',
+    fields: { completeSaved: COMPLETE_SAVED_URL },
+    lines: [`Completion URL after a saved file: ${COMPLETE_SAVED_URL}`],
+  },
+  { name: 'a web address alone', fields: { store: { kind: 'webhook', url: WEB_URL } }, lines: [`Address: ${WEB_URL}`] },
+  { name: 'a Supabase project URL alone', fields: { store: { kind: 'supabase', url: SUPABASE_URL } }, lines: [`Project URL: ${SUPABASE_URL}`] },
+  {
+    name: 'both completion URLs and a web address',
+    fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: WEB_URL } },
+    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Address: ${WEB_URL}`],
+  },
+  {
+    name: 'both completion URLs and a Supabase project URL',
+    fields: {
+      complete: COMPLETE_URL,
+      completeSaved: COMPLETE_SAVED_URL,
+      store: { kind: 'supabase', url: SUPABASE_URL, key: 'sb_publishable_x', table: 'prefill_responses' },
+    },
+    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Project URL: ${SUPABASE_URL}`],
+  },
+  // A text field drops line breaks from the value it is given, so this
+  // address fills the field as one joined string, and the notice lists that.
+  {
+    name: 'a completion URL written over two lines',
+    fields: { complete: 'https://c.test/one\nhttps://c.test/two' },
+    lines: ['Completion URL: https://c.test/onehttps://c.test/two'],
+    held: { complete: 'https://c.test/onehttps://c.test/two' },
+  },
+];
+
+for (const w of NOTICE_SHOWN) {
+  test(`a c filling ${w.name} lists it in a notice between the steps and the form`, async ({ page }) => {
+    await openBuilder(page, { config: { instrument: 'hitopbr', study: 'notice', ...w.fields } });
+    await expect(page.locator('#err')).toHaveText('');
+    await expect(page.locator('#prefilled')).toBeVisible();
+    await expect(page.locator('#prefilled p')).toHaveText(NOTICE_TEXT);
+    expect(await noticeLines(page)).toEqual(w.lines);
+    for (const [name, value] of Object.entries(w.held ?? {})) {
+      await expect(page.locator(`#f [name="${name}"]`)).toHaveValue(value);
+    }
+    // L23: focus is on the notice.
+    expect(await focused(page)).toBe('prefilled');
+    const list = await page.locator('main ol.steps').boundingBox();
+    const notice = await page.locator('#prefilled').boundingBox();
+    const form = await page.locator('#f').boundingBox();
+    expect(list.y + list.height, 'the steps sit above the notice').toBeLessThanOrEqual(notice.y);
+    expect(notice.y + notice.height, 'the notice sits above the form').toBeLessThanOrEqual(form.y);
+  });
+}
+
+// L20: loads that fill no address show no notice. The refused loads are
+// asserted in L18's loop.
+const NOTICE_SILENT = [
+  { name: 'no c' },
+  { name: 'the instrument only', config: { instrument: 'hitopbr' } },
+  { name: 'the instrument and a module', module: 'module-plain.json' },
+  { name: 'a Supabase store with a key and a table and no url', config: { instrument: 'hitopbr', store: { kind: 'supabase', key: 'sb_publishable_x', table: 't' } } },
+  { name: 'a web store whose url is not a string', config: { instrument: 'hitopbr', store: { kind: 'webhook', url: 123 } } },
+  { name: 'empty completion URLs', config: { instrument: 'hitopbr', complete: '', completeSaved: '' } },
+  // A text field drops line breaks, so each of these leaves its field empty.
+  { name: 'a completion URL that is only a line break', config: { instrument: 'hitopbr', complete: '\n' } },
+  { name: 'a web store whose url is only a line break', config: { instrument: 'hitopbr', store: { kind: 'webhook', url: '\r\n' } } },
+];
+
+for (const w of NOTICE_SILENT) {
+  test(`a load with ${w.name} shows no notice`, async ({ page }) => {
+    let config = w.config;
+    if (w.module) {
+      const module = await readDescriptor(w.module);
+      config = { instrument: module.instrument, module };
+    }
+    await openBuilder(page, config === undefined ? {} : { config });
+    await expect(page.locator('#err')).toHaveText('');
+    expect(await noticeLines(page)).toBeNull();
+    await expect(page.locator('#prefilled li')).toHaveCount(0);
+    // L23: nothing takes focus.
+    expect(await focused(page)).toBe('body');
+  });
+}
+
+// L21: markup and an entity in each address show as written. Read as markup,
+// the first would add an img to the notice and the second would read "&".
+const MARKUP = '"><img src=x>&amp;';
+for (const kind of ['webhook', 'supabase']) {
+  test(`addresses holding markup show verbatim as text in the notice: ${kind}`, async ({ page }) => {
+    const plainFields = (tail) => ({
+      complete: `https://c.test/${tail}`,
+      completeSaved: `https://s.test/${tail}`,
+      store: { kind, url: `https://w.test/${tail}` },
+    });
+    await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields('plain') } });
+    const plainTags = await page.$$eval('#prefilled *', (nodes) => nodes.map((n) => n.tagName));
+    await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields(MARKUP) } });
+    const label = kind === 'webhook' ? 'Address' : 'Project URL';
+    expect(await noticeLines(page)).toEqual([
+      `Completion URL: https://c.test/${MARKUP}`,
+      `Completion URL after a saved file: https://s.test/${MARKUP}`,
+      `${label}: https://w.test/${MARKUP}`,
+    ]);
+    expect(await page.$$eval('#prefilled *', (nodes) => nodes.map((n) => n.tagName))).toEqual(plainTags);
+    await expect(page.locator('#prefilled img')).toHaveCount(0);
+  });
+}
+
+// L22: "Make the link" empties and hides the notice, on a build and on the
+// first refusal.
+test('a built link empties and hides the notice', async ({ page }) => {
+  await openBuilder(page, { config: { instrument: 'hitopbr', study: 'notice', complete: COMPLETE_URL } });
+  await expect(page.locator('#prefilled')).toBeVisible();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out')).not.toHaveText('');
+  await expect(page.locator('#prefilled')).toBeHidden();
+  await expect(page.locator('#prefilled li')).toHaveCount(0);
+});
+
+test('a refused build with the study empty empties and hides the notice', async ({ page }) => {
+  await openBuilder(page, { config: { instrument: 'hitopbr', complete: COMPLETE_URL } });
+  await expect(page.locator('#prefilled')).toBeVisible();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#err')).toHaveText('Give the study a name.');
+  await expect(page.locator('#prefilled')).toBeHidden();
+  await expect(page.locator('#prefilled li')).toHaveCount(0);
 });

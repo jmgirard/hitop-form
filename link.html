@@ -61,6 +61,10 @@
   .upnav a { color: var(--muted); }
   ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
   ol.steps li { margin: 0 0 var(--s2); }
+  #prefilled { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r1);
+               padding: var(--s3) var(--s4); margin: 0 0 var(--s5); word-break: break-all; }
+  #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
+  #prefilled ul { margin: 0; padding-left: 1.25rem; }
 </style>
 </head>
 <body>
@@ -69,12 +73,16 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. For a Supabase table it downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>) puts its <code>c</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <ol class="steps">
     <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
     <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
     <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
   </ol>
+  <div id="prefilled" role="status" tabindex="-1" hidden>
+    <p>The link you opened filled in these addresses. Check each one before you make a link.</p>
+    <ul id="prefilledList"></ul>
+  </div>
   <form id="f" novalidate>
     <label>Instrument
       <select name="instrument">
@@ -143,7 +151,7 @@
         <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
       </label>
     </div>
-    <p role="alert" id="err"></p>
+    <p role="alert" id="err" tabindex="-1"></p>
     <p>
       <button type="submit">Make the link</button>
       <button type="button" class="secondary" id="copy" hidden>Copy</button>
@@ -177,6 +185,8 @@
   const sql = document.getElementById('sql');
   const copySql = document.getElementById('copySql');
   const kindSelect = f.elements.storeKind;
+  const notice = document.getElementById('prefilled');
+  const noticeList = document.getElementById('prefilledList');
 
   // Only the chosen kind's fields show.
   function showKind() {
@@ -195,37 +205,52 @@
   // such a link when it is opened. Nothing is fetched. A throw past the
   // three checks (a module nested deep enough to stop JSON.stringify) is
   // the first refusal with the form reset, so the script reaches its submit
-  // handler and no field keeps a part of the config.
+  // handler and no field keeps a part of the config. A `c` accepted here can
+  // come from anyone who sends a link, so each address it fills (where the
+  // responses go, where the participant is sent or pointed at the end) is
+  // listed in a notice above the form, as text, for the researcher to check.
+  // The notice is written only once prefill() has returned, so a throw
+  // leaves none.
   const refuse = (what) => {
     err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
   };
+  // Returns the addresses filled, each as [label, the field's value] in the
+  // form's order, the label named as the form shows it.
   function prefill() {
+    const filled = [];
     const c = new URLSearchParams(window.location.search).get('c');
-    if (c === null) return;
+    if (c === null) return filled;
     let config;
     try {
       config = decodeConfig(c);
     } catch {
       refuse('could not be read.');
-      return;
+      return filled;
     }
     if (config === null || typeof config !== 'object' || Array.isArray(config)) {
       refuse('does not hold a form.');
-      return;
+      return filled;
     }
     const offered = [...f.elements.instrument.options].map((o) => o.value);
     if (!offered.includes(config.instrument)) {
       refuse(`names an instrument this page does not offer: ${JSON.stringify(config.instrument)}.`);
-      return;
+      return filled;
     }
     f.elements.instrument.value = config.instrument;
     const text = (name, v) => {
       if (typeof v === 'string') f.elements[name].value = v;
     };
+    // Listed as the field holds it: a text field drops line breaks from the
+    // value it is given, so the config's string can differ from the field's.
+    const address = (name, label, v) => {
+      text(name, v);
+      const held = f.elements[name].value;
+      if (typeof v === 'string' && held !== '') filled.push([label, held]);
+    };
     text('study', config.study);
     text('participant', config.participant);
-    text('complete', config.complete);
-    text('completeSaved', config.completeSaved);
+    address('complete', 'Completion URL', config.complete);
+    address('completeSaved', 'Completion URL after a saved file', config.completeSaved);
     f.elements.shuffle.checked = config.shuffle === true;
     f.elements.prolific.checked = config.prolific === true;
     const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -234,21 +259,33 @@
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
       kindSelect.value = store.kind;
       if (store.kind === 'webhook') {
-        text('store', store.url);
+        address('store', 'Address', store.url);
       } else {
-        text('supabaseUrl', store.url);
+        address('supabaseUrl', 'Project URL', store.url);
         text('supabaseKey', store.key);
         text('supabaseTable', store.table);
       }
     }
+    return filled;
   }
   try {
-    prefill();
+    const filled = prefill();
+    for (const [label, value] of filled) {
+      const li = document.createElement('li');
+      li.textContent = `${label}: ${value}`;
+      noticeList.append(li);
+    }
+    notice.hidden = filled.length === 0;
   } catch {
     f.reset();
     refuse('could not be read.');
   }
   showKind();
+  // Both messages are written before the page has loaded, so their live
+  // regions' own announcement is not relied on. Focus goes to the refusal
+  // when it holds text, else to the notice when it shows.
+  if (err.textContent !== '') err.focus();
+  else if (!notice.hidden) notice.focus();
 
   const makeButton = f.querySelector('button[type="submit"]');
 
@@ -266,6 +303,10 @@
   });
 
   async function build() {
+    // Once "Make the link" is pressed the fields are the researcher's own,
+    // so the notice of what the opened link filled goes.
+    notice.hidden = true;
+    noticeList.replaceChildren();
     err.textContent = '';
     out.textContent = '';
     open.textContent = '';
