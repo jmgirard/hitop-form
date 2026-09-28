@@ -158,10 +158,10 @@ included, then reaches the host's request logs from that request too.
 
 ## Recruit through SONA or CloudResearch Connect
 
-A recruiting site other than Prolific puts each participant's identifier
-into the study link's address under a parameter of its own. Choose the site
-in the builder's "Recruiting site" menu and leave the participant field
-empty. The link then carries `participantParam`, the parameter's name, and
+A recruiting site other than Prolific can pass each participant's
+identifier to the page in the study link's address, under a parameter of
+its own. Choose the site in the builder's "Recruiting site" menu and leave
+the participant field empty. The link then carries `participantParam`, the parameter's name, and
 the page takes the participant identifier from that parameter. When the
 address carries no value for it, a blank value, or a placeholder the site
 did not fill (a value of the form `%…%` or `{{…}}`), the page asks for the
@@ -183,11 +183,13 @@ and the external study must put the participant's survey code in place of
 Give that address as the completion URL with `{participant}` in place of
 `XXXX`. After a confirmed send the page sends the participant there with
 their code filled in, and SONA grants the credit. After a saved file it
-links there.
+links there, or to the completion URL after a saved file when you give one,
+which takes `{participant}` the same way.
 
 The client-side completion URL carries a key specific to the study, and
-SONA says that a participant can read it and can use it to try other
-survey codes
+SONA says that a participant can read it, because their browser loads
+the URL, and can use it to try other survey codes and so grant credit to
+other participants
 ([Security Considerations](https://www.sona-systems.com/researcher/security-considerations/)).
 In a hitop-form link the address sits inside the study link, so a
 participant can read the key before they finish, not only at the end. SONA

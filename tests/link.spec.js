@@ -111,7 +111,8 @@
 //  L27: a c parameter selects Prolific for prolific: true, SONA for "id",
 //       Connect for "participantId", another site with the field filled for
 //       any other name, and None with no field; a participantParam that is
-//       not text selects None; each round-trips through "Make the link"
+//       not text selects None; each other case round-trips through "Make
+//       the link", and the not-text one builds a link without the field
 //  L28: the SONA link opened through "Open the link", %SURVEY_CODE%
 //       unfilled, shows the start screen's identifier question
 //  L29: the Supabase SQL under SONA equals the SQL with no site, with the
@@ -962,9 +963,9 @@ for (const c of [
   { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '' },
   { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '' },
   { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId' },
-  { name: 'a participantParam that is not text', config: { participantParam: 7 }, site: '', field: '', built: {} },
+  { name: 'a participantParam that is not text, left out of the rebuilt link', config: { participantParam: 7 }, site: '', field: '', built: {} },
 ]) {
-  test(`a c parameter selects the recruiting site and round-trips: ${c.name}`, async ({ page }) => {
+  test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
     await openBuilder(page, { config });
     await expect(page.locator('#err')).toHaveText('');

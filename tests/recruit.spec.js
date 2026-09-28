@@ -20,7 +20,9 @@
 //       same link without it, the identifier given as participant instead
 //
 // The {participant} token in a completion address, on a SONA-shaped
-// address. Each use of the address, and each source of the identifier:
+// address except where a test names another (P11's saved-file address, P13's
+// Prolific address). Each use of the address, and each source of the
+// identifier:
 //
 //   P8: a confirmed send, identifier "a&b c" from the address: at the held
 //       navigation request the sent screen's link is the filled address,
