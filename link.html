@@ -144,7 +144,7 @@
       <textarea name="consentText" class="prose"></textarea>
     </label>
     <label>Declined text
-      <span class="hint">Optional, and only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, the page shows "You chose not to take part. You can close this page." After "I do not agree" the page sends no answer and saves no file.</span>
+      <span class="hint">Optional, and only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, the page shows "You chose not to take part. You can close this page.", or only its first sentence when the completion URL after a decline is given. After "I do not agree" the page sends no answer and saves no file.</span>
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
@@ -260,8 +260,8 @@
   // page names in a `z`, a config that is not a plain object, and an
   // instrument the select does not offer. A field of another type than its control takes
   // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched. A throw past the
-  // three checks (a module nested deep enough to stop JSON.stringify) is
+  // such a link when it is opened. Nothing is fetched. A throw past these
+  // checks (a module nested deep enough to stop JSON.stringify) is
   // the first refusal with the form reset, so the script reaches its submit
   // handler and no field keeps a part of the config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
