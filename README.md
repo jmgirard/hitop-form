@@ -107,7 +107,9 @@ the form:
    a decline. The page then shows the consent text before the form, as
    [Show consent text before the form](#show-consent-text-before-the-form)
    describes.
-9. Choose where responses go. "A file on the participant's device" is the
+9. Optionally add questions of your own, asked before or after the form, as
+   [Ask your own questions](#ask-your-own-questions) describes.
+10. Choose where responses go. "A file on the participant's device" is the
    default: the page saves a file and sends nothing. "A web address" is the
    `https://` address of an endpoint that accepts one JSON row per
    participant. The web app in
@@ -122,17 +124,17 @@ the form:
 
 Press "Make the link". The link carries the instrument, the study, the
 participant, the module, the random-order choice, the recruiting site, the
-completion URLs, the consent text and the store folded into its address, so it needs
+completion URLs, the consent text, the questions and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
 a module descriptor is a few hundred characters long. If a mail client or a
 course system truncates it, the page reports that the link cannot be read.
 The builder prints the link's length in characters beside "Open the link".
 
-A link without consent text carries its fields in one parameter, `c`: the
-fields as JSON, written as base64url. A link with consent text carries them
-in `z` in place of `c`. That is the same JSON compressed with deflate-raw,
-then written as base64url with no padding, so a long consent text makes a
-shorter link. The page reads either parameter and refuses a link that
+A link without consent text or questions carries its fields in one
+parameter, `c`: the fields as JSON, written as base64url. A link with
+consent text or questions carries them in `z` in place of `c`. That is the
+same JSON compressed with deflate-raw, then written as base64url with no
+padding, so a long consent text or many questions make a shorter link. The page reads either parameter and refuses a link that
 carries both. It also refuses a `z` it cannot read, and names the fault.
 The faults are a character outside base64url, data that does not
 decompress, and more than 100,000 bytes once decompressed. Text that is not
@@ -143,8 +145,8 @@ A study link's own `c` or `z` parameter, opened on `link.html`
 (`link.html?c=…` or `link.html?z=…`), fills the fields from the link, so a
 link can be edited and made again. The instrument, the study, the
 participant, the module descriptor, the random-order box, the recruiting
-site, the completion URLs, the consent and declined texts and the store are
-filled, and the store kind's fields are shown. The site
+site, the completion URLs, the consent and declined texts, the questions
+and the store are filled, and the store kind's fields are shown. The site
 is Prolific for a link with `prolific: true`, SONA for one whose
 `participantParam` is `id`, CloudResearch Connect for `participantId`, and
 another site, with its name in the "Address parameter" field, for any other
@@ -290,11 +292,79 @@ A link with consent text is a `z` link, as
 [Make a study link](#make-a-study-link) describes. The consent text reaches
 the page's host in the address, as the rest of the link does.
 
+## Ask your own questions
+
+A link can carry questions of your own, such as age or how the participant
+heard of the study. In the builder's "Your own questions" part, press "Add
+a question" once for each question. For each question, choose whether it
+is asked before or after the form, and give a name, the question and a
+type. "Move up", "Move down" and "Remove" change the list. A link holds up
+to 50 questions. The link carries them as its `questions` field, with a
+`before` list and an `after` list. Each list keeps the builder's order.
+
+The page asks the before questions on a screen headed "Before you begin".
+That screen comes ahead of the start screen, and after the consent screen
+when the link has one. It has a "Next" button and no "Back". The page asks
+the after questions on a screen headed "Before you finish", after the last
+item page. That item page then carries "Next" in place of "Finish", and
+the question screen carries "Back" and "Finish". The questions never share
+a screen with the items. Each question is numbered on its screen, and a
+required one ends in "(required)". The page shows the question text and the
+option labels as plain text, as it shows consent text.
+
+A question has one of four types. Each answer is written as text:
+
+| Type | The participant | The answer's column holds |
+|---|---|---|
+| Text, one line | types one line | the answer as typed |
+| Whole number | types a whole number | the number in digits, with no leading zero and a minus sign only below zero, so `007` is `7` and `-0` is `0` |
+| One of several options | picks one option | the option's number, counted from 1 |
+| Any of several options | picks any number of options | the numbers of the picked options in ascending order, separated by single spaces, such as `1 3` |
+
+An unanswered question writes an empty cell. The hitop package's
+`read_form_responses()` reads it as `NA`.
+
+The options of a question are numbered by their order in the link, one per
+line in the builder's "Options" box. If you change the order of the options
+between two links of one study, the same number means different options in
+the two sets of files. Keep the order the same in every link of a study.
+A question holds 2 to 20 options. Each option is one line of up to 200
+characters, without `|`. Two options of one question must not be the same.
+
+"Next" and "Finish" check the answers on their screen in order. A required
+question with no answer stops the page, which then says "Please answer
+question 2 before continuing." with that question's number. A text answer
+of spaces alone counts as no answer. A whole-number answer must be an
+optional minus sign and digits. Give a minimum, a maximum or both to limit
+it. The page then shows the range under the question, such as "A whole
+number from 18 to 99.", and refuses a number outside it: "Question 1 needs
+a whole number from 18 to 99." The cursor moves to the refused question.
+
+The name gives the answer's column: `q_` plus the name, such as `q_age`. A
+name is a lower-case letter followed by lower-case letters, digits and
+`_`, up to 30 characters in all. Two questions must not share a name. The
+question columns come after the item columns in the file, the posted row
+and the Supabase table. The before list comes first, and each list keeps
+the link's order. A question text is one line of up to 1,000 characters.
+The builder refuses a question that breaks one of these rules and names it
+by its number in the builder. The page refuses such a link and shows no
+form. Its message names the question by its list and its place there, such
+as "question 2 of the before list".
+
+The Supabase SQL from the builder adds one text column per question. A
+table made before the questions were added has no column for them. The API
+then refuses the row, and the page saves the file instead. Make a new table
+from the builder's SQL whenever the questions change.
+
+A link with questions is a `z` link, as
+[Make a study link](#make-a-study-link) describes.
+
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
 count, and a "Begin" button. A link with consent text shows its consent
-screen first, and the start screen after "I agree". The start screen says where the answers go.
+screen first, and the start screen after "I agree". A link with questions
+before the form shows them next, and the start screen after "Next". The start screen says where the answers go.
 With a send address, it names the address's host. Without one, it says the
 answers are saved to a file on this device. When the link carries no
 participant identifier, the start screen asks for one. Under the Prolific
@@ -524,8 +594,9 @@ included, makes the page save the file instead.
    SQL creates the table with the five study columns, a text column
    `item_order` when the random-order box is checked, the text columns
    `prolific_study` and `prolific_session` when the recruiting site is
-   Prolific, and one integer column per item, in the order the file keeps
-   them. It then turns on row-level
+   Prolific, one integer column per item, in the order the file keeps
+   them, and one text column per question of your own after the items.
+   It then turns on row-level
    security, revokes the project's default table privileges from the
    `anon` and `authenticated` roles, grants insert back to `anon`, and
    adds one policy that lets that role insert. With the publishable key,
@@ -535,7 +606,8 @@ included, makes the page save the file instead.
 
 The table's columns are fixed by the SQL, so a link for a different
 instrument or module, or a link with the random order or the Prolific
-route sent to a table made without it, needs a table of its own. A row with a key the table
+route sent to a table made without it, needs a table of its own. So does a
+link whose questions differ from those the table was made for. A row with a key the table
 has no column for is refused by the API, and the page then saves the file.
 A row that lacks some of the table's columns is stored with those columns
 empty, because the SQL puts no constraint on any column.
@@ -573,7 +645,9 @@ text, or open it in the spreadsheet as text.
 Read the files into R and score them with the hitop package.
 `read_form_responses()` reads a folder of files saved for one form into one
 data frame, with `item_order`, `prolific_study` and `prolific_session` as
-character columns that are `NA` for a file without them. Pass its item columns to the scoring function for the form:
+character columns that are `NA` for a file without them. The answers to
+your own questions come after the item columns as character columns, with
+`NA` for an unanswered question. Pass its item columns to the scoring function for the form:
 `score_hitopsr()`, `score_hitopbr()` or `score_pid5()`. For a PID-5 file, set
 `version` to `"FULL"`, `"SF"` or `"BF"` to match the form:
 
@@ -614,6 +688,10 @@ npx playwright test
 | `tests/consent.spec.js` | The refusals of a `consent` field that is not an object, has a key other than `text` and `declined`, has no text, or has a text or declined text that is not a string, blank, over its limit or holding a lone surrogate half, and of `completeDeclined` without `consent` or as an `http://` address; a text and a declined text at their limits accepted. The consent screen of a hand-made link with CR LF and a lone CR: each paragraph's text, a single line break kept, no `b` element from `<b>x</b>`, the two buttons, focus on the heading, and "I agree" leading to the start screen the link without consent shows. "I do not agree" with no store, a webhook store and a Supabase store, each with `complete`: the declined text or the fixed sentence, no button and no link, and for 2 seconds no request, no download and the same address. With `completeDeclined`, a Prolific-shaped and a SONA-shaped address, the latter with and without an identifier: the declined screen and its link at the moment of the navigation, then the address reached, with no store request and no download. The saved file's header, the posted row's keys and the builder's Supabase SQL the same with and without consent, with and without the random order |
 | `tests/zlink.spec.js` | A `z` link without consent opens the form, and one that decompresses to exactly 100,000 bytes is read. The refusal, naming the fault, of a `z` with a character outside base64url, a length base64 does not have, bytes that are no stream, a truncated stream, bytes after the end of the stream, 100,001 bytes decompressed, bytes that are not UTF-8, text that is not JSON, and JSON that is not an object; of a link with both `c` and `z`, in either order; of a `z` link in a browser without `DecompressionStream`, where a `c` link still opens; and of `participantParam` `"z"` |
 | `tests/link-consent.spec.js` | A link built with consent text opens a consent screen with the text's paragraphs. Consent text with CR LF, blank lines, a tab and non-ASCII text makes a `?z=` link carrying the box's text, which the page writes back line for line. With the consent fields empty the builder writes `?c=`, and with consent text `?z=`. `link.html?z=…` fills the consent boxes and the decline address, lists the address in the notice, and round-trips. The builder's refusals: a Consent or Declined box of white space, a Declined box or decline address beside an empty Consent box, a box over its limit or holding a lone surrogate half, and an `http://` decline address, with boxes at their limits building a link. `"z"` refused under "Another site", and `link.html` opened with both `c` and `z` or with a `z` that does not decompress refused by name |
+| `tests/questions.spec.js` | The refusal, naming the question's list and place, of each fault in a `questions` field: its shape, the 50-question limit, a question's keys, name, text, type and `required`, its options and their labels, and its `min` and `max`. The limits themselves are accepted |
+| `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, and the unload guard counting a question's answer |
+| `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
+| `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce is refused by its number, 51 questions included. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions. Move up, Move down and Remove reorder and renumber the questions |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
