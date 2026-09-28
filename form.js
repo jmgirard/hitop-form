@@ -121,6 +121,22 @@ export function parseLink(search) {
       "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
     );
   }
+  // `participantParam` also takes the participant identifier from the
+  // address, so a link that names one, or that asks for the Prolific ID,
+  // is refused beside it: each would compete for the column.
+  if (config.participantParam !== undefined) {
+    const name = checkParticipantParam(config.participantParam);
+    if (config.participant !== undefined) {
+      throw new Error(
+        `The study link names a participant and takes the identifier from the address parameter ${JSON.stringify(name)} as well. Under participantParam the participant identifier comes from the page's address, so the link must carry no participant.`,
+      );
+    }
+    if (config.prolific === true) {
+      throw new Error(
+        `The study link carries prolific: true and takes the identifier from the address parameter ${JSON.stringify(name)} as well. Keep one: prolific: true for a Prolific study, participantParam for another site.`,
+      );
+    }
+  }
   if (config.complete !== undefined) config.complete = checkCompleteUrl(config.complete);
   // `completeSaved` takes the same check under its own name, and means
   // nothing without a `complete` beside it: the saved screens link to it in
@@ -151,6 +167,32 @@ export function readProlific(search) {
   const read = (name) => params.getAll(name).map((v) => v.trim()).find(filled) ?? '';
   const [pid, study, session] = PROLIFIC_PARAMS.map(read);
   return { pid, study, session };
+}
+
+// The name of the address parameter a link's `participantParam` field
+// names, for a site that fills the participant's identifier into the study
+// URL under a name of its own or the researcher's choosing (SONA's
+// `%SURVEY_CODE%` placeholder, CloudResearch Connect's `participantId`). It
+// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c`, which
+// carries the link itself, nor one of the three Prolific names, which
+// `prolific: true` reads together with the two columns it writes. Returns
+// the name or throws naming the fault with the value shown. link.html runs
+// the same check on the builder's field.
+export function checkParticipantParam(
+  name,
+  bad = (why) => new Error(`The study link's participantParam field could not be used: ${why}`),
+) {
+  if (typeof name !== 'string') throw bad(`it is not text, and it is ${JSON.stringify(name)}.`);
+  if (name === '') throw bad('it is empty, and it is "".');
+  if (name.length > 64) throw bad(`it is longer than 64 characters, and it is ${JSON.stringify(name)}.`);
+  if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+    throw bad(`it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(name)}.`);
+  }
+  if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
+  if (PROLIFIC_PARAMS.includes(name)) {
+    throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. For a Prolific study use prolific: true, which also keeps STUDY_ID and SESSION_ID.`);
+  }
+  return name;
 }
 
 // ---- The store ------------------------------------------------------------

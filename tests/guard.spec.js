@@ -39,6 +39,14 @@
 //   G13: a descriptor whose items are not in ascending order, reversed or
 //       with its last two swapped, is refused with a message naming the
 //       fault, and no form starts
+//   G14: a link's participantParam field is refused by name, with the value
+//       shown, when it is not text (a number, null, an array), empty, over
+//       64 characters, holds a character outside A-Z a-z 0-9 _ . - (a space,
+//       "=", "&", an accented letter), is "c", or is one of the three
+//       Prolific names; a link naming it beside a non-blank participant or
+//       beside prolific: true is refused naming both; a blank participant
+//       beside it is dropped and the name accepted; a 64-character name and
+//       names holding "." and "-" are accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -399,6 +407,72 @@ test('a completeSaved field of an https:// address beside a complete is accepted
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
   await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
 });
+
+// G14: the participantParam field. Each refusal names the field and shows
+// the value; the two conflicts name both fields and the parameter.
+const LONG_NAME = 'p'.repeat(65);
+const REFUSED_PARAM = [
+  ...[7, null, ['id']].map((participantParam) => ({
+    participantParam,
+    names: `it is not text, and it is ${JSON.stringify(participantParam)}.`,
+  })),
+  { participantParam: '', names: 'it is empty, and it is "".' },
+  { participantParam: LONG_NAME, names: `it is longer than 64 characters, and it is "${LONG_NAME}".` },
+  ...['survey code', 'id=1', 'a&b', 'identité'].map((participantParam) => ({
+    participantParam,
+    names: `it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(participantParam)}.`,
+  })),
+  { participantParam: 'c', names: 'it is "c", the parameter that carries the study link itself.' },
+  ...['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'].map((participantParam) => ({
+    participantParam,
+    names: `it is "${participantParam}", one of Prolific's parameters. For a Prolific study use prolific: true, which also keeps STUDY_ID and SESSION_ID.`,
+  })),
+];
+
+for (const probe of REFUSED_PARAM) {
+  test(`a participantParam field of ${JSON.stringify(probe.participantParam).slice(0, 40)} is refused, naming the field and the value`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam: probe.participantParam });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's participantParam field could not be used: ${probe.names}`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+}
+
+test('participantParam beside a participant identifier is refused, naming both and the parameter', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g14', participantParam: 'id' });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link names a participant and takes the identifier from the address parameter "id" as well. Under participantParam the participant identifier comes from the page\'s address, so the link must carry no participant.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('participantParam beside prolific: true is refused, naming both and the parameter', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', prolific: true, participantParam: 'participantId' });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link carries prolific: true and takes the identifier from the address parameter "participantId" as well. Keep one: prolific: true for a Prolific study, participantParam for another site.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+// A blank participant is no participant (parseLink() drops it), so it does
+// not conflict; prolific: false is no Prolific field.
+for (const extra of [{ participant: '  ' }, { prolific: false }]) {
+  test(`participantParam beside ${JSON.stringify(extra)} is accepted`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam: 'id', ...extra });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  });
+}
+
+for (const participantParam of ['id', 'participantId', 'survey.code-1', 'q'.repeat(64)]) {
+  test(`a participantParam field of ${JSON.stringify(participantParam).slice(0, 40)} is accepted`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  });
+}
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');
