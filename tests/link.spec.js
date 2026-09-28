@@ -122,6 +122,8 @@
 //       and another spelling of it after the ? or the #; no link is built
 //  L31: the menu is described by the chosen site's hint for Prolific, SONA
 //       and Connect, and by none for None and another site
+//  L32: another site refuses "id", " id " and "participantId", naming the
+//       choice that writes the name; no link is built
 
 import { test, expect } from '@playwright/test';
 import {
@@ -951,6 +953,21 @@ for (const c of [
 ]) {
   test(`the builder refuses ${c.participant ? `the site ${c.site} beside a participant` : `the address parameter ${JSON.stringify(c.param).slice(0, 30)}`}`, async ({ page }) => {
     const { err, href } = await buildSite(page, c);
+    expect(err).toBe(c.names);
+    expect(href, 'no link is built').toBe('');
+  });
+}
+
+// L32: another site refuses the two names the SONA and Connect choices
+// write, trimmed first, so a link with either name always reloads as the
+// choice that made it; no link is built.
+for (const c of [
+  { param: 'id', names: 'The address parameter could not be used: "id" is the name SONA fills. For a SONA study choose SONA as the recruiting site.' },
+  { param: ' id ', names: 'The address parameter could not be used: "id" is the name SONA fills. For a SONA study choose SONA as the recruiting site.' },
+  { param: 'participantId', names: 'The address parameter could not be used: "participantId" is the name CloudResearch Connect fills. For a CloudResearch Connect study choose CloudResearch Connect as the recruiting site.' },
+]) {
+  test(`another site refuses the address parameter ${JSON.stringify(c.param)}`, async ({ page }) => {
+    const { err, href } = await buildSite(page, { site: 'other', param: c.param });
     expect(err).toBe(c.names);
     expect(href, 'no link is built').toBe('');
   });

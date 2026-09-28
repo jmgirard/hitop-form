@@ -200,8 +200,8 @@
   // names no placeholder, so its link ends in nothing. "Another site" takes
   // the name from its field.
   const SITES = {
-    sona: { param: 'id', suffix: '&id=%SURVEY_CODE%' },
-    connect: { param: 'participantId', suffix: '' },
+    sona: { param: 'id', suffix: '&id=%SURVEY_CODE%', label: 'SONA' },
+    connect: { param: 'participantId', suffix: '', label: 'CloudResearch Connect' },
   };
   const siteOf = (param) => Object.keys(SITES).find((s) => SITES[s].param === param) ?? 'other';
 
@@ -390,12 +390,21 @@
     // Another site puts `participantParam` in the link: the site's own
     // name for SONA and Connect, the field's for another site, which takes
     // the form page's own check. It too is refused beside a participant.
+    // Another site refuses the names SONA and Connect write, because the
+    // prefill reads those names as the two sites: an "id" link made here
+    // would come back as SONA and gain its ending. The form page itself
+    // accepts both names.
     if (site === 'sona' || site === 'connect' || site === 'other') {
       let param;
       try {
+        const typed = data.get('participantParam').trim();
+        const owner = SITES[siteOf(typed)];
+        if (site === 'other' && owner !== undefined) {
+          throw new Error(`The address parameter could not be used: ${JSON.stringify(typed)} is the name ${owner.label} fills. For a ${owner.label} study choose ${owner.label} as the recruiting site.`);
+        }
         param = site === 'other'
           ? checkParticipantParam(
-            data.get('participantParam').trim(),
+            typed,
             (why) => new Error(`The address parameter could not be used: ${why}`),
             'For a Prolific study choose Prolific as the recruiting site',
           )
