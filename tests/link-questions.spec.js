@@ -18,14 +18,18 @@
 //        options, an option of 201 characters, an option holding "|", a line
 //        separator, U+0085, a vertical tab or a form feed, two options the same after
 //        trimming, an option holding a lone surrogate, a minimum that is not
-//        a whole number, a maximum outside the range, a bound of more digits
-//        than a JavaScript number holds, quoted as typed, and a minimum above
-//        the maximum; 51 questions are refused naming the count
+//        a whole number, a maximum outside the range with and without a
+//        leading zero, a bound of more digits than a JavaScript number holds,
+//        each out-of-range bound quoted as typed, and a minimum above the
+//        maximum; 51 questions are refused naming the count
 //   LQ5: blank lines in the options box are skipped, a type that takes no
 //        options or bounds leaves the hidden ones out of the link, and with
 //        no question the builder writes ?c= and no questions field; in a
 //        browser without CompressionStream a link with questions, consent
-//        text, or both is refused naming what it holds
+//        text, or both is refused naming what it holds; a setup whose JSON
+//        is over 100,000 bytes is refused with its size, and one of exactly
+//        100,000 bytes is built and opens; the min and max boxes ask for no
+//        numeric keypad, so a minus sign can be typed
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
 
@@ -171,9 +175,11 @@ const REFUSED = [
   { name: 'an option holding a lone surrogate', qs: [{ name: 'a', text: 'a', type: 'choice', options: `Red\nBlue ${String.fromCharCode(0xdc00)}` }], why: bad('question 1: its option 2 holds half of a character (a lone surrogate), which cannot be written.') },
   { name: 'a minimum of 2.5', qs: [{ name: 'a', text: 'a', type: 'number', min: '2.5' }], why: bad('question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "2.5".') },
   { name: 'a minimum of abc', qs: [{ name: 'a', text: 'a', type: 'number', min: 'abc' }], why: bad('question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "abc".') },
-  { name: 'a maximum of 2147483648', qs: [{ name: 'a', text: 'a', type: 'number', max: '2147483648' }], why: bad('question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is 2147483648.') },
-  // Past the digits a JavaScript number holds exactly, the refusal quotes
-  // what was typed, not the number it rounds to (1e+23, or null for Infinity).
+  // A bound out of range is quoted as typed: leading zeros stay, and past
+  // the digits a JavaScript number holds exactly, the refusal shows no
+  // rounded number (1e+23, or null for Infinity).
+  { name: 'a maximum of 2147483648', qs: [{ name: 'a', text: 'a', type: 'number', max: '2147483648' }], why: bad('question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "2147483648".') },
+  { name: 'a maximum of 02147483648', qs: [{ name: 'a', text: 'a', type: 'number', max: '02147483648' }], why: bad('question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "02147483648".') },
   { name: 'a minimum of 23 nines', qs: [{ name: 'a', text: 'a', type: 'number', min: '9'.repeat(23) }], why: bad(`question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "${'9'.repeat(23)}".`) },
   { name: 'a maximum of minus 400 nines', qs: [{ name: 'a', text: 'a', type: 'number', max: `-${'9'.repeat(400)}` }], why: bad(`question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "-${'9'.repeat(400)}".`) },
   { name: 'a minimum above the maximum', qs: [{ name: 'a', text: 'a', type: 'number', min: '10', max: '5' }], why: bad('question 1: its min 10 is above its max 5.') },
@@ -246,6 +252,54 @@ for (const { parts, consent, question } of [
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+test('a setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens', async ({ page }) => {
+  // Seven full choice questions of three-byte characters, a smaller one,
+  // and a text question whose length sets the total byte for byte.
+  const opts = (m) => many(20, (i) => `${i}${'€'.repeat(m)}`);
+  const setup = (pad) => ({
+    instrument: 'hitopbr',
+    study: 'questions',
+    questions: {
+      before: [
+        ...many(7, (i) => ({ name: `f${i}`, text: 'x'.repeat(1000), type: 'choice', options: opts(198) })),
+        { name: 'g', text: 'x', type: 'choice', options: opts(132) },
+        { name: 'pad', text: 'x'.repeat(pad), type: 'text' },
+      ],
+    },
+  });
+  await openBuilder(page, `?z=${encodeCompressed(setup(1))}`);
+  await make(page);
+  await expect(page.locator('#err')).toHaveText('');
+  const need = 100_000 - Buffer.byteLength(JSON.stringify(decodeLinkParam(await page.locator('#out').textContent())));
+  expect(need).toBeGreaterThan(0);
+  expect(need).toBeLessThan(1000);
+
+  await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
+  await make(page);
+  await expect(page.locator('#err')).toHaveText('');
+  const href = await page.locator('#out').textContent();
+  expect(Buffer.byteLength(JSON.stringify(decodeLinkParam(href)))).toBe(100_000);
+  await page.goto(href);
+  await expect(page.getByRole('heading', { name: 'Before you begin' })).toBeVisible();
+
+  await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
+  await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
+  await make(page);
+  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.");
+  await expect(page.locator('#out')).toHaveText('');
+});
+
+test('the min and max boxes ask for no numeric keypad, and negative bounds are built', async ({ page }) => {
+  await openBuilder(page);
+  const g = await addQ(page, { name: 'temp', text: 'Temperature', type: 'number', min: '-30', max: '-1' });
+  for (const box of ['qMin', 'qMax']) await expect(g.locator(`[name=${box}]`)).not.toHaveAttribute('inputmode');
+  await make(page);
+  await expect(page.locator('#err')).toHaveText('');
+  expect(decodeLinkParam(await page.locator('#out').textContent()).questions.before[0]).toEqual(
+    { name: 'temp', text: 'Temperature', type: 'number', min: -30, max: -1 },
+  );
+});
 
 // LQ6
 test('Move up, Move down and Remove reorder and renumber the questions', async ({ page }) => {

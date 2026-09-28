@@ -103,10 +103,15 @@ export function decodeConfig(param) {
 //
 // The query of a study link, without its `?`: `z=…` for a config that carries
 // `consent` or `questions`, and `c=…` as before for any other. link.html
-// builds its links with it.
+// builds its links with it. It refuses a `z` config whose JSON is over
+// MAX_LINK_BYTES, which the page would refuse to read.
 export async function encodeLink(config) {
   const json = JSON.stringify(config);
   if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
+  const bytes = new TextEncoder().encode(json).length;
+  if (bytes > MAX_LINK_BYTES) {
+    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.`);
+  }
   if (typeof CompressionStream !== 'function') {
     const parts = [config.consent === undefined ? null : 'consent text', config.questions === undefined ? null : 'questions'];
     throw new Error(`This browser cannot make a link with ${parts.filter((p) => p !== null).join(' and ')}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);

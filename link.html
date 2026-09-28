@@ -214,7 +214,7 @@
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
     consentTextFault, fetchExport, planItems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
-    CONSENT_DECLINED_MAX, checkQuestions,
+    CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -348,8 +348,10 @@
       typeSelect.append(o);
     }
     const options = control('textarea', { name: 'qOptions', class: 'prose' });
-    const min = control('input', { name: 'qMin', type: 'text', autocomplete: 'off', inputmode: 'numeric' });
-    const max = control('input', { name: 'qMax', type: 'text', autocomplete: 'off', inputmode: 'numeric' });
+    // No numeric keypad, since the iPhone one has no minus sign for a
+    // negative bound.
+    const min = control('input', { name: 'qMin', type: 'text', autocomplete: 'off' });
+    const max = control('input', { name: 'qMax', type: 'text', autocomplete: 'off' });
     const required = control('input', { name: 'qRequired', type: 'checkbox' });
     if (typeof q.name === 'string') name.value = q.name;
     if (typeof q.text === 'string') text.value = q.text;
@@ -432,7 +434,11 @@
       if (q.type === 'number') {
         for (const [bound, input] of [['min', 'qMin'], ['max', 'qMax']]) {
           const typed = get(input).value.trim();
-          if (typed !== '') q[bound] = /^-?\d+$/.test(typed) && Number.isSafeInteger(Number(typed)) ? Number(typed) : typed;
+          if (typed === '') continue;
+          // A bound out of range is passed on as typed, so the refusal
+          // quotes the digits the researcher typed.
+          const n = Number(typed);
+          q[bound] = /^-?\d+$/.test(typed) && Math.abs(n) <= QUESTION_INT_MAX ? n : typed;
         }
       }
       if (get('qRequired').checked) q.required = true;

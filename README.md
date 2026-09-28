@@ -299,7 +299,8 @@ heard of the study. In the builder's "Your own questions" part, press "Add
 a question" once for each question. For each question, choose whether it
 is asked before or after the form, and give a name, the question and a
 type. "Move up", "Move down" and "Remove" change the list. A link holds up
-to 50 questions. The link carries them as its `questions` field, with a
+to 50 questions. The page reads at most 100,000 bytes of setup, so the
+builder refuses a link whose setup is larger, and names its size. The link carries them as its `questions` field, with a
 `before` list and an `after` list. Each list keeps the builder's order.
 
 The page asks the before questions on a screen headed "Before you begin".
@@ -329,7 +330,8 @@ line in the builder's "Options" box. If you change the order of the options
 between two links of one study, the same number means different options in
 the two sets of files. Keep the order the same in every link of a study.
 A question holds 2 to 20 options. Each option is one line of up to 200
-characters, without `|`. Two options of one question must not be the same.
+characters, without `|`. Two options of one question must not be the same
+once the page removes spaces at their ends.
 
 "Next" and "Finish" check the answers on their screen in order. A required
 question with no answer stops the page, which then says "Please answer
@@ -693,7 +695,7 @@ npx playwright test
 | `tests/questions.spec.js` | The refusal, naming the question's list and place, of each fault in a `questions` field: its shape, the 50-question limit, a question's keys, name, text, type and `required`, its options and their labels, and its `min` and `max`. The limits themselves are accepted |
 | `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, the unload guard counting a question's answer, and the numeric keypad asked for only when a number question's `min` is 0 or more |
 | `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
-| `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions, consent text, or both, and names what the link holds. A bound with more digits than a JavaScript number keeps exactly is quoted as typed. Move up, Move down and Remove reorder and renumber the questions |
+| `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions, consent text, or both, and names what the link holds. A bound outside the range is quoted as typed, with any zeros in front. A setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens. The min and max boxes ask for no numeric keypad, and negative bounds are built. Move up, Move down and Remove reorder and renumber the questions |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
