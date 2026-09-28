@@ -39,6 +39,24 @@
 //   G13: a descriptor whose items are not in ascending order, reversed or
 //       with its last two swapped, is refused with a message naming the
 //       fault, and no form starts
+//   G14: a link's participantParam field is refused by name, with the value
+//       shown, when it is not text (a number, null, an array), empty, over
+//       64 characters, holds a character outside A-Z a-z 0-9 _ . - (a space,
+//       "=", "&", an accented letter), is "c", or is one of the three
+//       Prolific names; a link naming it beside a non-blank participant or
+//       beside prolific: true is refused naming both; a blank participant
+//       beside it is dropped and the name accepted; a 64-character name and
+//       names holding "." and "-" are accepted
+//   G15: a complete or completeSaved address holding the {participant}
+//       token in its path (typed with braces or as %7Bparticipant%7D) or in
+//       its host is refused by name with the value shown; the token in the
+//       query, in the fragment, or twice in the query is accepted
+//   G16: a complete or completeSaved address holding another spelling of
+//       the token after the ? or the # (another letter case, alone and
+//       beside an exact token; both braces, the opening one or the closing
+//       one as %7B and %7D; both as %257B and %257D; doubled braces; a
+//       space inside the braces, each alone) is refused naming that
+//       spelling as the address holds it, with the address shown
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -399,6 +417,130 @@ test('a completeSaved field of an https:// address beside a complete is accepted
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
   await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
 });
+
+// G14: the participantParam field. Each refusal names the field and shows
+// the value; the two conflicts name both fields and the parameter.
+const LONG_NAME = 'p'.repeat(65);
+const REFUSED_PARAM = [
+  ...[7, null, ['id']].map((participantParam) => ({
+    participantParam,
+    names: `it is not text, and it is ${JSON.stringify(participantParam)}.`,
+  })),
+  { participantParam: '', names: 'it is empty, and it is "".' },
+  { participantParam: LONG_NAME, names: `it is longer than 64 characters, and it is "${LONG_NAME}".` },
+  ...['survey code', 'id=1', 'a&b', 'identité'].map((participantParam) => ({
+    participantParam,
+    names: `it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(participantParam)}.`,
+  })),
+  { participantParam: 'c', names: 'it is "c", the parameter that carries the study link itself.' },
+  ...['PROLIFIC_PID', 'STUDY_ID', 'SESSION_ID'].map((participantParam) => ({
+    participantParam,
+    names: `it is "${participantParam}", one of Prolific's parameters. For a Prolific study use prolific: true, which also keeps STUDY_ID and SESSION_ID.`,
+  })),
+];
+
+for (const probe of REFUSED_PARAM) {
+  test(`a participantParam field of ${JSON.stringify(probe.participantParam).slice(0, 40)} is refused, naming the field and the value`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam: probe.participantParam });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      `The study link's participantParam field could not be used: ${probe.names}`,
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+}
+
+test('participantParam beside a participant identifier is refused, naming both and the parameter', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g14', participantParam: 'id' });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link names a participant and takes the identifier from the address parameter "id" as well. Under participantParam the participant identifier comes from the page\'s address, so the link must carry no participant.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('participantParam beside prolific: true is refused, naming both and the parameter', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', prolific: true, participantParam: 'participantId' });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link carries prolific: true and takes the identifier from the address parameter "participantId" as well. Keep one: prolific: true for a Prolific study, participantParam for another site.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+// A blank participant is no participant (parseLink() drops it), so it does
+// not conflict; prolific: false is no Prolific field.
+for (const extra of [{ participant: '  ' }, { prolific: false }]) {
+  test(`participantParam beside ${JSON.stringify(extra)} is accepted`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam: 'id', ...extra });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  });
+}
+
+for (const participantParam of ['id', 'participantId', 'survey.code-1', 'q'.repeat(64)]) {
+  test(`a participantParam field of ${JSON.stringify(participantParam).slice(0, 40)} is accepted`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam });
+    await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+    await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  });
+}
+
+// G15: where the {participant} token may stand in a completion address.
+const TOKEN_REFUSED = [
+  'https://example.org/{participant}/done',
+  'https://example.org/done/%7Bparticipant%7D',
+  'https://example.org/done/%7bparticipant%7d',
+  'https://{participant}.example.org/done',
+];
+const TOKEN_ACCEPTED = [
+  'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}',
+  'https://example.org/done#code={participant}',
+  'https://example.org/done?a={participant}&b={participant}',
+];
+for (const field of ['complete', 'completeSaved']) {
+  for (const address of TOKEN_REFUSED) {
+    test(`a ${field} address with the token in the host or the path, ${address}, is refused naming the token`, async ({ page }) => {
+      const config = { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address };
+      await openForm(page, base(), config);
+      await expect(page.locator('[role=alert]')).toHaveText(
+        `The study link's ${field} field could not be used: the {participant} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(address)}.`,
+      );
+      await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    });
+  }
+  for (const address of TOKEN_ACCEPTED) {
+    test(`a ${field} address with the token in ${address.includes('#') ? 'the fragment' : 'the query'}, ${address.slice(8, 40)}…, is accepted`, async ({ page }) => {
+      await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address });
+      await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+      await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+    });
+  }
+}
+
+// G16: only the exact spelling is filled, so another one is refused rather
+// than sent to the site unfilled.
+const TOKEN_VARIANTS = [
+  { address: 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={Participant}', spelling: '{Participant}' },
+  { address: 'https://example.org/done?code={PARTICIPANT}', spelling: '{PARTICIPANT}' },
+  { address: 'https://example.org/done?code=%7Bparticipant%7D', spelling: '%7Bparticipant%7D' },
+  { address: 'https://example.org/done?code=%7bparticipant}', spelling: '%7bparticipant}' },
+  { address: 'https://example.org/done?a={participant}#b={Participant}', spelling: '{Participant}' },
+  { address: 'https://example.org/done?code={participant%7D', spelling: '{participant%7D' },
+  { address: 'https://example.org/done?code=%257Bparticipant%257D', spelling: '%257Bparticipant%257D' },
+  { address: 'https://example.org/done?code={{participant}}', spelling: '{{participant}}' },
+  // The URL encodes the spaces, and the message names the spelling so.
+  { address: 'https://example.org/done?code={ participant }', spelling: '{%20participant%20}' },
+];
+for (const field of ['complete', 'completeSaved']) {
+  for (const { address, spelling } of TOKEN_VARIANTS) {
+    test(`a ${field} address holding ${spelling} after the ? or #, ${address.slice(8, 60)}…, is refused naming that spelling`, async ({ page }) => {
+      await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g16', complete: COMPLETE_OK, [field]: address });
+      await expect(page.locator('[role=alert]')).toHaveText(
+        `The study link's ${field} field could not be used: the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and ${JSON.stringify(spelling)} is another spelling of it. The address is ${JSON.stringify(address)}.`,
+      );
+      await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    });
+  }
+}
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

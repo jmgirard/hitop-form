@@ -1,5 +1,6 @@
 // The form page. index.html calls boot(); link.html imports encodeConfig(),
-// the checks, fetchExport(), planItems(), storeSql() and PROLIFIC_PARAMS.
+// the checks (checkParticipantParam() among them), fetchExport(), planItems(),
+// storeSql() and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -24,6 +25,14 @@
 // makes one further request with `complete`, that navigation, and only
 // after the store confirmed; the saved screens' link is followed by the
 // participant or not at all.
+//
+// For another recruiting site, `participantParam` names the address
+// parameter the site fills with the participant identifier (`id` for a SONA
+// study URL ending in `id=%SURVEY_CODE%`, `participantId` for CloudResearch
+// Connect), and no column is added. A `{participant}` in the query or
+// fragment of `complete` or `completeSaved` is replaced by the identifier,
+// whatever its source, for a completion address that carries each
+// participant's code, as SONA's does.
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -121,6 +130,22 @@ export function parseLink(search) {
       "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
     );
   }
+  // `participantParam` also takes the participant identifier from the
+  // address, so a link that names one, or that asks for the Prolific ID,
+  // is refused beside it: each would compete for the column.
+  if (config.participantParam !== undefined) {
+    const name = checkParticipantParam(config.participantParam);
+    if (config.participant !== undefined) {
+      throw new Error(
+        `The study link names a participant and takes the identifier from the address parameter ${JSON.stringify(name)} as well. Under participantParam the participant identifier comes from the page's address, so the link must carry no participant.`,
+      );
+    }
+    if (config.prolific === true) {
+      throw new Error(
+        `The study link carries prolific: true and takes the identifier from the address parameter ${JSON.stringify(name)} as well. Keep one: prolific: true for a Prolific study, participantParam for another site.`,
+      );
+    }
+  }
   if (config.complete !== undefined) config.complete = checkCompleteUrl(config.complete);
   // `completeSaved` takes the same check under its own name, and means
   // nothing without a `complete` beside it: the saved screens link to it in
@@ -151,6 +176,46 @@ export function readProlific(search) {
   const read = (name) => params.getAll(name).map((v) => v.trim()).find(filled) ?? '';
   const [pid, study, session] = PROLIFIC_PARAMS.map(read);
   return { pid, study, session };
+}
+
+// The name of the address parameter a link's `participantParam` field
+// names, for a site that fills the participant's identifier into the study
+// URL under a name of its own or the researcher's choosing (SONA's
+// `%SURVEY_CODE%` placeholder, CloudResearch Connect's `participantId`). It
+// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c`, which
+// carries the link itself, nor one of the three Prolific names, which
+// `prolific: true` reads together with the two columns it writes. Returns
+// the name or throws naming the fault with the value shown. link.html runs
+// the same check on the builder's field, with `prolificAdvice` naming its
+// Prolific choice in place of the link field.
+export function checkParticipantParam(
+  name,
+  bad = (why) => new Error(`The study link's participantParam field could not be used: ${why}`),
+  prolificAdvice = 'For a Prolific study use prolific: true',
+) {
+  if (typeof name !== 'string') throw bad(`it is not text, and it is ${JSON.stringify(name)}.`);
+  if (name === '') throw bad('it is empty, and it is "".');
+  if (name.length > 64) throw bad(`it is longer than 64 characters, and it is ${JSON.stringify(name)}.`);
+  if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+    throw bad(`it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(name)}.`);
+  }
+  if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
+  if (PROLIFIC_PARAMS.includes(name)) {
+    throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. ${prolificAdvice}, which also keeps STUDY_ID and SESSION_ID.`);
+  }
+  return name;
+}
+
+// The participant identifier a link's `participantParam` names, read from
+// the page's address as its first value that is neither blank nor a
+// placeholder: a value of the form `%…%` (SONA's `%SURVEY_CODE%`) or `{{…}}`
+// (Prolific's placeholders) is a placeholder the site did not fill. Comes
+// back as the empty string when there is no such value, and the start
+// screen then asks.
+export function readParticipantParam(search, name) {
+  const params = new URLSearchParams(search);
+  const filled = (v) => v !== '' && !/^%.*%$/.test(v) && !/^\{\{.*\}\}$/.test(v);
+  return params.getAll(name).map((v) => v.trim()).find(filled) ?? '';
 }
 
 // ---- The store ------------------------------------------------------------
@@ -249,6 +314,25 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
 // nothing else. The loopback exception above is for the tests' recording
 // endpoint, which a completion address never is. link.html runs the same
 // check on the builder's completion field.
+//
+// The address may hold the token `{participant}` in its query or fragment,
+// which the page replaces with the participant identifier before it uses
+// the address (fillParticipant()), for a site whose completion address
+// carries each participant's own code, as SONA's `survey_code=` does. A
+// URL keeps the braces there as typed. In the path it encodes them, and a
+// token in the host would give a host the identifier cannot fill, so the
+// token is refused in either, in its typed or its encoded form. Only the
+// exact spelling is replaced, so another spelling after the ? or the # is
+// refused too: another letter case, doubled braces, a space inside the
+// braces, or a brace encoded as %7B or %7D, or twice as %257B or %257D.
+// Left in place, it would reach the site unfilled, or with a brace around
+// the identifier.
+export const PARTICIPANT_TOKEN = '{participant}';
+
+// A brace, typed or encoded once or twice, and the spellings between a
+// brace and the word that the list above names.
+const TOKEN_LIKE = /(?:\{|%7b|%257b)(?:\{|%7b|%257b|\s|%20|\+)*participant(?:\}|%7d|%257d|\s|%20|\+)*(?:\}|%7d|%257d)/i;
+
 export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
   // A value that is not text is refused with the value shown, as every
   // other refusal of this field shows it.
@@ -258,7 +342,22 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
   refuseCredentials(u, url, bad, 'it');
+  if (TOKEN_LIKE.test(u.host) || TOKEN_LIKE.test(u.pathname)) {
+    throw bad(`the ${PARTICIPANT_TOKEN} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(url)}.`);
+  }
+  const variant = (u.search + u.hash).match(new RegExp(TOKEN_LIKE.source, 'gi'))?.find((m) => m !== PARTICIPANT_TOKEN);
+  if (variant !== undefined) {
+    throw bad(`the ${PARTICIPANT_TOKEN} token must be written exactly so, in lower case with one typed brace on each side and no space, and ${JSON.stringify(variant)} is another spelling of it. The address is ${JSON.stringify(url)}.`);
+  }
   return u.href;
+}
+
+// A completion address with each `{participant}` replaced by the
+// identifier, encoded as one query value. checkCompleteUrl() has kept the
+// token out of the host and the path, so every token left is in the query
+// or the fragment. An address without the token comes back unchanged.
+export function fillParticipant(address, participant) {
+  return address.split(PARTICIPANT_TOKEN).join(encodeURIComponent(participant));
 }
 
 // The parse the two address checks share: text, then a URL. `what` names
@@ -707,22 +806,31 @@ export async function boot(root, search) {
     return;
   }
   // The three Prolific parameters are read from the address only under
-  // `prolific: true`; any other link ignores them.
-  runForm(root, config, exp, plan, config.prolific === true ? readProlific(search) : undefined);
+  // `prolific: true`, and the parameter a `participantParam` names only
+  // under that field; any other link ignores the address's parameters.
+  runForm(
+    root, config, exp, plan,
+    config.prolific === true ? readProlific(search) : undefined,
+    config.participantParam !== undefined ? readParticipantParam(search, config.participantParam) : '',
+  );
 }
 
 // `plan.shown` is the order the pages render and the positions count in;
 // `plan.items` the order the row and the file keep. `prolific`, under
 // `prolific: true`, is the address's three parameters from readProlific():
 // a PROLIFIC_PID that is not empty is the participant identifier, and the
-// start screen then asks for none.
-function runForm(root, config, exp, plan, prolific) {
+// start screen then asks for none. `fromAddress`, under `participantParam`,
+// is the identifier readParticipantParam() read, and likewise takes the
+// place of the start screen's question when it is not empty.
+function runForm(root, config, exp, plan, prolific, fromAddress) {
   const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
   const pageCount = Math.ceil(items.length / PAGE_SIZE);
-  let participant = prolific && prolific.pid !== '' ? prolific.pid : config.participant;
+  let participant = prolific && prolific.pid !== ''
+    ? prolific.pid
+    : fromAddress !== '' ? fromAddress : config.participant;
   let page = 0;
   let finished = false;
   let sending = false;
@@ -906,6 +1014,7 @@ function runForm(root, config, exp, plan, prolific) {
     sending = false;
     finished = true;
     if (outcome.confirmed) {
+      const complete = config.complete === undefined ? undefined : fillParticipant(config.complete, participant);
       // The sent screen is drawn first either way. With a completion
       // address a link there takes the place of "You can close this
       // page.", and the page then navigates there, as Prolific recommends:
@@ -915,17 +1024,17 @@ function runForm(root, config, exp, plan, prolific) {
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
-        config.complete === undefined
+        complete === undefined
           ? el('p', { text: 'You can close this page.' })
           : el('p', { class: 'complete' }, [
               'Continue to ',
-              el('a', { href: config.complete, text: new URL(config.complete).host }),
+              el('a', { href: complete, text: new URL(complete).host }),
               '.',
             ]),
         versionLine(exp),
       );
       focusHeading(root);
-      if (config.complete !== undefined) window.location.assign(config.complete);
+      if (complete !== undefined) window.location.assign(complete);
       return;
     }
     showSaved(
@@ -947,7 +1056,8 @@ function runForm(root, config, exp, plan, prolific) {
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
   // name, labelled by its host, and navigate nowhere on their own. The
-  // address is `completeSaved` when the link carries one, else `complete`.
+  // address is `completeSaved` when the link carries one, else `complete`,
+  // each `{participant}` in it filled with the identifier.
   // The trail paragraph ends by naming the "Save the file" button below it,
   // which saves the file again with the name and text saved at Finish. A
   // status region under the button is rendered empty, so it exists before
@@ -955,7 +1065,8 @@ function runForm(root, config, exp, plan, prolific) {
   // `role="status"` marks the write for a screen reader to announce. Focus
   // is not moved, so after a keyboard press it stays on the button.
   function showSaved({ name, text }, lead, trail) {
-    const address = config.completeSaved ?? config.complete;
+    const given = config.completeSaved ?? config.complete;
+    const address = given === undefined ? undefined : fillParticipant(given, participant);
     const complete = address === undefined
       ? []
       : [el('p', { class: 'complete' }, [
