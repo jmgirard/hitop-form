@@ -20,9 +20,23 @@
 //        a question; rows count records, so a quoted line break above a
 //        fault does not change its row number
 //   LF5: loading a file makes no network request
+//
+// "Download these questions" and "Download a template":
+//
+//   LF6: the editor's questions, one of each type with a required question,
+//        a negative minimum, and a text and an option label holding a comma,
+//        a double quote and non-ASCII text, are saved as a UTF-8 file with a
+//        byte-order mark and CR LF line ends, its columns in the file's
+//        order and one row per question; loading that file fills the editor
+//        with the same questions, and both build the same link
+//   LF7: the template is saved in the same form and loads as four
+//        questions, one of each type
+//   LF8: "Download these questions" saves nothing and names the fault when
+//        the editor holds none or holds a faulty question
 
 import { test, expect } from '@playwright/test';
-import { useTarget, decodeLinkParam } from './helpers.mjs';
+import { readFile } from 'node:fs/promises';
+import { useTarget, decodeLinkParam, awaitDownload } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -300,3 +314,114 @@ test('LF5: loading a file makes no network request', async ({ page }) => {
   await page.waitForLoadState('networkidle');
   expect(urls).toEqual([]);
 });
+
+// Adds a group with "Add a question" and fills it.
+async function addQ(page, { list, name, text, type, options, min, max, required }) {
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  const g = page.locator('fieldset.question-edit').last();
+  await g.locator('[name=qList]').selectOption(list);
+  await g.locator('[name=qName]').fill(name);
+  await g.locator('[name=qText]').fill(text);
+  await g.locator('[name=qType]').selectOption(type);
+  if (options !== undefined) await g.locator('[name=qOptions]').fill(options);
+  if (min !== undefined) await g.locator('[name=qMin]').fill(min);
+  if (max !== undefined) await g.locator('[name=qMax]').fill(max);
+  if (required) await g.locator('[name=qRequired]').check();
+}
+
+// Presses a download button and returns the saved file's name and bytes.
+async function download(page, button) {
+  const saved = awaitDownload(page);
+  await page.getByRole('button', { name: button }).click();
+  const dl = await saved;
+  return { name: dl.suggestedFilename(), bytes: await readFile(await dl.path()) };
+}
+
+// The questions field of the link "Make the link" builds from the editor.
+async function linkQuestions(page) {
+  await page.locator('input[name="study"]').fill('round trip');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out')).not.toHaveText('');
+  return decodeLinkParam(await page.locator('#out').textContent()).questions;
+}
+
+// The form of every saved file: a byte-order mark, then lines each ended by
+// CR LF, with no LF alone.
+function expectFileForm(bytes) {
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const text = bytes.subarray(3).toString('utf8');
+  expect(text.endsWith('\r\n')).toBe(true);
+  expect(/(?<!\r)\n/.test(text)).toBe(false);
+  return text;
+}
+
+test('LF6: the editor saved as a file loads back as the same questions', async ({ page }) => {
+  await openBuilder(page);
+  await addQ(page, { list: 'after', name: 'note', text: 'Anything, "else"?', type: 'text' });
+  await addQ(page, { list: 'before', name: 'age', text: 'Age, in "years" ñ', type: 'number', min: '-5', max: '120', required: true });
+  await addQ(page, { list: 'before', name: 'pick', text: 'Pick one', type: 'choice', options: 'Café, au lait\nTea "green"\nWater' });
+  await addQ(page, { list: 'after', name: 'days', text: 'Días', type: 'multi', options: 'Mon\nTue' });
+  const before = await readEditor(page);
+  const { name, bytes } = await download(page, 'Download these questions');
+  expect(name).toBe('questions.csv');
+  await expect(page.locator('#questionsErr')).toHaveText('');
+  expect(expectFileForm(bytes)).toBe([
+    'list,name,text,type,options,required,min,max',
+    'before,age,"Age, in ""years"" ñ",number,,yes,-5,120',
+    'before,pick,Pick one,choice,"Café, au lait|Tea ""green""|Water",no,,',
+    'after,note,"Anything, ""else""?",text,,no,,',
+    'after,days,Días,multi,Mon|Tue,no,,',
+  ].map((line) => `${line}\r\n`).join(''));
+  const built = await linkQuestions(page);
+
+  await openBuilder(page);
+  await load(page, bytes);
+  await expect(page.locator('#questionsStatus')).toHaveText('Loaded 4 questions from questions.csv.');
+  // The editor held the lists interleaved; the loaded file holds the before
+  // list first, so the same groups come back in list order.
+  const byList = [...before].sort((a, b) => (a[1] === b[1] ? 0 : a[1] === 'before' ? -1 : 1))
+    .map((g, k) => [`Question ${k + 1}`, ...g.slice(1)]);
+  expect(await readEditor(page)).toEqual(byList);
+  expect(await linkQuestions(page)).toEqual(built);
+});
+
+test('LF7: the template is saved in the same form and loads as one question of each type', async ({ page }) => {
+  await openBuilder(page);
+  const { name, bytes } = await download(page, 'Download a template');
+  expect(name).toBe('questions-template.csv');
+  const text = expectFileForm(bytes);
+  expect(text.split('\r\n')[0]).toBe('list,name,text,type,options,required,min,max');
+  await openBuilder(page);
+  await load(page, bytes, name);
+  await expect(page.locator('#questionsStatus')).toHaveText('Loaded 4 questions from questions-template.csv.');
+  const types = (await readEditor(page)).map((g) => g[4]);
+  expect([...types].sort()).toEqual(['choice', 'multi', 'number', 'text']);
+});
+
+for (const { label, setup, message } of [
+  {
+    label: 'no question',
+    setup: async () => {},
+    message: 'There are no questions to download. Add a question or load a file first.',
+  },
+  {
+    label: 'a question with no name',
+    setup: async (page) => {
+      await page.getByRole('button', { name: 'Add a question' }).click();
+      await page.locator('[name=qText]').fill('No name');
+    },
+    message: 'The questions could not be used: question 1: it has no name.',
+  },
+]) {
+  test(`LF8: "Download these questions" saves nothing from an editor with ${label}`, async ({ page }) => {
+    await openBuilder(page);
+    await setup(page);
+    let saved = 0;
+    page.on('download', () => { saved += 1; });
+    await page.getByRole('button', { name: 'Download these questions' }).click();
+    await expect(page.locator('#questionsErr')).toHaveText(message);
+    // A download starts inside the press, so one would be recorded by now.
+    await page.waitForTimeout(500);
+    expect(saved).toBe(0);
+  });
+}
