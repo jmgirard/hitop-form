@@ -124,6 +124,9 @@
 //       and Connect, and by none for None and another site
 //  L32: another site refuses "id", " id " and "participantId", naming the
 //       choice that writes the name; no link is built
+//  L33: a participant field prefilled from a c with an unpaired surrogate is
+//       refused and no link is built; a participant holding U+1F600
+//       round-trips
 
 import { test, expect } from '@playwright/test';
 import {
@@ -972,6 +975,30 @@ for (const c of [
     expect(href, 'no link is built').toBe('');
   });
 }
+
+// L33: FormData would write an unpaired surrogate as U+FFFD, so the builder
+// refuses a participant field holding one. Only a c can put one
+// in: Node's JSON.stringify() writes it as a \u escape, which the page's
+// JSON.parse() reads back as the lone code unit. The field is read back
+// before the build to show the surrogate is there.
+for (const [name, participant] of [['a lone high', 'a\ud800b'], ['a lone low', 'a\udc00b'], ['a low before a high', '\udc00\ud800']]) {
+  test(`the builder refuses a participant field holding ${name} surrogate`, async ({ page }) => {
+    await openBuilder(page, { config: { instrument: 'hitopbr', study: 'prefill', participant } });
+    const held = await page.locator('input[name="participant"]').evaluate((el) => [...el.value].map((ch) => ch.codePointAt(0)));
+    expect(held, 'the field holds the surrogate').toEqual([...participant].map((ch) => ch.codePointAt(0)));
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    expect(await page.locator('#err').textContent()).toBe('The participant field holds a character that cannot be written. Type the identifier again.');
+    expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+  });
+}
+
+test('the builder keeps a participant holding a paired character', async ({ page }) => {
+  const config = { instrument: 'hitopbr', study: 'prefill', participant: 'p\u{1F600}' };
+  await openBuilder(page, { config });
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  expect(await page.locator('#err').textContent()).toBe('');
+  expect(decodeLink(await page.locator('#out').textContent())).toEqual(config);
+});
 
 // L27: a c parameter selects the site its fields name and round-trips, the
 // printed link ending in that site's ending after the c value; a

@@ -419,5 +419,6 @@ test('an address value encoding a surrogate arrives as replacement characters, a
   const filled = 'https://example.org/done?code=%EF%BF%BD%EF%BF%BD%EF%BF%BD';
   expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: 'example.org' });
   release();
+  await expect(page).toHaveURL(filled);
   expect(requests).toEqual([filled]);
 });

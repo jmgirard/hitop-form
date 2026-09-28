@@ -60,7 +60,8 @@
 //   G17: a link whose participant holds an unpaired surrogate (a lone high
 //       or low one, alone or at the start, middle or end; a low before a
 //       high; a high before a valid pair) is refused with one message, and
-//       no form starts; an identifier holding a paired character (U+1F600)
+//       no form starts, also with no completion address in the link; an
+//       identifier holding a paired character (U+1F600)
 //       is accepted and fills the completion address with its encoding
 //
 // The altered exports are copies of the live export served in its place, so
@@ -570,6 +571,14 @@ for (const participant of BROKEN_IDS) {
     await expect(page.locator('fieldset.item')).toHaveCount(0);
   });
 }
+
+test('a participant holding a lone surrogate is refused with no completion address in the link', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: `ab${HIGH}c` });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link carries a participant identifier with a character that cannot be written.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
 
 test('a participant holding a paired character is accepted and fills the completion address with its encoding', async ({ page }) => {
   await openForm(page, base(), {
