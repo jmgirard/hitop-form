@@ -1,7 +1,7 @@
 // The form page. index.html calls boot(); link.html imports encodeLink(),
 // the link readers, the checks (checkParticipantParam(), consentTextFault()
-// and checkQuestions() among them), fetchExport(), planItems(), storeSql()
-// and PROLIFIC_PARAMS.
+// and checkQuestions() among them), readQuestionsCsv(), writeQuestionsCsv(),
+// saveFile(), fetchExport(), planItems(), storeSql() and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -314,12 +314,16 @@ function questionStringFault(s, max, what) {
 // fault. A fault in one question names it by `where(list, index)`, the index
 // counted from 0: "question 2 of the before list" on the form page. link.html
 // runs the same check before it builds a link, with its own `bad` and a
-// `where` that names the question as its editor numbers it.
+// `where` that names the question as its editor numbers it. A fault in one
+// field of a question is named by `field(at, key)`, `at` being what `where`
+// returned; the default names the question alone, and readQuestionsCsv()
+// adds the file's column.
 export function checkQuestions(
   questions,
   {
     bad = (why) => new Error(`The study link's questions field could not be used: ${why}`),
     where = (list, i) => `question ${i + 1} of the ${list} list`,
+    field = (at) => at,
   } = {},
 ) {
   if (questions === null || typeof questions !== 'object' || Array.isArray(questions)) throw bad('it is not an object.');
@@ -342,73 +346,230 @@ export function checkQuestions(
   for (const list of lists) {
     out[list] = questions[list].map((q, i) => {
       const at = where(list, i);
-      const fault = (why) => bad(`${at}: ${why}`);
+      const fault = (why, key) => bad(`${key === undefined ? at : field(at, key)}: ${why}`);
       if (q === null || typeof q !== 'object' || Array.isArray(q)) throw fault('it is not an object.');
       const key = Object.keys(q).find((k) => !QUESTION_KEYS.includes(k));
       if (key !== undefined) {
         throw fault(`it has a field ${JSON.stringify(key)}, and a question takes only name, text, type, required, options, min and max.`);
       }
-      if (q.name === undefined) throw fault('it has no name.');
+      if (q.name === undefined) throw fault('it has no name.', 'name');
       if (typeof q.name !== 'string' || !QUESTION_NAME.test(q.name)) {
-        throw fault(`its name is ${JSON.stringify(q.name)}, and a name starts with a lower-case letter and holds only lower-case letters, digits and "_", up to 30 characters.`);
+        throw fault(`its name is ${JSON.stringify(q.name)}, and a name starts with a lower-case letter and holds only lower-case letters, digits and "_", up to 30 characters.`, 'name');
       }
-      if (seen.has(q.name)) throw fault(`its name ${JSON.stringify(q.name)} is also the name of ${seen.get(q.name)}.`);
+      if (seen.has(q.name)) throw fault(`its name ${JSON.stringify(q.name)} is also the name of ${seen.get(q.name)}.`, 'name');
       seen.set(q.name, at);
-      if (q.text === undefined) throw fault('it has no text.');
-      if (typeof q.text !== 'string') throw fault('its text is not a string.');
+      if (q.text === undefined) throw fault('it has no text.', 'text');
+      if (typeof q.text !== 'string') throw fault('its text is not a string.', 'text');
       const textFault = questionStringFault(q.text, QUESTION_TEXT_MAX, 'a question text');
-      if (textFault !== null) throw fault(`its text ${textFault}.`);
-      if (q.type === undefined) throw fault('it has no type.');
+      if (textFault !== null) throw fault(`its text ${textFault}.`, 'text');
+      if (q.type === undefined) throw fault('it has no type.', 'type');
       if (!QUESTION_TYPES.includes(q.type)) {
-        throw fault(`its type is ${JSON.stringify(q.type)}, and a type is "text", "number", "choice" or "multi".`);
+        throw fault(`its type is ${JSON.stringify(q.type)}, and a type is "text", "number", "choice" or "multi".`, 'type');
       }
       if (q.required !== undefined && q.required !== true && q.required !== false) {
-        throw fault(`its required field must be true or false, and it is ${JSON.stringify(q.required)}.`);
+        throw fault(`its required field must be true or false, and it is ${JSON.stringify(q.required)}.`, 'required');
       }
       const copy = { ...q, text: q.text.trim() };
       if (q.type === 'choice' || q.type === 'multi') {
-        if (q.options === undefined) throw fault(`it is a ${q.type} question and has no options.`);
-        if (!Array.isArray(q.options)) throw fault('its options are not a list.');
+        if (q.options === undefined) throw fault(`it is a ${q.type} question and has no options.`, 'options');
+        if (!Array.isArray(q.options)) throw fault('its options are not a list.', 'options');
         if (q.options.length < OPTIONS_MIN || q.options.length > OPTIONS_MAX) {
-          throw fault(`it has ${q.options.length} ${q.options.length === 1 ? 'option' : 'options'}, and a question holds ${OPTIONS_MIN} to ${OPTIONS_MAX}.`);
+          throw fault(`it has ${q.options.length} ${q.options.length === 1 ? 'option' : 'options'}, and a question holds ${OPTIONS_MIN} to ${OPTIONS_MAX}.`, 'options');
         }
         const labels = new Map();
         copy.options = q.options.map((o, j) => {
-          if (typeof o !== 'string') throw fault(`its option ${j + 1} is not a string.`);
+          if (typeof o !== 'string') throw fault(`its option ${j + 1} is not a string.`, 'options');
           const optionFault = questionStringFault(o, OPTION_LABEL_MAX, 'an option label');
-          if (optionFault !== null) throw fault(`its option ${j + 1} ${optionFault}.`);
-          if (o.includes('|')) throw fault(`its option ${j + 1} holds "|", which an option label may not hold.`);
+          if (optionFault !== null) throw fault(`its option ${j + 1} ${optionFault}.`, 'options');
+          if (o.includes('|')) throw fault(`its option ${j + 1} holds "|", which an option label may not hold.`, 'options');
           const label = o.trim();
           if (labels.has(label)) {
-            throw fault(`its options ${labels.get(label) + 1} and ${j + 1} are the same after trimming: ${JSON.stringify(label)}.`);
+            throw fault(`its options ${labels.get(label) + 1} and ${j + 1} are the same after trimming: ${JSON.stringify(label)}.`, 'options');
           }
           labels.set(label, j);
           return label;
         });
         for (const bound of ['min', 'max']) {
-          if (q[bound] !== undefined) throw fault(`it is a ${q.type} question and cannot have a ${bound}.`);
+          if (q[bound] !== undefined) throw fault(`it is a ${q.type} question and cannot have a ${bound}.`, bound);
         }
       } else {
-        if (q.options !== undefined) throw fault(`it is a ${q.type} question and cannot have options.`);
+        if (q.options !== undefined) throw fault(`it is a ${q.type} question and cannot have options.`, 'options');
         if (q.type === 'text') {
           for (const bound of ['min', 'max']) {
-            if (q[bound] !== undefined) throw fault(`it is a text question and cannot have a ${bound}.`);
+            if (q[bound] !== undefined) throw fault(`it is a text question and cannot have a ${bound}.`, bound);
           }
         }
         for (const bound of ['min', 'max']) {
           const v = q[bound];
           if (v !== undefined && !(Number.isInteger(v) && Math.abs(v) <= QUESTION_INT_MAX)) {
-            throw fault(`its ${bound} is not a whole number from -2,147,483,647 to 2,147,483,647, and it is ${JSON.stringify(v)}.`);
+            throw fault(`its ${bound} is not a whole number from -2,147,483,647 to 2,147,483,647, and it is ${JSON.stringify(v)}.`, bound);
           }
         }
         if (q.min !== undefined && q.max !== undefined && q.min > q.max) {
-          throw fault(`its min ${q.min} is above its max ${q.max}.`);
+          throw fault(`its min ${q.min} is above its max ${q.max}.`, 'min');
         }
       }
       return copy;
     });
   }
   return out;
+}
+
+// The link builder's questions file: a CSV file as a spreadsheet saves it,
+// in UTF-8. The first row names the columns, in lower case and in any order:
+// list, name, text and type are required, and options, required, min and
+// max are optional. Each further row is one question. `list` is before or
+// after, `options` holds the option labels joined by "|", `required` is
+// yes, no or blank (blank is no), and `min` and `max` are blank or whole
+// numbers.
+export const QUESTION_COLUMNS = ['list', 'name', 'text', 'type', 'options', 'required', 'min', 'max'];
+const QUESTION_COLUMNS_REQUIRED = ['list', 'name', 'text', 'type'];
+
+// Returns the questions a questions file holds, as checkQuestions() returns
+// them, from its bytes (an ArrayBuffer or a typed array), or throws naming
+// the fault. A fault in one field names its row and its column, or its
+// field number in the header row or past the last column. Rows count the
+// file's records, the header being row 1, so a quoted line break does not
+// start a row. The file is read as RFC 4180 describes CSV, with LF also
+// ending a line. Every field's value is trimmed once its quotes are read,
+// and a row whose fields are all blank is skipped. Each list keeps the
+// order of the file.
+export function readQuestionsCsv(bytes) {
+  const bad = (why) => new Error(`The file could not be used: ${why}`);
+  const notUtf8 = () => bad('it is not UTF-8 text. In your spreadsheet, save it as "CSV UTF-8" and load that file.');
+  let text;
+  try {
+    // The decoder drops a byte-order mark.
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw notUtf8();
+  }
+  // UTF-16 text with no byte-order mark can also be valid UTF-8, with a NUL
+  // beside each ASCII character. A spreadsheet writes no NUL in a CSV file.
+  if (text.includes('\u0000')) throw notUtf8();
+  if (text.trim() === '') throw bad('it is empty.');
+  // The columns, once the header row is read. Until then a field is named
+  // by its position in the row.
+  let header = null;
+  const at = (row, k) => (header !== null && k < header.length ? `row ${row}, column ${header[k]}` : `row ${row}, field ${k + 1}`);
+  const lineEnd = (i) => text[i] === '\n' || (text[i] === '\r' && text[i + 1] === '\n');
+  const lists = { before: [], after: [] };
+  const rows = { before: [], after: [] };
+  let i = 0;
+  let row = 0;
+  while (i < text.length) {
+    row += 1;
+    const fields = [];
+    for (;;) {
+      const k = fields.length;
+      let value = '';
+      if (text[i] === '"') {
+        i += 1;
+        for (;;) {
+          if (i >= text.length) throw bad(`${at(row, k)}: its opening quote is never closed.`);
+          if (text[i] === '"') {
+            if (text[i + 1] !== '"') break;
+            value += '"';
+            i += 2;
+          } else {
+            value += text[i];
+            i += 1;
+          }
+        }
+        i += 1;
+        if (i < text.length && text[i] !== ',' && !lineEnd(i)) {
+          throw bad(`${at(row, k)}: it has text after its closing quote. A quote inside a quoted field is written twice.`);
+        }
+      } else {
+        while (i < text.length && text[i] !== ',' && !lineEnd(i)) {
+          if (text[i] === '"') {
+            throw bad(`${at(row, k)}: it holds a quote but does not start with one. A field that holds a quote is written in quotes, with each quote in it written twice.`);
+          }
+          value += text[i];
+          i += 1;
+        }
+      }
+      fields.push(value.trim());
+      if (text[i] !== ',') break;
+      i += 1;
+    }
+    // Past the line end: CR LF, LF, or the end of the file.
+    i += text[i] === '\r' ? 2 : 1;
+    if (header === null) {
+      fields.forEach((name, k) => {
+        if (!QUESTION_COLUMNS.includes(name)) {
+          throw bad(`${at(1, k)}: its name is ${JSON.stringify(name)}, and a column is named list, name, text, type, options, required, min or max, in lower case.`);
+        }
+        const first = fields.indexOf(name);
+        if (first !== k) throw bad(`${at(1, k)}: its name ${JSON.stringify(name)} is also the name of field ${first + 1}.`);
+      });
+      const missing = QUESTION_COLUMNS_REQUIRED.find((c) => !fields.includes(c));
+      if (missing !== undefined) throw bad(`row 1: it has no column ${missing}, and the file needs list, name, text and type.`);
+      header = fields;
+      continue;
+    }
+    if (fields.every((v) => v === '')) continue;
+    if (fields.length !== header.length) {
+      const why = fields.length < header.length
+        ? `so column ${header[fields.length]} has no field`
+        : `so field ${header.length + 1} has no column`;
+      throw bad(`row ${row}: it has ${fields.length} ${fields.length === 1 ? 'field' : 'fields'} and row 1 has ${header.length}, ${why}.`);
+    }
+    const cell = Object.fromEntries(header.map((name, k) => [name, fields[k]]));
+    const column = (name) => `row ${row}, column ${name}`;
+    if (cell.list !== 'before' && cell.list !== 'after') {
+      throw bad(`${column('list')}: it is ${JSON.stringify(cell.list)}, and a list is before or after, in lower case.`);
+    }
+    // A blank field is left out of the question, so checkQuestions() names
+    // a blank name, text or type as missing.
+    const q = {};
+    for (const key of ['name', 'text', 'type']) if (cell[key] !== '') q[key] = cell[key];
+    if (cell.options !== undefined && cell.options !== '') q.options = cell.options.split('|').map((o) => o.trim());
+    const required = (cell.required ?? '').toLowerCase();
+    if (required === 'yes') {
+      q.required = true;
+    } else if (required !== 'no' && required !== '') {
+      throw bad(`${column('required')}: it is ${JSON.stringify(cell.required)}, and required is yes, no or blank.`);
+    }
+    for (const bound of ['min', 'max']) {
+      const v = cell[bound];
+      if (v === undefined || v === '') continue;
+      if (!/^-?[0-9]+$/.test(v)) {
+        throw bad(`${column(bound)}: it is ${JSON.stringify(v)}, and a ${bound} is blank or a whole number, such as 18 or -5.`);
+      }
+      // A bound out of range is passed on as written, so the refusal quotes
+      // the digits of the file.
+      const n = Number(v);
+      q[bound] = Math.abs(n) <= QUESTION_INT_MAX ? n : v;
+    }
+    lists[cell.list].push(q);
+    rows[cell.list].push(row);
+  }
+  const questions = {};
+  for (const list of QUESTION_LISTS) if (lists[list].length > 0) questions[list] = lists[list];
+  if (Object.keys(questions).length === 0) throw bad('it has a header row and no question row.');
+  return checkQuestions(questions, {
+    bad,
+    where: (list, k) => `row ${rows[list][k]}`,
+    field: (where, key) => `${where}, column ${key}`,
+  });
+}
+
+// The questions as a questions file: UTF-8 with a byte-order mark, which
+// tells a spreadsheet the file is UTF-8, CR LF line ends, the columns in
+// the order of QUESTION_COLUMNS, and one row per question, the before list
+// first. `required` is written yes or no, and a missing field blank.
+export function writeQuestionsCsv(questions) {
+  const lines = [QUESTION_COLUMNS.join(',')];
+  for (const list of QUESTION_LISTS) {
+    for (const q of questions[list] ?? []) {
+      const fields = [
+        list, q.name, q.text, q.type, (q.options ?? []).join('|'), q.required === true ? 'yes' : 'no', q.min ?? '', q.max ?? '',
+      ];
+      lines.push(fields.map(csvField).join(','));
+    }
+  }
+  return `﻿${lines.map((line) => `${line}\r\n`).join('')}`;
 }
 
 // An answer as a question screen holds it (see runForm()) counts as given
@@ -1167,7 +1328,7 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
   }
 }
 
-function saveFile(name, text) {
+export function saveFile(name, text) {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
