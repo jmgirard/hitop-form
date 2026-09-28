@@ -195,6 +195,18 @@ export function checkParticipantParam(
   return name;
 }
 
+// The participant identifier a link's `participantParam` names, read from
+// the page's address as its first value that is neither blank nor a
+// placeholder: a value of the form `%…%` (SONA's `%SURVEY_CODE%`) or `{{…}}`
+// (Prolific's placeholders) is a placeholder the site did not fill. Comes
+// back as the empty string when there is no such value, and the start
+// screen then asks.
+export function readParticipantParam(search, name) {
+  const params = new URLSearchParams(search);
+  const filled = (v) => v !== '' && !/^%.*%$/.test(v) && !/^\{\{.*\}\}$/.test(v);
+  return params.getAll(name).map((v) => v.trim()).find(filled) ?? '';
+}
+
 // ---- The store ------------------------------------------------------------
 
 // The store kinds this page can send to. A `webhook` is an HTTPS endpoint
@@ -749,22 +761,31 @@ export async function boot(root, search) {
     return;
   }
   // The three Prolific parameters are read from the address only under
-  // `prolific: true`; any other link ignores them.
-  runForm(root, config, exp, plan, config.prolific === true ? readProlific(search) : undefined);
+  // `prolific: true`, and the parameter a `participantParam` names only
+  // under that field; any other link ignores the address's parameters.
+  runForm(
+    root, config, exp, plan,
+    config.prolific === true ? readProlific(search) : undefined,
+    config.participantParam !== undefined ? readParticipantParam(search, config.participantParam) : '',
+  );
 }
 
 // `plan.shown` is the order the pages render and the positions count in;
 // `plan.items` the order the row and the file keep. `prolific`, under
 // `prolific: true`, is the address's three parameters from readProlific():
 // a PROLIFIC_PID that is not empty is the participant identifier, and the
-// start screen then asks for none.
-function runForm(root, config, exp, plan, prolific) {
+// start screen then asks for none. `fromAddress`, under `participantParam`,
+// is the identifier readParticipantParam() read, and likewise takes the
+// place of the start screen's question when it is not empty.
+function runForm(root, config, exp, plan, prolific, fromAddress) {
   const items = plan.shown;
   const title = INSTRUMENTS[config.instrument];
   const options = exp.instructions.options;
   const answers = new Map();
   const pageCount = Math.ceil(items.length / PAGE_SIZE);
-  let participant = prolific && prolific.pid !== '' ? prolific.pid : config.participant;
+  let participant = prolific && prolific.pid !== ''
+    ? prolific.pid
+    : fromAddress !== '' ? fromAddress : config.participant;
   let page = 0;
   let finished = false;
   let sending = false;
