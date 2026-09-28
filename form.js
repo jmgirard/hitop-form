@@ -368,7 +368,7 @@ export function fillParticipant(address, participant) {
 // written as two UTF-16 code units), so an identifier holding one is refused
 // where it enters, the link or the start screen, before anything is sent or
 // saved. The address readers cannot deliver one: URLSearchParams decodes a
-// broken sequence to U+FFFD.
+// broken sequence to one or more U+FFFD.
 export function isWritableIdentifier(participant) {
   try {
     encodeURIComponent(participant);

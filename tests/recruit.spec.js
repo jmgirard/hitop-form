@@ -40,8 +40,9 @@
 //   P13: an address without the token, under participantParam, is used as
 //       the link check returns it (its parsed href): the navigation and the
 //       sent screen's link after a confirmed send, and the saved screen's
-//       link to complete and to completeSaved, one address given with an
-//       uppercase host the parse lowercases
+//       link to complete and to completeSaved after a walk with no store,
+//       two of the addresses given with an uppercase host the parse
+//       lowercases
 //   P14: fillParticipant() itself: each token replaced, the value encoded
 //       as one query value, an address without the token unchanged
 //
@@ -377,7 +378,7 @@ test('fillParticipant() replaces each token with the encoded identifier', () => 
 });
 
 // P15: Playwright's fill() and typing replace a lone surrogate with U+FFFD,
-// so the field is set through the page, as a paste can, and its value read
+// so the field is set by script through the page, and its value read
 // back before Begin to show the surrogate is there.
 for (const [name, value] of [['a lone high', 'a\ud800b'], ['a lone low', 'a\udc00b'], ['a low before a high', '\udc00\ud800']]) {
   test(`the start screen refuses an identifier holding ${name} surrogate, and no item shows`, async ({ page }) => {
