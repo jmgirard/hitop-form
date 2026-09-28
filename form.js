@@ -1,7 +1,7 @@
 // The form page. index.html calls boot(); link.html imports encodeLink(),
-// the link readers, the checks (checkParticipantParam() and
-// consentTextFault() among them), fetchExport(), planItems(), storeSql() and
-// PROLIFIC_PARAMS.
+// the link readers, the checks (checkParticipantParam(), consentTextFault()
+// and checkQuestions() among them), fetchExport(), planItems(), storeSql()
+// and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -23,6 +23,13 @@
 // screen and sends and saves nothing; `completeDeclined`, allowed only
 // beside `consent`, is an https:// address that screen then goes to, such as
 // a recruiting site's code for a participant who did not consent.
+//
+// A link's `questions` field holds the researcher's own questions, in a
+// `before` list, an `after` list or both. The page asks the before list on
+// a screen of its own ahead of the start screen, after any consent screen,
+// and the after list on a screen of its own after the last item page. Each
+// answer is a `q_<name>` column after the item columns, in the row, the file
+// and the Supabase table.
 //
 // Three link fields fit a Prolific study. `prolific: true` takes the
 // participant identifier from the PROLIFIC_PID parameter of the page's
@@ -88,19 +95,26 @@ export function decodeConfig(param) {
   return JSON.parse(base64urlToUtf8(param));
 }
 
-// A link that carries consent text travels as `z` rather than `c`: the
-// config's UTF-8 JSON compressed with deflate-raw, then written as base64url
-// with no padding. Consent text makes a `c` link long, and the compressed
-// form keeps it shorter. The page reads either parameter.
+// A link that carries consent text or questions travels as `z` rather than
+// `c`: the config's UTF-8 JSON compressed with deflate-raw, then written as
+// base64url with no padding. Consent text and questions make a `c` link
+// long, and the compressed form keeps it shorter. The page reads either
+// parameter.
 //
 // The query of a study link, without its `?`: `z=…` for a config that carries
-// `consent`, and `c=…` as before for any other. link.html builds its links
-// with it.
+// `consent` or `questions`, and `c=…` as before for any other. link.html
+// builds its links with it. It refuses a `z` config whose JSON is over
+// MAX_LINK_BYTES, which the page would refuse to read.
 export async function encodeLink(config) {
   const json = JSON.stringify(config);
-  if (config.consent === undefined) return `c=${utf8ToBase64url(json)}`;
+  if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
+  const bytes = new TextEncoder().encode(json).length;
+  if (bytes > MAX_LINK_BYTES) {
+    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.`);
+  }
   if (typeof CompressionStream !== 'function') {
-    throw new Error('This browser cannot make a link with consent text, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.');
+    const parts = [config.consent === undefined ? null : 'consent text', config.questions === undefined ? null : 'questions'];
+    throw new Error(`This browser cannot make a link with ${parts.filter((p) => p !== null).join(' and ')}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
   }
   const stream = new Blob([new TextEncoder().encode(json)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
   return `z=${bytesToBase64url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
@@ -259,6 +273,210 @@ export function textParagraphs(text) {
   return paragraphs;
 }
 
+// A link's `questions` field: `{ before, after }`, either list optional but
+// not both, each a list of the researcher's own questions. The `before`
+// questions show on a screen of their own before the start screen, the
+// `after` questions on one after the last item page, and each answer is a
+// `q_<name>` column after the item columns. The limits below count
+// characters as a JavaScript string counts them (UTF-16 code units).
+export const QUESTION_LISTS = ['before', 'after'];
+export const QUESTION_TYPES = ['text', 'number', 'choice', 'multi'];
+export const QUESTION_KEYS = ['name', 'text', 'type', 'required', 'options', 'min', 'max'];
+export const QUESTIONS_MAX = 50;
+export const QUESTION_TEXT_MAX = 1_000;
+export const OPTIONS_MIN = 2;
+export const OPTIONS_MAX = 20;
+export const OPTION_LABEL_MAX = 200;
+// The largest `min` or `max`, the limit of a 32-bit signed whole number, and
+// its negative for the smallest.
+export const QUESTION_INT_MAX = 2_147_483_647;
+export const QUESTION_NAME = /^[a-z][a-z0-9_]{0,29}$/;
+
+// Unicode's mandatory line breaks: LF, vertical tab, form feed, CR, U+0085
+// (next line), and the line and paragraph separators U+2028 and U+2029,
+// built from their code points so the source holds no literal separator.
+const LINE_BREAK = new RegExp(`[\\n\\v\\f\\r${String.fromCharCode(0x85, 0x2028, 0x2029)}]`);
+
+// The fault in a question text or an option label, as the end of a
+// sentence, or null when there is none.
+function questionStringFault(s, max, what) {
+  if (s.trim() === '') return 'is empty or holds only white space';
+  if (s.length > max) {
+    return `has ${s.length.toLocaleString('en-US')} characters, more than the ${max.toLocaleString('en-US')} it may hold`;
+  }
+  if (LINE_BREAK.test(s)) return `holds a line break, and ${what} is one line`;
+  if (LONE_SURROGATE.test(s)) return 'holds half of a character (a lone surrogate), which cannot be written';
+  return null;
+}
+
+// Returns a copy of the field, each question text and option label trimmed
+// and the questions' other keys as given, or throws through `bad` naming the
+// fault. A fault in one question names it by `where(list, index)`, the index
+// counted from 0: "question 2 of the before list" on the form page. link.html
+// runs the same check before it builds a link, with its own `bad` and a
+// `where` that names the question as its editor numbers it.
+export function checkQuestions(
+  questions,
+  {
+    bad = (why) => new Error(`The study link's questions field could not be used: ${why}`),
+    where = (list, i) => `question ${i + 1} of the ${list} list`,
+  } = {},
+) {
+  if (questions === null || typeof questions !== 'object' || Array.isArray(questions)) throw bad('it is not an object.');
+  const extra = Object.keys(questions).find((k) => !QUESTION_LISTS.includes(k));
+  if (extra !== undefined) {
+    throw bad(`it has a field ${JSON.stringify(extra)}, and it takes only before and after.`);
+  }
+  const lists = QUESTION_LISTS.filter((list) => questions[list] !== undefined);
+  if (lists.length === 0) throw bad('it has neither a before nor an after list.');
+  for (const list of lists) {
+    if (!Array.isArray(questions[list])) throw bad(`its ${list} list is not a list.`);
+    if (questions[list].length === 0) throw bad(`its ${list} list is empty, and a list holds 1 or more questions.`);
+  }
+  const total = lists.reduce((n, list) => n + questions[list].length, 0);
+  if (total > QUESTIONS_MAX) {
+    throw bad(`it has ${total} questions, more than the ${QUESTIONS_MAX} it may hold.`);
+  }
+  const seen = new Map();
+  const out = {};
+  for (const list of lists) {
+    out[list] = questions[list].map((q, i) => {
+      const at = where(list, i);
+      const fault = (why) => bad(`${at}: ${why}`);
+      if (q === null || typeof q !== 'object' || Array.isArray(q)) throw fault('it is not an object.');
+      const key = Object.keys(q).find((k) => !QUESTION_KEYS.includes(k));
+      if (key !== undefined) {
+        throw fault(`it has a field ${JSON.stringify(key)}, and a question takes only name, text, type, required, options, min and max.`);
+      }
+      if (q.name === undefined) throw fault('it has no name.');
+      if (typeof q.name !== 'string' || !QUESTION_NAME.test(q.name)) {
+        throw fault(`its name is ${JSON.stringify(q.name)}, and a name starts with a lower-case letter and holds only lower-case letters, digits and "_", up to 30 characters.`);
+      }
+      if (seen.has(q.name)) throw fault(`its name ${JSON.stringify(q.name)} is also the name of ${seen.get(q.name)}.`);
+      seen.set(q.name, at);
+      if (q.text === undefined) throw fault('it has no text.');
+      if (typeof q.text !== 'string') throw fault('its text is not a string.');
+      const textFault = questionStringFault(q.text, QUESTION_TEXT_MAX, 'a question text');
+      if (textFault !== null) throw fault(`its text ${textFault}.`);
+      if (q.type === undefined) throw fault('it has no type.');
+      if (!QUESTION_TYPES.includes(q.type)) {
+        throw fault(`its type is ${JSON.stringify(q.type)}, and a type is "text", "number", "choice" or "multi".`);
+      }
+      if (q.required !== undefined && q.required !== true && q.required !== false) {
+        throw fault(`its required field must be true or false, and it is ${JSON.stringify(q.required)}.`);
+      }
+      const copy = { ...q, text: q.text.trim() };
+      if (q.type === 'choice' || q.type === 'multi') {
+        if (q.options === undefined) throw fault(`it is a ${q.type} question and has no options.`);
+        if (!Array.isArray(q.options)) throw fault('its options are not a list.');
+        if (q.options.length < OPTIONS_MIN || q.options.length > OPTIONS_MAX) {
+          throw fault(`it has ${q.options.length} ${q.options.length === 1 ? 'option' : 'options'}, and a question holds ${OPTIONS_MIN} to ${OPTIONS_MAX}.`);
+        }
+        const labels = new Map();
+        copy.options = q.options.map((o, j) => {
+          if (typeof o !== 'string') throw fault(`its option ${j + 1} is not a string.`);
+          const optionFault = questionStringFault(o, OPTION_LABEL_MAX, 'an option label');
+          if (optionFault !== null) throw fault(`its option ${j + 1} ${optionFault}.`);
+          if (o.includes('|')) throw fault(`its option ${j + 1} holds "|", which an option label may not hold.`);
+          const label = o.trim();
+          if (labels.has(label)) {
+            throw fault(`its options ${labels.get(label) + 1} and ${j + 1} are the same after trimming: ${JSON.stringify(label)}.`);
+          }
+          labels.set(label, j);
+          return label;
+        });
+        for (const bound of ['min', 'max']) {
+          if (q[bound] !== undefined) throw fault(`it is a ${q.type} question and cannot have a ${bound}.`);
+        }
+      } else {
+        if (q.options !== undefined) throw fault(`it is a ${q.type} question and cannot have options.`);
+        if (q.type === 'text') {
+          for (const bound of ['min', 'max']) {
+            if (q[bound] !== undefined) throw fault(`it is a text question and cannot have a ${bound}.`);
+          }
+        }
+        for (const bound of ['min', 'max']) {
+          const v = q[bound];
+          if (v !== undefined && !(Number.isInteger(v) && Math.abs(v) <= QUESTION_INT_MAX)) {
+            throw fault(`its ${bound} is not a whole number from -2,147,483,647 to 2,147,483,647, and it is ${JSON.stringify(v)}.`);
+          }
+        }
+        if (q.min !== undefined && q.max !== undefined && q.min > q.max) {
+          throw fault(`its min ${q.min} is above its max ${q.max}.`);
+        }
+      }
+      return copy;
+    });
+  }
+  return out;
+}
+
+// An answer as a question screen holds it (see runForm()) counts as given
+// when a `text` or `number` answer is not blank after trimming, a `choice`
+// has a chosen option, or a `multi` has one or more.
+function isAnswered(q, a) {
+  if (a === undefined) return false;
+  if (q.type === 'choice') return true;
+  if (q.type === 'multi') return a.size > 0;
+  return a.trim() !== '';
+}
+
+// A `number` answer after trimming: an optional minus sign and digits.
+const WHOLE_NUMBER = /^-?\d+$/;
+
+// A WHOLE_NUMBER answer in decimal digits with no leading zero and a minus
+// sign only below zero, written from the typed digits, so no length is lost
+// to a floating-point number: `007` is `7` and `-0` is `0`.
+export function wholeNumber(typed) {
+  const t = typed.trim();
+  const negative = t.startsWith('-');
+  const digits = (negative ? t.slice(1) : t).replace(/^0+(?=\d)/, '');
+  return negative && digits !== '0' ? `-${digits}` : digits;
+}
+
+// The range a `number` question takes, as words: "a whole number from
+// <min> to <max>", "a whole number of <min> or more" or "a whole number of
+// <max> or less", or null when it has neither bound.
+function rangeText(q) {
+  if (q.min !== undefined && q.max !== undefined) return `a whole number from ${q.min} to ${q.max}`;
+  if (q.min !== undefined) return `a whole number of ${q.min} or more`;
+  if (q.max !== undefined) return `a whole number of ${q.max} or less`;
+  return null;
+}
+
+// The fault in the answer to question `n` of a screen, as the sentence the
+// screen shows, or null when there is none: a required question with no
+// answer, a `number` answer that is not a WHOLE_NUMBER or is outside `min`
+// to `max`, and a `text` answer holding a lone surrogate, which the file and
+// the row cannot carry as typed.
+function answerFault(q, a, n) {
+  if (!isAnswered(q, a)) return q.required === true ? `Please answer question ${n} before continuing.` : null;
+  if (q.type === 'text' && LONE_SURROGATE.test(a)) {
+    return `Question ${n} holds a character this page cannot read. Please type it again.`;
+  }
+  if (q.type === 'number') {
+    const t = a.trim();
+    const v = WHOLE_NUMBER.test(t) ? BigInt(wholeNumber(t)) : null;
+    if (v === null || (q.min !== undefined && v < BigInt(q.min)) || (q.max !== undefined && v > BigInt(q.max))) {
+      return `Question ${n} needs ${rangeText(q) ?? 'a whole number'}.`;
+    }
+  }
+  return null;
+}
+
+// The value a question writes into the row and the file, always a string:
+// a `text` answer as typed, a `number` answer by wholeNumber(), the position
+// of a `choice`, the positions of a `multi` in ascending order joined by
+// single spaces, each position counted from 1, and the empty string for an
+// unanswered question.
+export function questionValue(q, a) {
+  if (!isAnswered(q, a)) return '';
+  if (q.type === 'text') return a;
+  if (q.type === 'number') return wholeNumber(a);
+  if (q.type === 'choice') return String(a);
+  return [...a].sort((x, y) => x - y).join(' ');
+}
+
 // Reads the link's `c` or `z` parameter into a config, or throws with a
 // message the participant can pass on to the study team.
 export async function parseLink(search) {
@@ -341,6 +559,7 @@ export async function parseLink(search) {
     }
     config.completeDeclined = checkCompleteUrl(config.completeDeclined, bad);
   }
+  if (config.questions !== undefined) config.questions = checkQuestions(config.questions);
   return config;
 }
 
@@ -631,17 +850,20 @@ function isIntegerArray(x) {
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (planItems().items): the five study fields as
 // text, an `item_order` text column under `shuffle`, the two Prolific text
-// columns under `prolific`, one integer column per item, row-level security
-// on, the project's default grants to the API roles revoked, and the anon
-// role allowed to insert and nothing else. Shown by link.html; pasted by the
-// researcher into the project's SQL editor.
-export function storeSql(table, items, shuffle = false, prolific = false) {
+// columns under `prolific`, one integer column per item, one text column
+// per question of `questions` (a link's `questions` field) in
+// questionColumns() order, row-level security on, the project's default
+// grants to the API roles revoked, and the anon role allowed to insert and
+// nothing else. Shown by link.html; pasted by the researcher into the
+// project's SQL editor.
+export function storeSql(table, items, shuffle = false, prolific = false, questions = undefined) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
   const lead = leadColumns({ shuffle, prolific });
   const columns = [
     ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
+    ...questionColumns({ questions }).map((c) => `  ${q(c)} text`),
   ];
   return [
     `create table ${t} (`,
@@ -803,16 +1025,29 @@ function leadValues({ study, participant, instrument, formBuild, submitted, item
   ];
 }
 
+// The trailing columns of the row, the file and the table: `q_` plus each
+// question's name, the `before` list first, each list in the link's order.
+// None for a config with no `questions`.
+export function questionColumns({ questions } = {}) {
+  return QUESTION_LISTS.flatMap((list) => (questions?.[list] ?? []).map((q) => `q_${q.name}`));
+}
+
+// The trailing values of one record, in questionColumns() order: each
+// question's string from `questionValues` (runForm()'s questionValue()).
+function questionCells({ questions, questionValues }) {
+  return QUESTION_LISTS.flatMap((list) => (questions?.[list] ?? []).map((q) => questionValues.get(q.name)));
+}
+
 // One header row and one data row. `answers` maps item number to the chosen
 // option value. `items` is the column order; the lead columns are
 // leadColumns()' for the record's `itemOrder` and `prolific`. Without either
-// the file has five lead columns.
+// the file has five lead columns. The question columns follow the items.
 export function buildCsv(record) {
   const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const row = leadValues(record);
-  header.push(...items.map((it) => it.name));
-  row.push(...items.map((it) => answers.get(it.number)));
+  header.push(...items.map((it) => it.name), ...questionColumns(record));
+  row.push(...items.map((it) => answers.get(it.number)), ...questionCells(record));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
 }
 
@@ -828,13 +1063,16 @@ export const SEND_TIMEOUT_MS = 30_000;
 
 // One JSON object per finished form: the lead fields buildCsv() writes as
 // columns, key for column and in the same order, then one key per item in
-// `items` order, each value the chosen option's integer value.
+// `items` order, each value the chosen option's integer value, then one
+// string per question, keyed and ordered as questionColumns().
 export function buildRow(record) {
   const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const values = leadValues(record);
   const row = Object.fromEntries(header.map((k, i) => [k, values[i]]));
   for (const it of items) row[it.name] = answers.get(it.number);
+  const cells = questionCells(record);
+  questionColumns(record).forEach((k, i) => { row[k] = cells[i]; });
   return row;
 }
 
@@ -1036,11 +1274,17 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   let sending = false;
   const store = config.store;
   const storeHost = store ? new URL(store.url).host : null;
+  const before = config.questions?.before ?? [];
+  const after = config.questions?.after ?? [];
+  // The answers to the researcher's questions, by name, as the screens hold
+  // them: the typed string for `text` and `number`, the chosen position for
+  // `choice` and the set of chosen positions for `multi`, each counted from 1.
+  const questionAnswers = new Map();
 
   // A reload or a back gesture would lose every answer, since they live only
   // in memory until Finish writes the file. The browser asks first.
   window.addEventListener('beforeunload', (ev) => {
-    if (finished || answers.size === 0) return;
+    if (finished || (answers.size === 0 && ![...before, ...after].some((q) => isAnswered(q, questionAnswers.get(q.name))))) return;
     ev.preventDefault();
     ev.returnValue = '';
   });
@@ -1106,7 +1350,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       heading('Consent to take part'),
       el('div', { class: 'consent' }, textNodes(config.consent.text)),
       el('div', { class: 'nav' }, [
-        el('button', { type: 'button', text: 'I agree', onclick: start }),
+        el('button', { type: 'button', text: 'I agree', onclick: proceed }),
         el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: decline }),
       ]),
     );
@@ -1136,6 +1380,131 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     );
     focusHeading(root);
     if (address !== undefined) window.location.assign(address);
+  }
+
+  // A question on its screen, numbered `n` there: a fieldset of radio
+  // buttons for `choice` and of check boxes for `multi`, and a label and one
+  // text input for `text` and `number`. A `number` input is a text input
+  // with a numeric keyboard, so the page reads what was typed, and a range
+  // line under the question states its `min` and `max`. The question text
+  // and the option labels are written as text, so no tag or entity in them
+  // is read as markup. The answer the screen holds is kept across Back.
+  function questionNode(q, n) {
+    const id = `q-${q.name}`;
+    const caption = [
+      el('span', { class: 'pos', text: `${n}.` }),
+      ' ',
+      el('span', { class: 'text', text: q.text }),
+      ...(q.required === true ? [el('span', { class: 'required', text: ' (required)' })] : []),
+    ];
+    const held = questionAnswers.get(q.name);
+    if (q.type === 'choice' || q.type === 'multi') {
+      const fs = el('fieldset', { class: 'question', 'data-name': q.name }, [el('legend', {}, caption)]);
+      const group = el('div', { class: 'options' });
+      q.options.forEach((label, j) => {
+        const position = j + 1;
+        const input = el('input', {
+          type: q.type === 'choice' ? 'radio' : 'checkbox',
+          name: id,
+          value: String(position),
+          onchange: () => {
+            if (q.type === 'choice') {
+              questionAnswers.set(q.name, position);
+            } else {
+              const chosen = questionAnswers.get(q.name) ?? new Set();
+              if (input.checked) chosen.add(position);
+              else chosen.delete(position);
+              questionAnswers.set(q.name, chosen);
+            }
+            fs.classList.remove('unanswered');
+          },
+        });
+        if (q.type === 'choice' ? held === position : held?.has(position)) input.checked = true;
+        group.append(el('label', {}, [input, el('span', { class: 'label', text: label })]));
+      });
+      fs.append(group);
+      return fs;
+    }
+    const range = q.type === 'number' ? rangeText(q) : null;
+    const hint = range === null ? [] : [el('p', { class: 'range', id: `${id}-hint`, text: `${range[0].toUpperCase()}${range.slice(1)}.` })];
+    const input = el('input', {
+      type: 'text',
+      id,
+      name: id,
+      autocomplete: 'off',
+      // The numeric keypad of a phone can lack a minus sign, so a question
+      // that takes a negative answer keeps the full keyboard.
+      ...(q.type === 'number' && q.min >= 0 ? { inputmode: 'numeric' } : {}),
+      ...(q.required === true ? { 'aria-required': 'true' } : {}),
+      ...(range === null ? {} : { 'aria-describedby': `${id}-hint` }),
+      oninput: () => {
+        questionAnswers.set(q.name, input.value);
+        wrap.classList.remove('unanswered');
+      },
+    });
+    input.value = held ?? '';
+    const wrap = el('div', { class: 'question', 'data-name': q.name }, [el('label', { for: id }, caption), ...hint, input]);
+    return wrap;
+  }
+
+  // A screen of the researcher's questions: `before`, ahead of the start
+  // screen, with Next and no Back, or `after`, behind the last item page,
+  // with Back and Finish. It holds no item, option or instruction of the
+  // instrument. Next and Finish check the answers in order and stop at the
+  // first fault, named by the question's number on the screen, with focus
+  // on that question's first input.
+  function showQuestions(list) {
+    const qs = list === 'before' ? before : after;
+    const alert = el('p', { role: 'alert' });
+    const nodes = qs.map((q, i) => questionNode(q, i + 1));
+    const checked = () => {
+      for (let i = 0; i < qs.length; i++) {
+        const why = answerFault(qs[i], questionAnswers.get(qs[i].name), i + 1);
+        if (why === null) continue;
+        nodes.forEach((node, k) => node.classList.toggle('unanswered', k === i));
+        alert.textContent = why;
+        nodes[i].scrollIntoView({ block: 'center' });
+        nodes[i].querySelector('input').focus({ preventScroll: true });
+        return false;
+      }
+      return true;
+    };
+    const nav = list === 'before'
+      ? el('div', { class: 'nav' }, [
+          el('span', { class: 'spacer' }),
+          el('button', { type: 'button', text: 'Next', onclick: () => { if (checked()) start(); } }),
+        ])
+      : el('div', { class: 'nav' }, [
+          el('button', {
+            type: 'button',
+            class: 'secondary',
+            text: 'Back',
+            onclick: () => {
+              if (sending) return;
+              page = pageCount - 1;
+              showPage();
+            },
+          }),
+          el('span', { class: 'spacer' }),
+          el('button', {
+            type: 'button',
+            text: 'Finish',
+            onclick: () => {
+              if (sending) return;
+              if (checked()) finish(nav);
+            },
+          }),
+        ]);
+    root.replaceChildren(heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, nav);
+    window.scrollTo(0, 0);
+    focusHeading(root);
+  }
+
+  // After consent, or at once without it: the before screen when the link
+  // has one, then the start screen.
+  function proceed() {
+    if (before.length > 0) showQuestions('before');
+    else start();
   }
 
   function itemNode(it, position) {
@@ -1190,7 +1559,8 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
         nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
         return;
       }
-      if (last) finish(nav);
+      if (last && after.length > 0) showQuestions('after');
+      else if (last) finish(nav);
       else {
         page += 1;
         showPage();
@@ -1204,7 +1574,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     const nav = el('div', { class: 'nav' }, [
       ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
       el('span', { class: 'spacer' }),
-      el('button', { type: 'button', text: last ? 'Finish' : 'Next', onclick: advance }),
+      el('button', { type: 'button', text: last && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
     ]);
 
     root.replaceChildren(
@@ -1248,6 +1618,9 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       // A copy: the radios stay live during a send, and the file saved on an
       // unconfirmed send must hold the answers the row was posted with.
       answers: new Map(answers),
+      // The researcher's questions and the value each writes, by name.
+      questions: config.questions,
+      questionValues: new Map([...before, ...after].map((q) => [q.name, questionValue(q, questionAnswers.get(q.name))])),
     };
     if (!store) {
       finished = true;
@@ -1345,5 +1718,5 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   }
 
   if (config.consent !== undefined) showConsent();
-  else start();
+  else proceed();
 }

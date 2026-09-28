@@ -67,6 +67,15 @@
   #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
   #prefilled ul { margin: 0; padding-left: 1.25rem; }
   .site-hint { color: var(--muted); font-size: .875rem; margin-top: calc(-1 * var(--s2)); }
+  fieldset { border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4); }
+  legend { font-weight: 600; padding: 0 var(--s1); }
+  p.hint { color: var(--muted); font-size: .875rem; }
+  fieldset.question-edit { background: var(--surface); }
+  .question-edit .bounds { display: flex; gap: var(--s4); }
+  .question-edit .bounds label { flex: 1; }
+  .question-edit .moves button { margin: 0 var(--s2) 0 0; }
+  /* After the rules above, so a hidden label or range row stays hidden. */
+  .question-edit [hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -75,7 +84,7 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text or questions) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <ol class="steps">
     <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
     <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
@@ -151,6 +160,12 @@
       <span class="hint">Optional, and only beside consent text. An https:// address the page sends the participant to after "I do not agree", once the declined screen is drawn. For Prolific, the completion URL of the code your study gives a participant who does not consent. A <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier from the address or the link, or nothing when the page holds none yet.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
+    <fieldset id="questionsBlock">
+      <legend>Your own questions</legend>
+      <p class="hint">Optional. Questions of your own, such as age or how the participant heard of the study. The page asks them on a screen before the form or on a screen after its last page, never beside the items. Each answer is written in a column named <code>q_</code> plus the question's name, after the item columns. A text answer is written as typed. A whole number is written in digits. A choice is written as the number of the chosen option, counted from 1, and several choices as those numbers in order, separated by spaces. An unanswered question is written empty. Up to 50 questions. A link with questions is written compressed, as <code>?z=</code>.</p>
+      <div id="questionList"></div>
+      <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
+    </fieldset>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
       <select name="storeKind">
@@ -189,7 +204,7 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them, and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -199,7 +214,7 @@
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
     consentTextFault, fetchExport, planItems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
-    CONSENT_DECLINED_MAX,
+    CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -251,6 +266,193 @@
     else siteSelect.removeAttribute('aria-describedby');
   }
   siteSelect.addEventListener('change', showSite);
+
+  // The question editor: one group of fields per question, in the order the
+  // researcher added and moved them. Each group sets the list the question
+  // goes in (before or after the form), its name, its text, its type, and,
+  // as its type takes them, its options (one per line), its minimum and
+  // maximum, and whether it is required. The link keeps each list in the
+  // editor's order, the before list first.
+  const questionList = document.getElementById('questionList');
+  const addQuestion = document.getElementById('addQuestion');
+  const TYPE_LABELS = {
+    text: 'Text, one line',
+    number: 'Whole number',
+    choice: 'One of several options',
+    multi: 'Any of several options',
+  };
+
+  function control(tag, attrs = {}) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
+  function field(label, hint, input, cls) {
+    const node = control('label', cls ? { class: cls } : {});
+    node.append(label);
+    if (hint) {
+      const span = control('span', { class: 'hint' });
+      span.textContent = hint;
+      node.append(span);
+    }
+    node.append(input);
+    return node;
+  }
+
+  function button(text, onclick) {
+    const node = control('button', { type: 'button', class: 'secondary' });
+    node.textContent = text;
+    node.addEventListener('click', onclick);
+    return node;
+  }
+
+  // Only a choice or multi question shows its options, and only a number
+  // question its minimum and maximum.
+  function showType(group) {
+    const type = group.querySelector('[name=qType]').value;
+    group.querySelector('.options-field').hidden = type !== 'choice' && type !== 'multi';
+    group.querySelector('.bounds').hidden = type !== 'number';
+  }
+
+  // Each group's legend and the names of its three move buttons carry its
+  // number, counted from 1 in the editor's order.
+  function renumber() {
+    [...questionList.children].forEach((group, k) => {
+      const n = k + 1;
+      group.querySelector('legend').textContent = `Question ${n}`;
+      group.querySelector('.up').setAttribute('aria-label', `Move question ${n} up`);
+      group.querySelector('.down').setAttribute('aria-label', `Move question ${n} down`);
+      group.querySelector('.remove').setAttribute('aria-label', `Remove question ${n}`);
+    });
+  }
+
+  // A new group at the end, filled from `q` (a question as a link holds it)
+  // where its fields are of the type each control takes.
+  function addGroup(list = 'before', q = {}) {
+    const group = control('fieldset', { class: 'question-edit' });
+    group.append(control('legend'));
+    const listSelect = control('select', { name: 'qList' });
+    for (const [value, text] of [['before', 'Before the form'], ['after', 'After the form']]) {
+      const o = control('option', { value });
+      o.textContent = text;
+      listSelect.append(o);
+    }
+    listSelect.value = list;
+    const name = control('input', { name: 'qName', type: 'text', autocomplete: 'off', spellcheck: 'false' });
+    const text = control('input', { name: 'qText', type: 'text', autocomplete: 'off' });
+    const typeSelect = control('select', { name: 'qType' });
+    for (const [value, label] of Object.entries(TYPE_LABELS)) {
+      const o = control('option', { value });
+      o.textContent = label;
+      typeSelect.append(o);
+    }
+    const options = control('textarea', { name: 'qOptions', class: 'prose' });
+    // No numeric keypad, since the iPhone one has no minus sign for a
+    // negative bound.
+    const min = control('input', { name: 'qMin', type: 'text', autocomplete: 'off' });
+    const max = control('input', { name: 'qMax', type: 'text', autocomplete: 'off' });
+    const required = control('input', { name: 'qRequired', type: 'checkbox' });
+    if (typeof q.name === 'string') name.value = q.name;
+    if (typeof q.text === 'string') text.value = q.text;
+    if (Object.hasOwn(TYPE_LABELS, q.type)) typeSelect.value = q.type;
+    if (Array.isArray(q.options) && q.options.every((o) => typeof o === 'string')) options.value = q.options.join('\n');
+    if (typeof q.min === 'number') min.value = String(q.min);
+    if (typeof q.max === 'number') max.value = String(q.max);
+    required.checked = q.required === true;
+    const bounds = control('div', { class: 'bounds' });
+    bounds.append(
+      field('Minimum', 'Optional.', min),
+      field('Maximum', 'Optional.', max),
+    );
+    const requiredLabel = control('label', { class: 'check' });
+    requiredLabel.append(required, 'Required: the participant must answer before going on');
+    const moves = control('p', { class: 'moves' });
+    const up = button('Move up', () => {
+      if (group.previousElementSibling) questionList.insertBefore(group, group.previousElementSibling);
+      renumber();
+      up.focus();
+    });
+    const down = button('Move down', () => {
+      if (group.nextElementSibling) questionList.insertBefore(group.nextElementSibling, group);
+      renumber();
+      down.focus();
+    });
+    const remove = button('Remove', () => {
+      const next = group.nextElementSibling ?? group.previousElementSibling;
+      group.remove();
+      renumber();
+      (next ? next.querySelector('select') : addQuestion).focus();
+    });
+    up.classList.add('up');
+    down.classList.add('down');
+    remove.classList.add('remove');
+    moves.append(up, down, remove);
+    group.append(
+      field('Asked', null, listSelect),
+      field('Name', 'A lower-case letter, then lower-case letters, digits and "_", up to 30 in all. The answer\'s column is q_ plus this name.', name),
+      field('Question', 'One line, up to 1,000 characters.', text),
+      field('Type', null, typeSelect),
+      field('Options', 'One per line, 2 to 20, each up to 200 characters and without "|". Blank lines are skipped. The answer is the number of the chosen option, counted from 1, so keep the order the same in every link of a study.', options, 'options-field'),
+      bounds,
+      requiredLabel,
+      moves,
+    );
+    typeSelect.addEventListener('change', () => showType(group));
+    showType(group);
+    questionList.append(group);
+    renumber();
+    return group;
+  }
+
+  addQuestion.addEventListener('click', () => addGroup().querySelector('select').focus());
+
+  // The editor's questions as a link's `questions` field, or undefined when
+  // there are none. Each group's fields are read as the form page's check
+  // reads a link: an empty name or text is left out, and a minimum or maximum
+  // that is not digits with an optional minus sign, or that holds more digits
+  // than a JavaScript number keeps exactly, is passed on as typed, so the
+  // check names it as typed. The text and the options are read from the controls,
+  // not a FormData, which would hold a lone surrogate as U+FFFD. The check
+  // runs with the editor's own numbers in its messages.
+  function readQuestions() {
+    const groups = [...questionList.children];
+    if (groups.length === 0) return undefined;
+    const lists = { before: [], after: [] };
+    const numbers = { before: [], after: [] };
+    groups.forEach((group, k) => {
+      const get = (name) => group.querySelector(`[name=${name}]`);
+      const q = {};
+      const name = get('qName').value.trim();
+      if (name !== '') q.name = name;
+      const text = get('qText').value;
+      if (text !== '') q.text = text;
+      q.type = get('qType').value;
+      if (q.type === 'choice' || q.type === 'multi') {
+        q.options = get('qOptions').value.split('\n').filter((line) => line.trim() !== '');
+      }
+      if (q.type === 'number') {
+        for (const [bound, input] of [['min', 'qMin'], ['max', 'qMax']]) {
+          const typed = get(input).value.trim();
+          if (typed === '') continue;
+          // A bound out of range is passed on as typed, so the refusal
+          // quotes the digits the researcher typed.
+          const n = Number(typed);
+          q[bound] = /^-?\d+$/.test(typed) && Math.abs(n) <= QUESTION_INT_MAX ? n : typed;
+        }
+      }
+      if (get('qRequired').checked) q.required = true;
+      const list = get('qList').value;
+      lists[list].push(q);
+      numbers[list].push(k + 1);
+    });
+    const questions = {};
+    for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
+    return checkQuestions(questions, {
+      bad: (why) => new Error(`The questions could not be used: ${why}`),
+      where: (list, i) => `question ${numbers[list][i]}`,
+    });
+  }
 
   // A study link's own `c` or `z` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
@@ -335,6 +537,14 @@
       text('declinedText', config.consent.declined);
     }
     address('completeDeclined', 'Completion URL after a decline', config.completeDeclined);
+    // One group per question that is an object, the before list first, each
+    // field filled where it is of the type its control takes.
+    if (isPlainObject(config.questions)) {
+      for (const list of ['before', 'after']) {
+        const qs = config.questions[list];
+        if (Array.isArray(qs)) for (const q of qs) if (isPlainObject(q)) addGroup(list, q);
+      }
+    }
     f.elements.shuffle.checked = config.shuffle === true;
     // The site follows the link's fields: Prolific for prolific: true, SONA
     // for participantParam "id", Connect for "participantId", another site
@@ -370,6 +580,7 @@
     notice.hidden = filled.length === 0;
   } catch {
     f.reset();
+    questionList.replaceChildren();
     refuse('could not be read.');
   }
   showKind();
@@ -539,6 +750,15 @@
         }
       }
     }
+    // The questions take the form page's own check, each named by its
+    // number in the editor.
+    try {
+      const questions = readQuestions();
+      if (questions !== undefined) config.questions = questions;
+    } catch (e) {
+      err.textContent = e.message;
+      return;
+    }
     const text = data.get('module').trim();
     if (text !== '') {
       let m;
@@ -587,11 +807,11 @@
         err.textContent = e.message;
         return;
       }
-      sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific);
+      sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
       sqlBlock.hidden = false;
     }
-    // A link with consent text is written as ?z=, compressed, and any other
-    // as ?c=.
+    // A link with consent text or questions is written as ?z=, compressed,
+    // and any other as ?c=.
     const url = new URL('./', window.location.href);
     try {
       url.search = `?${await encodeLink(config)}`;
