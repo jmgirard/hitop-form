@@ -36,10 +36,18 @@
 //       with its cc code, and a SONA-shaped address whose {participant} is
 //       filled with the identifier from the address or, with none, the
 //       empty string; the store and download assertions of C5 hold
+//
+// The columns, each pair walked or built with and without consent, with
+// shuffle off and on:
+//
+//   C7: the saved file's header, the posted row's keys, and the SQL the
+//       builder shows for a Supabase table are the same under both links
 
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import {
-  useTarget, useStore, allowLocalStore, openForm, webhook, supabase,
+  useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
+  leadColumns,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -291,4 +299,70 @@ for (const c of DECLINED_CASES) {
       });
     }
   }
+}
+
+// ---- The columns ----------------------------------------------------------
+
+// Opens the link, presses "I agree" when it carries consent, and walks the
+// form to Finish.
+async function walkLink(page, config) {
+  await openForm(page, base(), config, { param: config.consent ? 'z' : 'c' });
+  if (config.consent) await page.getByRole('button', { name: 'I agree' }).click();
+  await begin(page);
+  await walkAll(page);
+}
+
+// C7
+for (const shuffle of [false, true]) {
+  const extra = shuffle ? { shuffle } : {};
+  const under = shuffle ? ' under shuffle' : '';
+
+  test(`the saved file's header is the same with and without consent${under}`, async ({ page }) => {
+    const headers = [];
+    for (const consent of [{ consent: { text: TEXT } }, {}]) {
+      const downloading = awaitDownload(page);
+      await walkLink(page, { ...LINK, ...extra, ...consent });
+      headers.push(parseCsv(await readFile(await (await downloading).path(), 'utf8'))[0]);
+    }
+    expect(headers[0].slice(0, leadColumns({ shuffle }).length)).toEqual(leadColumns({ shuffle }));
+    expect(headers[0]).toEqual(headers[1]);
+  });
+
+  test(`the posted row's keys are the same with and without consent${under}`, async ({ page }) => {
+    const rows = [];
+    for (const consent of [{ consent: { text: TEXT } }, {}]) {
+      const from = store().requests.length;
+      await walkLink(page, { ...LINK, ...extra, ...consent, store: webhook(store()) });
+      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
+      expect(sent.length).toBe(1);
+      rows.push(JSON.parse(sent[0].body));
+    }
+    expect(Object.keys(rows[0]).slice(0, leadColumns({ shuffle }).length)).toEqual(leadColumns({ shuffle }));
+    expect(Object.keys(rows[0])).toEqual(Object.keys(rows[1]));
+  });
+
+  test(`the builder's Supabase SQL is the same with and without consent${under}`, async ({ page }) => {
+    const sqls = [];
+    for (const consent of [TEXT, '']) {
+      await page.goto(`${base()}link.html`);
+      await page.locator('select[name="instrument"]').selectOption('hitopbr');
+      await page.locator('input[name="study"]').fill('consent');
+      if (shuffle) await page.locator('input[name="shuffle"]').check();
+      await page.locator('textarea[name="consentText"]').fill(consent);
+      await page.locator('select[name="storeKind"]').selectOption('supabase');
+      await page.locator('input[name="supabaseUrl"]').fill('https://abcdefghijkl.supabase.co');
+      await page.locator('input[name="supabaseKey"]').fill('sb_publishable_x');
+      await page.locator('input[name="supabaseTable"]').fill('responses');
+      await page.getByRole('button', { name: 'Make the link' }).click();
+      await expect(page.locator('#sqlBlock')).toBeVisible();
+      await expect(page.locator('#err')).toHaveText('');
+      const href = await page.locator('#out').textContent();
+      expect([...new URL(href).searchParams.keys()]).toEqual([consent ? 'z' : 'c']);
+      sqls.push(await page.locator('#sql').inputValue());
+    }
+    expect(sqls[0]).toContain('create table "responses" (');
+    expect(sqls[0].includes('"item_order" text')).toBe(shuffle);
+    expect(sqls[0]).toBe(sqls[1]);
+  });
 }
