@@ -18,13 +18,35 @@
 //   P7: with shuffle off and with shuffle on, the saved file's header and
 //       the posted row's keys under participantParam equal those of the
 //       same link without it, the identifier given as participant instead
+//
+// The {participant} token in a completion address, on a SONA-shaped
+// address. Each use of the address, and each source of the identifier:
+//
+//   P8: a confirmed send, identifier "a&b c" from the address: at the held
+//       navigation request the sent screen's link is the filled address,
+//       and the one navigation goes there
+//   P9: a confirmed send under prolific: true, identifier 12345 from
+//       PROLIFIC_PID: the one navigation goes to the filled address
+//   P10: no store, identifier "a&b c" typed on the start screen: the saved
+//       screen links to the filled complete address, and nothing is
+//       requested of it
+//   P11: no store, identifier 12345 from the link's participant field, with
+//       complete and completeSaved both holding the token: the saved screen
+//       links to the filled completeSaved address
+//   P12: an unconfirmed send, identifier "a&b c" from the address: the
+//       saved screen links to the filled complete address
+//   P13: an address without the token, under participantParam, is linked
+//       unchanged
+//   P14: fillParticipant() itself: each token replaced, the value encoded
+//       as one query value, an address without the token unchanged
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
+  prolificQuery, COMPLETE_URL,
 } from './helpers.mjs';
-import { readParticipantParam } from '../form.js';
+import { readParticipantParam, fillParticipant } from '../form.js';
 
 const base = useTarget();
 const store = useStore();
@@ -152,3 +174,153 @@ for (const shuffle of [false, true]) {
     expect(rows[0].participant).toBe(SONA_CODE);
   });
 }
+
+// ---- The {participant} token ---------------------------------------------
+
+// SONA's client-side completion address with the token where SONA's
+// documentation puts XXXX, and a saved-file address on another host so a
+// test tells the two apart. Neither is fetched for real: a route answers.
+const SONA_COMPLETE = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}';
+const SAVED_COMPLETE = 'https://saved.example.org/done?code={participant}&from=saved';
+// The filled addresses, written out rather than computed with the code
+// under test.
+const SONA_FILLED_ABC = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=a%26b%20c';
+const SONA_FILLED_12345 = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=12345';
+const SAVED_FILLED_12345 = 'https://saved.example.org/done?code=12345&from=saved';
+const ABC_QUERY = '&id=a%26b%20c';
+
+// Answers every request to an address on either completion host, holding
+// each until `release()` when `hold` is set, and records its URL.
+async function serveCompletion(page, { hold = false } = {}) {
+  const requests = [];
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route((url) => url.hostname === 'yourschool.sona-systems.com' || url.hostname === 'saved.example.org', async (route) => {
+    requests.push(route.request().url());
+    if (hold) await held;
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><html><head><title>Credit</title></head><body><h1>Credit granted</h1></body></html>',
+    });
+  });
+  return { requests, release };
+}
+
+// The document at the moment of a navigation request, reported through a
+// mutation observer (a locator waits on the pending navigation).
+async function observeLink(page) {
+  const states = [];
+  await page.exposeFunction('noteLink', (s) => states.push(s));
+  await page.evaluate(`(() => {
+    const snap = () => ({
+      h1: document.querySelector('h1')?.textContent ?? null,
+      href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+      text: document.querySelector('p.complete a')?.textContent ?? null,
+    });
+    new MutationObserver(() => window.noteLink(snap())).observe(document.body, { childList: true, subtree: true });
+  })()`);
+  return states;
+}
+
+// P8
+test('a confirmed send fills the token with the identifier from the address in the sent screen link and the navigation', async ({ page }) => {
+  const { requests, release } = await serveCompletion(page, { hold: true });
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', participantParam: 'id', store: webhook(store(), '/record'), complete: SONA_COMPLETE,
+  }, { extra: ABC_QUERY });
+  await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+  await begin(page);
+  const states = await observeLink(page);
+  await walkAll(page);
+  await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  expect(states.at(-1), 'the sent screen at the request').toEqual({
+    h1: 'Thank you', href: SONA_FILLED_ABC, text: 'yourschool.sona-systems.com',
+  });
+  release();
+  await expect(page).toHaveURL(SONA_FILLED_ABC);
+  expect(requests).toEqual([SONA_FILLED_ABC]);
+});
+
+// P9
+test('a confirmed send under prolific fills the token with the PROLIFIC_PID', async ({ page }) => {
+  const { requests } = await serveCompletion(page);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', prolific: true, store: webhook(store(), '/record'), complete: SONA_COMPLETE,
+  }, { extra: prolificQuery({ pid: '12345' }) });
+  await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+  await begin(page);
+  await walkAll(page);
+  await expect(page).toHaveURL(SONA_FILLED_12345);
+  expect(requests).toEqual([SONA_FILLED_12345]);
+});
+
+// P10
+test('with no store, the saved screen links to complete filled with the identifier typed on the start screen', async ({ page }) => {
+  const { requests } = await serveCompletion(page);
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'recruit', participantParam: 'id', complete: SONA_COMPLETE });
+  await begin(page, 'a&b c');
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveAttribute('href', SONA_FILLED_ABC);
+  await expect(link).toHaveText('yourschool.sona-systems.com');
+  await page.waitForTimeout(2000);
+  expect(requests, 'nothing requested of the completion address').toEqual([]);
+});
+
+// P11
+test('with no store, the saved screen links to completeSaved filled with the link\'s participant', async ({ page }) => {
+  const { requests } = await serveCompletion(page);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', participant: '12345', complete: SONA_COMPLETE, completeSaved: SAVED_COMPLETE,
+  });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  const link = page.locator('p.complete a');
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute('href', SAVED_FILLED_12345);
+  await expect(link).toHaveText('saved.example.org');
+  await page.waitForTimeout(2000);
+  expect(requests, 'nothing requested of either address').toEqual([]);
+});
+
+// P12
+test('an unconfirmed send links to complete filled with the identifier from the address', async ({ page }) => {
+  const { requests } = await serveCompletion(page);
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', participantParam: 'id', store: webhook(store(), '/status/500'), complete: SONA_COMPLETE,
+  }, { extra: ABC_QUERY });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('p.complete a')).toHaveAttribute('href', SONA_FILLED_ABC);
+  await page.waitForTimeout(2000);
+  expect(requests, 'nothing requested of the completion address').toEqual([]);
+});
+
+// P13
+test('under participantParam, a completion address without the token is linked unchanged', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'recruit', participantParam: 'id', complete: COMPLETE_URL }, {
+    extra: '&id=30039',
+  });
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  await expect(page.locator('p.complete a')).toHaveAttribute('href', COMPLETE_URL);
+});
+
+// P14: read in Node from form.js.
+test('fillParticipant() replaces each token with the encoded identifier', () => {
+  expect(fillParticipant(SONA_COMPLETE, 'a&b c')).toBe(SONA_FILLED_ABC);
+  expect(fillParticipant('https://example.org/done?a={participant}&b={participant}#c={participant}', 'x/y?z'))
+    .toBe('https://example.org/done?a=x%2Fy%3Fz&b=x%2Fy%3Fz#c=x%2Fy%3Fz');
+  expect(fillParticipant(COMPLETE_URL, 'a&b c'), 'no token').toBe(COMPLETE_URL);
+  expect(fillParticipant('https://example.org/done?code={participant}', 'ü#1')).toBe('https://example.org/done?code=%C3%BC%231');
+});

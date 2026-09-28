@@ -47,6 +47,10 @@
 //       beside prolific: true is refused naming both; a blank participant
 //       beside it is dropped and the name accepted; a 64-character name and
 //       names holding "." and "-" are accepted
+//   G15: a complete or completeSaved address holding the {participant}
+//       token in its path (typed with braces or as %7Bparticipant%7D) or in
+//       its host is refused by name with the value shown; the token in the
+//       query, in the fragment, or twice in the query is accepted
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -472,6 +476,38 @@ for (const participantParam of ['id', 'participantId', 'survey.code-1', 'q'.repe
     await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
     await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
   });
+}
+
+// G15: where the {participant} token may stand in a completion address.
+const TOKEN_REFUSED = [
+  'https://example.org/{participant}/done',
+  'https://example.org/done/%7Bparticipant%7D',
+  'https://example.org/done/%7bparticipant%7d',
+  'https://{participant}.example.org/done',
+];
+const TOKEN_ACCEPTED = [
+  'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}',
+  'https://example.org/done#code={participant}',
+  'https://example.org/done?a={participant}&b={participant}',
+];
+for (const field of ['complete', 'completeSaved']) {
+  for (const address of TOKEN_REFUSED) {
+    test(`a ${field} address with the token outside the query, ${address}, is refused naming the token`, async ({ page }) => {
+      const config = { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address };
+      await openForm(page, base(), config);
+      await expect(page.locator('[role=alert]')).toHaveText(
+        `The study link's ${field} field could not be used: the {participant} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(address)}.`,
+      );
+      await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    });
+  }
+  for (const address of TOKEN_ACCEPTED) {
+    test(`a ${field} address with the token in ${address.includes('#') ? 'the fragment' : 'the query'}, ${address.slice(8, 40)}…, is accepted`, async ({ page }) => {
+      await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address });
+      await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+      await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+    });
+  }
 }
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {

@@ -24,6 +24,14 @@
 // makes one further request with `complete`, that navigation, and only
 // after the store confirmed; the saved screens' link is followed by the
 // participant or not at all.
+//
+// For another recruiting site, `participantParam` names the address
+// parameter the site fills with the participant identifier (`id` for a SONA
+// study URL ending in `id=%SURVEY_CODE%`, `participantId` for CloudResearch
+// Connect), and no column is added. A `{participant}` in the query or
+// fragment of `complete` or `completeSaved` is replaced by the identifier,
+// whatever its source, for a completion address that carries each
+// participant's code, as SONA's does.
 
 export const EXPORT_BASE = 'https://jmgirard.github.io/hitop/downloads/';
 export const EXPORT_FORMAT = '1.0';
@@ -303,6 +311,16 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
 // nothing else. The loopback exception above is for the tests' recording
 // endpoint, which a completion address never is. link.html runs the same
 // check on the builder's completion field.
+//
+// The address may hold the token `{participant}` in its query or fragment,
+// which the page replaces with the participant identifier before it uses
+// the address (fillParticipant()), for a site whose completion address
+// carries each participant's own code, as SONA's `survey_code=` does. A
+// URL keeps the braces there as typed. In the path it encodes them, and a
+// token in the host would give a host the identifier cannot fill, so the
+// token is refused in either, in its typed or its encoded form.
+export const PARTICIPANT_TOKEN = '{participant}';
+
 export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
   // A value that is not text is refused with the value shown, as every
   // other refusal of this field shows it.
@@ -312,7 +330,19 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
   refuseCredentials(u, url, bad, 'it');
+  const token = /\{participant\}|%7bparticipant%7d/i;
+  if (token.test(u.host) || token.test(u.pathname)) {
+    throw bad(`the ${PARTICIPANT_TOKEN} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(url)}.`);
+  }
   return u.href;
+}
+
+// A completion address with each `{participant}` replaced by the
+// identifier, encoded as one query value. checkCompleteUrl() has kept the
+// token out of the host and the path, so every token left is in the query
+// or the fragment. An address without the token comes back unchanged.
+export function fillParticipant(address, participant) {
+  return address.split(PARTICIPANT_TOKEN).join(encodeURIComponent(participant));
 }
 
 // The parse the two address checks share: text, then a URL. `what` names
@@ -969,6 +999,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     sending = false;
     finished = true;
     if (outcome.confirmed) {
+      const complete = config.complete === undefined ? undefined : fillParticipant(config.complete, participant);
       // The sent screen is drawn first either way. With a completion
       // address a link there takes the place of "You can close this
       // page.", and the page then navigates there, as Prolific recommends:
@@ -978,17 +1009,17 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       root.replaceChildren(
         heading('Thank you'),
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
-        config.complete === undefined
+        complete === undefined
           ? el('p', { text: 'You can close this page.' })
           : el('p', { class: 'complete' }, [
               'Continue to ',
-              el('a', { href: config.complete, text: new URL(config.complete).host }),
+              el('a', { href: complete, text: new URL(complete).host }),
               '.',
             ]),
         versionLine(exp),
       );
       focusHeading(root);
-      if (config.complete !== undefined) window.location.assign(config.complete);
+      if (complete !== undefined) window.location.assign(complete);
       return;
     }
     showSaved(
@@ -1010,7 +1041,8 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
   // name, labelled by its host, and navigate nowhere on their own. The
-  // address is `completeSaved` when the link carries one, else `complete`.
+  // address is `completeSaved` when the link carries one, else `complete`,
+  // each `{participant}` in it filled with the identifier.
   // The trail paragraph ends by naming the "Save the file" button below it,
   // which saves the file again with the name and text saved at Finish. A
   // status region under the button is rendered empty, so it exists before
@@ -1018,7 +1050,8 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   // `role="status"` marks the write for a screen reader to announce. Focus
   // is not moved, so after a keyboard press it stays on the button.
   function showSaved({ name, text }, lead, trail) {
-    const address = config.completeSaved ?? config.complete;
+    const given = config.completeSaved ?? config.complete;
+    const address = given === undefined ? undefined : fillParticipant(given, participant);
     const complete = address === undefined
       ? []
       : [el('p', { class: 'complete' }, [
