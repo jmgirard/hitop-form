@@ -1007,16 +1007,29 @@ function leadValues({ study, participant, instrument, formBuild, submitted, item
   ];
 }
 
+// The trailing columns of the row, the file and the table: `q_` plus each
+// question's name, the `before` list first, each list in the link's order.
+// None for a config with no `questions`.
+export function questionColumns({ questions } = {}) {
+  return QUESTION_LISTS.flatMap((list) => (questions?.[list] ?? []).map((q) => `q_${q.name}`));
+}
+
+// The trailing values of one record, in questionColumns() order: each
+// question's string from `questionValues` (runForm()'s questionValue()).
+function questionCells({ questions, questionValues }) {
+  return QUESTION_LISTS.flatMap((list) => (questions?.[list] ?? []).map((q) => questionValues.get(q.name)));
+}
+
 // One header row and one data row. `answers` maps item number to the chosen
 // option value. `items` is the column order; the lead columns are
 // leadColumns()' for the record's `itemOrder` and `prolific`. Without either
-// the file has five lead columns.
+// the file has five lead columns. The question columns follow the items.
 export function buildCsv(record) {
   const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const row = leadValues(record);
-  header.push(...items.map((it) => it.name));
-  row.push(...items.map((it) => answers.get(it.number)));
+  header.push(...items.map((it) => it.name), ...questionColumns(record));
+  row.push(...items.map((it) => answers.get(it.number)), ...questionCells(record));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
 }
 
@@ -1032,13 +1045,16 @@ export const SEND_TIMEOUT_MS = 30_000;
 
 // One JSON object per finished form: the lead fields buildCsv() writes as
 // columns, key for column and in the same order, then one key per item in
-// `items` order, each value the chosen option's integer value.
+// `items` order, each value the chosen option's integer value, then one
+// string per question, keyed and ordered as questionColumns().
 export function buildRow(record) {
   const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const values = leadValues(record);
   const row = Object.fromEntries(header.map((k, i) => [k, values[i]]));
   for (const it of items) row[it.name] = answers.get(it.number);
+  const cells = questionCells(record);
+  questionColumns(record).forEach((k, i) => { row[k] = cells[i]; });
   return row;
 }
 
