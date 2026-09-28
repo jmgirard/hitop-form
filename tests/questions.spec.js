@@ -135,7 +135,7 @@ const ACCEPTED = [
   { name: 'min and max at the ends of the range', questions: { before: [{ ...NUMBER_Q, min: -2_147_483_647, max: 2_147_483_647 }] } },
   { name: 'min equal to max', questions: { before: [{ ...NUMBER_Q, min: 3, max: 3, required: true }] } },
   { name: 'a text holding a paired character', questions: { before: [{ ...TEXT_Q, text: 'How do you feel? 😀' }] } },
-  { name: 'a text and an option holding a tab and a no-break space', questions: { before: [{ ...CHOICE_Q, text: 'Your\tcolour', options: ['Red', `Bl\tue${String.fromCharCode(0xa0)}green`] }] } },
+  { name: 'a text and an option holding a tab and a no-break space', questions: { before: [{ ...CHOICE_Q, text: `Your\tcolour${String.fromCharCode(0xa0)}now`, options: ['Red', `Bl\tue${String.fromCharCode(0xa0)}green`] }] } },
 ];
 
 for (const probe of ACCEPTED) {
