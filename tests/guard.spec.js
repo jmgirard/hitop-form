@@ -57,13 +57,19 @@
 //       one as %7B and %7D; both as %257B and %257D; doubled braces; a
 //       space inside the braces, each alone) is refused naming that
 //       spelling as the address holds it, with the address shown
+//   G17: a link whose participant holds an unpaired surrogate (a lone high
+//       or low one, alone or at the start, middle or end; a low before a
+//       high; a high before a valid pair) is refused with one message, and
+//       no form starts, also with no completion address in the link; an
+//       identifier holding a paired character (U+1F600)
+//       is accepted and fills the completion address with its encoding
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, JWT_SHAPED_KEY,
+  useTarget, openForm, begin, walkAll, awaitDownload, fetchExport, readDescriptor, JWT_SHAPED_KEY,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor,
 } from './helpers.mjs';
 
@@ -541,6 +547,50 @@ for (const field of ['complete', 'completeSaved']) {
     });
   }
 }
+
+// G17: an identifier with an unpaired surrogate cannot be written into a
+// completion address (encodeURIComponent() throws on one), so the link is
+// refused before the form starts. The test's encodeConfig() writes the
+// surrogate as a \u escape in the JSON, which the page's JSON.parse() reads
+// back as the lone code unit.
+const HIGH = '\ud800';
+const LOW = '\udc00';
+const BROKEN_IDS = [
+  ...[HIGH, LOW].flatMap((s) => [s, `${s}abc`, `ab${s}c`, `abc${s}`]),
+  `${LOW}${HIGH}`,
+  `${HIGH}\u{1F600}`,
+];
+for (const participant of BROKEN_IDS) {
+  const shown = [...participant].map((ch) => (ch.length === 1 && /[\ud800-\udfff]/.test(ch) ? `\\u${ch.charCodeAt(0).toString(16)}` : ch)).join('');
+  test(`a participant of "${shown}" is refused, and no form starts`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant, complete: COMPLETE_OK });
+    await expect(page.locator('[role=alert]')).toHaveText(
+      'The study link carries a participant identifier with a character that cannot be written.',
+    );
+    await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+}
+
+test('a participant holding a lone surrogate is refused with no completion address in the link', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: `ab${HIGH}c` });
+  await expect(page.locator('[role=alert]')).toHaveText(
+    'The study link carries a participant identifier with a character that cannot be written.',
+  );
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
+});
+
+test('a participant holding a paired character is accepted and fills the completion address with its encoding', async ({ page }) => {
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'guard', participant: 'p\u{1F600}', complete: 'https://example.org/done?code={participant}',
+  });
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  await expect(page.locator('p.complete a')).toHaveAttribute('href', 'https://example.org/done?code=p%F0%9F%98%80');
+});
 
 test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');

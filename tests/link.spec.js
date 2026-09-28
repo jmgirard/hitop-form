@@ -122,6 +122,11 @@
 //       and another spelling of it after the ? or the #; no link is built
 //  L31: the menu is described by the chosen site's hint for Prolific, SONA
 //       and Connect, and by none for None and another site
+//  L32: another site refuses "id", " id " and "participantId", naming the
+//       choice that writes the name; no link is built
+//  L33: a participant field prefilled from a c with an unpaired surrogate is
+//       refused and no link is built; a participant holding U+1F600
+//       round-trips
 
 import { test, expect } from '@playwright/test';
 import {
@@ -956,15 +961,55 @@ for (const c of [
   });
 }
 
-// L27: a c parameter selects the site its fields name and round-trips; a
+// L32: another site refuses the two names the SONA and Connect choices
+// write, trimmed first, so a link with either name always reloads as the
+// choice that made it; no link is built.
+for (const c of [
+  { param: 'id', names: 'The address parameter could not be used: "id" is the name SONA fills. For a SONA study choose SONA as the recruiting site.' },
+  { param: ' id ', names: 'The address parameter could not be used: "id" is the name SONA fills. For a SONA study choose SONA as the recruiting site.' },
+  { param: 'participantId', names: 'The address parameter could not be used: "participantId" is the name CloudResearch Connect fills. For a CloudResearch Connect study choose CloudResearch Connect as the recruiting site.' },
+]) {
+  test(`another site refuses the address parameter ${JSON.stringify(c.param)}`, async ({ page }) => {
+    const { err, href } = await buildSite(page, { site: 'other', param: c.param });
+    expect(err).toBe(c.names);
+    expect(href, 'no link is built').toBe('');
+  });
+}
+
+// L33: FormData would write an unpaired surrogate as U+FFFD, so the builder
+// refuses a participant field holding one. Only a c can put one
+// in: Node's JSON.stringify() writes it as a \u escape, which the page's
+// JSON.parse() reads back as the lone code unit. The field is read back
+// before the build to show the surrogate is there.
+for (const [name, participant] of [['a lone high', 'a\ud800b'], ['a lone low', 'a\udc00b'], ['a low before a high', '\udc00\ud800']]) {
+  test(`the builder refuses a participant field holding ${name} surrogate`, async ({ page }) => {
+    await openBuilder(page, { config: { instrument: 'hitopbr', study: 'prefill', participant } });
+    const held = await page.locator('input[name="participant"]').evaluate((el) => [...el.value].map((ch) => ch.codePointAt(0)));
+    expect(held, 'the field holds the surrogate').toEqual([...participant].map((ch) => ch.codePointAt(0)));
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    expect(await page.locator('#err').textContent()).toBe('The participant field holds a character that cannot be written. Type the identifier again.');
+    expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
+  });
+}
+
+test('the builder keeps a participant holding a paired character', async ({ page }) => {
+  const config = { instrument: 'hitopbr', study: 'prefill', participant: 'p\u{1F600}' };
+  await openBuilder(page, { config });
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  expect(await page.locator('#err').textContent()).toBe('');
+  expect(decodeLink(await page.locator('#out').textContent())).toEqual(config);
+});
+
+// L27: a c parameter selects the site its fields name and round-trips, the
+// printed link ending in that site's ending after the c value; a
 // participantParam that is not text is skipped and selects none.
 for (const c of [
-  { name: 'no site', config: {}, site: '', field: '' },
-  { name: 'Prolific', config: { prolific: true }, site: 'prolific', field: '' },
-  { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '' },
-  { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '' },
-  { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId' },
-  { name: 'a participantParam that is not text, left out of the rebuilt link', config: { participantParam: 7 }, site: '', field: '', built: {} },
+  { name: 'no site', config: {}, site: '', field: '', suffix: '' },
+  { name: 'Prolific', config: { prolific: true }, site: 'prolific', field: '', suffix: PLACEHOLDERS },
+  { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '', suffix: '&id=%SURVEY_CODE%' },
+  { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '', suffix: '' },
+  { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId', suffix: '' },
+  { name: 'a participantParam that is not text, left out of the rebuilt link', config: { participantParam: 7 }, site: '', field: '', built: {}, suffix: '' },
 ]) {
   test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
@@ -976,7 +1021,9 @@ for (const c of [
     await page.getByRole('button', { name: 'Make the link' }).click();
     expect(await page.locator('#err').textContent()).toBe('');
     const expected = c.built === undefined ? config : { instrument: 'hitopbr', study: 'prefill', ...c.built };
-    expect(decodeLink(await page.locator('#out').textContent())).toEqual(expected);
+    const printed = await page.locator('#out').textContent();
+    expect(decodeLink(printed)).toEqual(expected);
+    expect(printed, 'the text after the c value is the site\'s ending').toBe(bare(printed) + c.suffix);
   });
 }
 

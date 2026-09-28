@@ -37,10 +37,22 @@
 //       links to the filled completeSaved address
 //   P12: an unconfirmed send, identifier "a&b c" from the address: the
 //       saved screen links to the filled complete address
-//   P13: an address without the token, under participantParam, is linked
-//       unchanged
+//   P13: an address without the token, under participantParam, is used as
+//       the link check returns it (its parsed href): the navigation and the
+//       sent screen's link after a confirmed send, and the saved screen's
+//       link to complete and to completeSaved after a walk with no store,
+//       two of the addresses given with an uppercase host the parse
+//       lowercases
 //   P14: fillParticipant() itself: each token replaced, the value encoded
 //       as one query value, an address without the token unchanged
+//
+// An identifier holding an unpaired surrogate, which cannot be encoded:
+//
+//   P15: the start screen refuses one entered as a lone high, a lone low,
+//       and a low before a high surrogate, with one message; no item shows
+//   P16: an address value percent-encoding a surrogate (%ED%A0%80) arrives
+//       as three U+FFFD characters, and the sent screen links to the
+//       address filled with them
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -307,17 +319,54 @@ test('an unconfirmed send links to complete filled with the identifier from the 
   expect(requests, 'nothing requested of the completion address').toEqual([]);
 });
 
-// P13
-test('under participantParam, a completion address without the token is linked unchanged', async ({ page }) => {
-  await openForm(page, base(), { instrument: 'hitopbr', study: 'recruit', participantParam: 'id', complete: COMPLETE_URL }, {
-    extra: '&id=30039',
+// P13: an address without the token, as the link check returns it (the
+// parsed address's href), at each use. EXAMPLE_GIVEN is one the parse
+// changes: the host is lowercased. The parsed forms are written out rather
+// than computed with the code under test.
+const EXAMPLE_GIVEN = 'https://Example.org/done?x=1';
+const EXAMPLE_PARSED = 'https://example.org/done?x=1';
+const EXAMPLE_SAVED_GIVEN = 'https://Example.org/saved?y=2';
+const EXAMPLE_SAVED_PARSED = 'https://example.org/saved?y=2';
+
+test('under participantParam, a confirmed send uses a completion address without the token as parsed, in the sent screen link and the navigation', async ({ page }) => {
+  const requests = [];
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route((url) => url.hostname === 'example.org', async (route) => {
+    requests.push(route.request().url());
+    await held;
+    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>Done</title><h1>Done</h1>' });
   });
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', participantParam: 'id', store: webhook(store(), '/record'), complete: EXAMPLE_GIVEN,
+  }, { extra: `&id=${SONA_CODE}` });
   await begin(page);
-  const downloading = awaitDownload(page);
+  const states = await observeLink(page);
   await walkAll(page);
-  await downloading;
-  await expect(page.locator('p.complete a')).toHaveAttribute('href', COMPLETE_URL);
+  await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: 'example.org' });
+  release();
+  await expect(page).toHaveURL(EXAMPLE_PARSED);
+  expect(requests).toEqual([EXAMPLE_PARSED]);
 });
+
+for (const c of [
+  { name: 'complete', config: { complete: COMPLETE_URL }, href: COMPLETE_URL },
+  { name: 'complete, in a form the parse changes', config: { complete: EXAMPLE_GIVEN }, href: EXAMPLE_PARSED },
+  { name: 'completeSaved', config: { complete: EXAMPLE_GIVEN, completeSaved: EXAMPLE_SAVED_GIVEN }, href: EXAMPLE_SAVED_PARSED },
+]) {
+  test(`under participantParam, the saved screen links to ${c.name} without the token as parsed`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'recruit', participantParam: 'id', ...c.config }, {
+      extra: `&id=${SONA_CODE}`,
+    });
+    await begin(page);
+    const downloading = awaitDownload(page);
+    await walkAll(page);
+    await downloading;
+    await expect(page.locator('p.complete a')).toHaveCount(1);
+    await expect(page.locator('p.complete a')).toHaveAttribute('href', c.href);
+  });
+}
 
 // P14: read in Node from form.js.
 test('fillParticipant() replaces each token with the encoded identifier', () => {
@@ -326,4 +375,50 @@ test('fillParticipant() replaces each token with the encoded identifier', () => 
     .toBe('https://example.org/done?a=x%2Fy%3Fz&b=x%2Fy%3Fz#c=x%2Fy%3Fz');
   expect(fillParticipant(COMPLETE_URL, 'a&b c'), 'no token').toBe(COMPLETE_URL);
   expect(fillParticipant('https://example.org/done?code={participant}', 'ü#1')).toBe('https://example.org/done?code=%C3%BC%231');
+});
+
+// P15: Playwright's fill() and typing replace a lone surrogate with U+FFFD,
+// so the field is set by script through the page, and its value read
+// back before Begin to show the surrogate is there.
+for (const [name, value] of [['a lone high', 'a\ud800b'], ['a lone low', 'a\udc00b'], ['a low before a high', '\udc00\ud800']]) {
+  test(`the start screen refuses an identifier holding ${name} surrogate, and no item shows`, async ({ page }) => {
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'recruit', participantParam: 'id', complete: SONA_COMPLETE });
+    const input = page.locator('input[name="participant"]');
+    await expect(input).toBeVisible();
+    const held = await input.evaluate((el, v) => {
+      el.value = v;
+      return [...el.value].map((ch) => ch.codePointAt(0));
+    }, value);
+    expect(held, 'the field holds the surrogate').toEqual([...value].map((ch) => ch.codePointAt(0)));
+    await page.getByRole('button', { name: 'Begin' }).click();
+    await expect(page.locator('[role=alert]')).toHaveText('Your participant identifier holds a character this page cannot read. Please type it again.');
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+    await expect(page.locator('.progress')).toHaveCount(0);
+    await expect(input).toBeVisible();
+  });
+}
+
+// P16
+test('an address value encoding a surrogate arrives as replacement characters, and the sent screen links to the filled address', async ({ page }) => {
+  const requests = [];
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route((url) => url.hostname === 'example.org', async (route) => {
+    requests.push(route.request().url());
+    await held;
+    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>Done</title><h1>Done</h1>' });
+  });
+  await openForm(page, base(), {
+    instrument: 'hitopbr', study: 'recruit', participantParam: 'id', store: webhook(store(), '/record'), complete: 'https://example.org/done?code={participant}',
+  }, { extra: '&id=%ED%A0%80' });
+  await expect(page.locator('input[name="participant"]')).toHaveCount(0);
+  await begin(page);
+  const states = await observeLink(page);
+  await walkAll(page);
+  await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  const filled = 'https://example.org/done?code=%EF%BF%BD%EF%BF%BD%EF%BF%BD';
+  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: 'example.org' });
+  release();
+  await expect(page).toHaveURL(filled);
+  expect(requests).toEqual([filled]);
 });

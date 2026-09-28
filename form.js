@@ -104,6 +104,9 @@ export function parseLink(search) {
   if (config.participant !== undefined && typeof config.participant !== 'string') {
     throw new Error('The study link carries a participant identifier that is not text.');
   }
+  if (typeof config.participant === 'string' && !isWritableIdentifier(config.participant)) {
+    throw new Error('The study link carries a participant identifier with a character that cannot be written.');
+  }
   // A blank identifier is no identifier: the start screen asks for one.
   if (typeof config.participant === 'string' && config.participant.trim() === '') {
     delete config.participant;
@@ -358,6 +361,21 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
 // or the fragment. An address without the token comes back unchanged.
 export function fillParticipant(address, participant) {
   return address.split(PARTICIPANT_TOKEN).join(encodeURIComponent(participant));
+}
+
+// Whether an identifier can be written into a completion address.
+// encodeURIComponent() throws on an unpaired surrogate (half of a character
+// written as two UTF-16 code units), so an identifier holding one is refused
+// where it enters, the link or the start screen, before anything is sent or
+// saved. The address readers cannot deliver one: URLSearchParams decodes a
+// broken sequence to one or more U+FFFD.
+export function isWritableIdentifier(participant) {
+  try {
+    encodeURIComponent(participant);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // The parse the two address checks share: text, then a URL. `what` names
@@ -856,6 +874,11 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
         const v = input.value.trim();
         if (v === '') {
           alert.textContent = 'Please enter your participant identifier before starting.';
+          input.focus();
+          return;
+        }
+        if (!isWritableIdentifier(v)) {
+          alert.textContent = 'Your participant identifier holds a character this page cannot read. Please type it again.';
           input.focus();
           return;
         }

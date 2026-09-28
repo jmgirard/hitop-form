@@ -185,7 +185,7 @@
 <script type="module">
   import {
     encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, checkParticipantParam, fetchExport, planItems,
-    storeSql, PROLIFIC_PARAMS,
+    storeSql, isWritableIdentifier, PROLIFIC_PARAMS,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -200,8 +200,8 @@
   // names no placeholder, so its link ends in nothing. "Another site" takes
   // the name from its field.
   const SITES = {
-    sona: { param: 'id', suffix: '&id=%SURVEY_CODE%' },
-    connect: { param: 'participantId', suffix: '' },
+    sona: { param: 'id', suffix: '&id=%SURVEY_CODE%', label: 'SONA' },
+    connect: { param: 'participantId', suffix: '', label: 'CloudResearch Connect' },
   };
   const siteOf = (param) => Object.keys(SITES).find((s) => SITES[s].param === param) ?? 'other';
 
@@ -372,7 +372,15 @@
       err.textContent = 'Give the study a name.';
       return;
     }
-    const participant = data.get('participant').trim();
+    // Read from the field, not the FormData: FormData would already hold an
+    // unpaired surrogate as U+FFFD, a link the form page accepts under
+    // another identifier. The builder refuses one as the form page does.
+    // Only a prefilled `c` can put one in.
+    const participant = f.elements.participant.value.trim();
+    if (!isWritableIdentifier(participant)) {
+      err.textContent = 'The participant field holds a character that cannot be written. Type the identifier again.';
+      return;
+    }
     if (participant !== '') config.participant = participant;
     // The box checked puts `shuffle: true` in the link; unchecked, the link
     // carries no shuffle field, as links made before the box did.
@@ -390,16 +398,27 @@
     // Another site puts `participantParam` in the link: the site's own
     // name for SONA and Connect, the field's for another site, which takes
     // the form page's own check. It too is refused beside a participant.
+    // Another site refuses the names SONA and Connect write, because the
+    // prefill reads those names as the two sites: an "id" link made here
+    // would come back as SONA and gain its ending. The form page itself
+    // accepts both names.
     if (site === 'sona' || site === 'connect' || site === 'other') {
       let param;
       try {
-        param = site === 'other'
-          ? checkParticipantParam(
-            data.get('participantParam').trim(),
+        if (site === 'other') {
+          const typed = data.get('participantParam').trim();
+          const owner = SITES[siteOf(typed)];
+          if (owner !== undefined) {
+            throw new Error(`The address parameter could not be used: ${JSON.stringify(typed)} is the name ${owner.label} fills. For a ${owner.label} study choose ${owner.label} as the recruiting site.`);
+          }
+          param = checkParticipantParam(
+            typed,
             (why) => new Error(`The address parameter could not be used: ${why}`),
             'For a Prolific study choose Prolific as the recruiting site',
-          )
-          : SITES[site].param;
+          );
+        } else {
+          param = SITES[site].param;
+        }
       } catch (e) {
         err.textContent = e.message;
         return;
