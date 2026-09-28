@@ -10,6 +10,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { serveDir, serveStore } from './serve.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -65,6 +66,20 @@ export async function notAscendingDescriptor(entry) {
 
 export function encodeConfig(config) {
   return Buffer.from(JSON.stringify(config), 'utf8').toString('base64url');
+}
+
+// The `z` form of a link: the UTF-8 JSON compressed with deflate-raw, then
+// base64url with no padding, written here with Node's zlib rather than the
+// browser's CompressionStream that link.html uses.
+export function encodeCompressed(config) {
+  return deflateRawSync(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64url');
+}
+
+// A study link's config back from its `c` or `z` parameter, in Node.
+export function decodeLinkParam(href) {
+  const params = new URL(href).searchParams;
+  if (params.has('z')) return JSON.parse(inflateRawSync(Buffer.from(params.get('z'), 'base64url')).toString('utf8'));
+  return JSON.parse(Buffer.from(params.get('c'), 'base64url').toString('utf8'));
 }
 
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
@@ -135,9 +150,11 @@ export function supabase(store, { key = 'sb_publishable_test', table = 'response
 export const JWT_SHAPED_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.c2lnbmF0dXJl';
 
 // `extra` is appended to the address after the link's own parameter: the
-// Prolific parameters a study URL carries, as `&PROLIFIC_PID=…`.
-export function formUrl(base, config, extra = '') {
-  return `${base}?c=${encodeConfig(config)}${extra}`;
+// Prolific parameters a study URL carries, as `&PROLIFIC_PID=…`. `param`
+// 'z' writes the link compressed.
+export function formUrl(base, config, extra = '', param = 'c') {
+  const value = param === 'z' ? encodeCompressed(config) : encodeConfig(config);
+  return `${base}?${param}=${value}${extra}`;
 }
 
 // The three values a Prolific study fills in, of the shape its example ID
@@ -182,8 +199,8 @@ export async function serveComplete(page, url = COMPLETE_URL) {
 // Opens the form for a config. `exportBody`, when given, is served in place
 // of the real export (a string, sent as JSON); `exportJson` is an object to
 // send. Either way the request still leaves the page and is seen by any
-// request listener. `extra` is formUrl()'s.
-export async function openForm(page, base, config, { exportBody, exportJson, extra } = {}) {
+// request listener. `extra` and `param` are formUrl()'s.
+export async function openForm(page, base, config, { exportBody, exportJson, extra, param } = {}) {
   if (exportBody !== undefined || exportJson !== undefined) {
     await page.route(exportUrl(config.instrument), (route) =>
       route.fulfill({
@@ -193,7 +210,7 @@ export async function openForm(page, base, config, { exportBody, exportJson, ext
       }),
     );
   }
-  await page.goto(formUrl(base, config, extra));
+  await page.goto(formUrl(base, config, extra, param));
 }
 
 // Presses Begin on the start screen, entering a participant identifier first

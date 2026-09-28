@@ -41,6 +41,7 @@
     border-radius: var(--r1); background: var(--bg); color: var(--fg);
   }
   textarea { font-family: var(--mono); font-size: .875rem; min-height: 8rem; }
+  textarea.prose { font-family: var(--font); font-size: 1rem; }
   button {
     font: inherit; font-weight: 600; padding: var(--s2) var(--s5);
     border-radius: var(--r1); border: 1px solid var(--accent);
@@ -74,7 +75,7 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>) puts its <code>c</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <ol class="steps">
     <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
     <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
@@ -126,7 +127,7 @@
     <p class="site-hint" id="connectHint" hidden>The page takes each participant's Connect ID from the <code>participantId</code> parameter of the address as their identifier, so leave the participant field empty. Give the link below as the project URL in Connect. For the completion URL, give the completion redirect URL Connect shows for the study.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
-        <span class="hint">The name of the parameter the site adds to the study link's address with the participant's identifier. Letters A-Z and a-z, digits, "_", "." and "-", up to 64, and not <code>c</code> or a Prolific parameter.</span>
+        <span class="hint">The name of the parameter the site adds to the study link's address with the participant's identifier. Letters A-Z and a-z, digits, "_", "." and "-", up to 64, and not <code>c</code>, <code>z</code> or a Prolific parameter.</span>
         <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
       </label>
     </div>
@@ -137,6 +138,18 @@
     <label>Completion URL after a saved file
       <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
       <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    <label>Consent text
+      <span class="hint">Optional. Your consent text, as your review board approved it. The page shows it on a screen of its own before the form, with an "I agree" and an "I do not agree" button. It is shown as plain text: a blank line starts a new paragraph, and a single line break stays a line break. Up to 20,000 characters. A link with consent text is written compressed, as <code>?z=</code> in place of <code>?c=</code>.</span>
+      <textarea name="consentText" class="prose"></textarea>
+    </label>
+    <label>Declined text
+      <span class="hint">Optional, and only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, the page shows "You chose not to take part. You can close this page.", or only its first sentence when the completion URL after a decline is given. After "I do not agree" the page sends no answer and saves no file.</span>
+      <textarea name="declinedText" class="prose"></textarea>
+    </label>
+    <label>Completion URL after a decline
+      <span class="hint">Optional, and only beside consent text. An https:// address the page sends the participant to after "I do not agree", once the declined screen is drawn. For Prolific, the completion URL of the code your study gives a participant who does not consent. A <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier from the address or the link, or nothing when the page holds none yet.</span>
+      <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
@@ -184,8 +197,9 @@
 </main>
 <script type="module">
   import {
-    encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, checkParticipantParam, fetchExport, planItems,
-    storeSql, isWritableIdentifier, PROLIFIC_PARAMS,
+    encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
+    consentTextFault, fetchExport, planItems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
+    CONSENT_DECLINED_MAX,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -238,15 +252,16 @@
   }
   siteSelect.addEventListener('change', showSite);
 
-  // A study link's own `c` parameter, opened on this page, fills the
+  // A study link's own `c` or `z` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
   // another page can hand a module over. The parameter is decoded as the
-  // form page decodes it, and three faults are refused by name: a `c` that
-  // cannot be decoded, one that is not a plain object, and an instrument
-  // the select does not offer. A field of another type than its control takes
+  // form page decodes it, and these faults are refused by name: a link
+  // with both parameters, a `c` that cannot be decoded, each fault the form
+  // page names in a `z`, a config that is not a plain object, and an
+  // instrument the select does not offer. A field of another type than its control takes
   // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched. A throw past the
-  // three checks (a module nested deep enough to stop JSON.stringify) is
+  // such a link when it is opened. Nothing is fetched. A throw past these
+  // checks (a module nested deep enough to stop JSON.stringify) is
   // the first refusal with the form reset, so the script reaches its submit
   // handler and no field keeps a part of the config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
@@ -254,21 +269,40 @@
   // listed in a notice above the form, as text, for the researcher to check.
   // The notice is written only once prefill() has returned, so a throw
   // leaves none.
+  const opened = new URLSearchParams(window.location.search);
+  const linkParam = opened.has('z') ? 'z' : 'c';
   const refuse = (what) => {
-    err.textContent = `The link's c parameter ${what} Fill in the form above to make a new link.`;
+    err.textContent = `The link's ${linkParam} parameter ${what} Fill in the form above to make a new link.`;
   };
   // Returns the addresses filled, each as [label, the field's value] in the
   // form's order, the label named as the form shows it.
-  function prefill() {
+  async function prefill() {
     const filled = [];
-    const c = new URLSearchParams(window.location.search).get('c');
-    if (c === null) return filled;
-    let config;
-    try {
-      config = decodeConfig(c);
-    } catch {
-      refuse('could not be read.');
+    if (opened.has('c') && opened.has('z')) {
+      err.textContent = 'The link carries both a c and a z parameter. Fill in the form above to make a new link.';
       return filled;
+    }
+    const param = opened.get(linkParam);
+    if (param === null) return filled;
+    let config;
+    if (linkParam === 'z') {
+      if (!canInflate()) {
+        refuse('could not be read, because this browser cannot decompress it.');
+        return filled;
+      }
+      try {
+        config = await inflateConfig(param, (why) => new Error(why));
+      } catch (e) {
+        refuse(`${e.message}.`);
+        return filled;
+      }
+    } else {
+      try {
+        config = decodeConfig(param);
+      } catch {
+        refuse('could not be read.');
+        return filled;
+      }
     }
     if (config === null || typeof config !== 'object' || Array.isArray(config)) {
       refuse('does not hold a form.');
@@ -294,6 +328,13 @@
     text('participant', config.participant);
     address('complete', 'Completion URL', config.complete);
     address('completeSaved', 'Completion URL after a saved file', config.completeSaved);
+    // A box keeps the text's line breaks; it gives CR LF back as LF.
+    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (isPlainObject(config.consent)) {
+      text('consentText', config.consent.text);
+      text('declinedText', config.consent.declined);
+    }
+    address('completeDeclined', 'Completion URL after a decline', config.completeDeclined);
     f.elements.shuffle.checked = config.shuffle === true;
     // The site follows the link's fields: Prolific for prolific: true, SONA
     // for participantParam "id", Connect for "participantId", another site
@@ -305,7 +346,6 @@
       siteSelect.value = siteOf(config.participantParam);
       if (siteSelect.value === 'other') text('participantParam', config.participantParam);
     }
-    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
     if (isPlainObject(config.module)) f.elements.module.value = JSON.stringify(config.module, null, 2);
     const store = config.store;
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
@@ -321,7 +361,7 @@
     return filled;
   }
   try {
-    const filled = prefill();
+    const filled = await prefill();
     for (const [label, value] of filled) {
       const li = document.createElement('li');
       li.textContent = `${label}: ${value}`;
@@ -456,6 +496,49 @@
         return;
       }
     }
+    // The consent text and the declined text take the form page's own
+    // checks, with the messages naming the boxes. Read from the boxes, not
+    // the FormData, for the reason the participant field is: FormData would
+    // hold a lone surrogate as U+FFFD. Each goes into the link as typed,
+    // untrimmed, with its line breaks. An empty Consent box makes a link
+    // without consent, so the Declined box and the decline address must
+    // then be empty too, as the form page refuses completeDeclined without
+    // consent.
+    const consentText = f.elements.consentText.value;
+    const declinedText = f.elements.declinedText.value;
+    const completeDeclined = data.get('completeDeclined').trim();
+    if (consentText === '') {
+      if (declinedText !== '') {
+        err.textContent = 'The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.';
+        return;
+      }
+      if (completeDeclined !== '') {
+        err.textContent = 'The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.';
+        return;
+      }
+    } else {
+      const textFault = consentTextFault(consentText, CONSENT_TEXT_MAX);
+      if (textFault !== null) {
+        err.textContent = `The consent text could not be used: it ${textFault}.`;
+        return;
+      }
+      if (declinedText !== '') {
+        const declinedFault = consentTextFault(declinedText, CONSENT_DECLINED_MAX);
+        if (declinedFault !== null) {
+          err.textContent = `The declined text could not be used: it ${declinedFault}.`;
+          return;
+        }
+      }
+      config.consent = declinedText === '' ? { text: consentText } : { text: consentText, declined: declinedText };
+      if (completeDeclined !== '') {
+        try {
+          config.completeDeclined = checkCompleteUrl(completeDeclined, (why) => new Error(`The completion URL after a decline could not be used: ${why}`));
+        } catch (e) {
+          err.textContent = e.message;
+          return;
+        }
+      }
+    }
     const text = data.get('module').trim();
     if (text !== '') {
       let m;
@@ -507,8 +590,15 @@
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific);
       sqlBlock.hidden = false;
     }
+    // A link with consent text is written as ?z=, compressed, and any other
+    // as ?c=.
     const url = new URL('./', window.location.href);
-    url.search = `?c=${encodeConfig(config)}`;
+    try {
+      url.search = `?${await encodeLink(config)}`;
+    } catch (e) {
+      err.textContent = e.message;
+      return;
+    }
     // A Prolific link ends in the three placeholders and a SONA link in
     // its one, appended as text so that the braces and percent signs reach
     // the site as it expects them.
