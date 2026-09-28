@@ -1090,6 +1090,53 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     else focusHeading(root);
   }
 
+  // The researcher's text as paragraphs, each line a text node and a line
+  // break a `br` between two, so no tag or entity in it is read as markup.
+  function textNodes(text) {
+    return textParagraphs(text).map((lines) =>
+      el('p', {}, lines.flatMap((line, i) => (i === 0 ? [line] : [el('br'), line]))));
+  }
+
+  // The consent screen, before the start screen under a link with
+  // `consent`. It holds the researcher's text and the two buttons, and no
+  // item, option or instruction of the instrument.
+  function showConsent() {
+    root.replaceChildren(
+      heading('Consent to take part'),
+      el('div', { class: 'consent' }, textNodes(config.consent.text)),
+      el('div', { class: 'nav' }, [
+        el('button', { type: 'button', text: 'I agree', onclick: start }),
+        el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: decline }),
+      ]),
+    );
+    focusHeading(root);
+  }
+
+  // "I do not agree": the declined screen, with nothing sent or saved and no
+  // way back to the form. Its text is the link's `declined`, or a fixed
+  // sentence. With `completeDeclined` the screen links to that address, each
+  // `{participant}` filled with the identifier the page holds (none yet
+  // when the start screen would have asked, so the empty string), and the
+  // page then goes there, the screen drawn first as the sent screen is.
+  function decline() {
+    finished = true;
+    const address = config.completeDeclined === undefined
+      ? undefined
+      : fillParticipant(config.completeDeclined, participant ?? '');
+    const text = config.consent.declined !== undefined
+      ? textNodes(config.consent.declined)
+      : [el('p', { text: address === undefined ? 'You chose not to take part. You can close this page.' : 'You chose not to take part.' })];
+    root.replaceChildren(
+      heading('Thank you'),
+      el('div', { class: 'declined' }, text),
+      ...(address === undefined
+        ? []
+        : [el('p', { class: 'complete' }, ['Continue to ', el('a', { href: address, text: new URL(address).host }), '.'])]),
+    );
+    focusHeading(root);
+    if (address !== undefined) window.location.assign(address);
+  }
+
   function itemNode(it, position) {
     const fs = el('fieldset', {
       class: 'item',
@@ -1296,5 +1343,6 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     focusHeading(root);
   }
 
-  start();
+  if (config.consent !== undefined) showConsent();
+  else start();
 }
