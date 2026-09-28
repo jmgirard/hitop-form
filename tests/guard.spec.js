@@ -52,9 +52,9 @@
 //       its host is refused by name with the value shown; the token in the
 //       query, in the fragment, or twice in the query is accepted
 //   G16: a complete or completeSaved address holding another spelling of
-//       the token after the ? or the # (another letter case, a brace or
-//       both braces as %7B and %7D, beside an exact token or alone) is
-//       refused naming that spelling, with the address shown
+//       the token after the ? or the # (another letter case, alone and
+//       beside an exact token; both braces or one brace as %7B and %7D,
+//       alone) is refused naming that spelling, with the address shown
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -496,7 +496,7 @@ const TOKEN_ACCEPTED = [
 ];
 for (const field of ['complete', 'completeSaved']) {
   for (const address of TOKEN_REFUSED) {
-    test(`a ${field} address with the token outside the query, ${address}, is refused naming the token`, async ({ page }) => {
+    test(`a ${field} address with the token in the host or the path, ${address}, is refused naming the token`, async ({ page }) => {
       const config = { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address };
       await openForm(page, base(), config);
       await expect(page.locator('[role=alert]')).toHaveText(
