@@ -1026,8 +1026,9 @@ for (const field of ['complete', 'completeSaved']) {
   for (const c of [
     { address: 'https://example.org/{participant}/done', why: (a) => `the {participant} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(a)}.` },
     { address: 'https://{participant}.example.org/done', why: (a) => `the {participant} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(a)}.` },
-    { address: 'https://example.org/done?code={Participant}', why: (a) => `the {participant} token must be written exactly so, in lower case with its braces typed, and "{Participant}" is another spelling of it. The address is ${JSON.stringify(a)}.` },
-    { address: 'https://example.org/done?code=%7Bparticipant%7D', why: (a) => `the {participant} token must be written exactly so, in lower case with its braces typed, and "%7Bparticipant%7D" is another spelling of it. The address is ${JSON.stringify(a)}.` },
+    { address: 'https://example.org/done?code={Participant}', why: (a) => `the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and "{Participant}" is another spelling of it. The address is ${JSON.stringify(a)}.` },
+    { address: 'https://example.org/done?code=%7Bparticipant%7D', why: (a) => `the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and "%7Bparticipant%7D" is another spelling of it. The address is ${JSON.stringify(a)}.` },
+    { address: 'https://example.org/done?code={{participant}}', why: (a) => `the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and "{{participant}}" is another spelling of it. The address is ${JSON.stringify(a)}.` },
   ]) {
     test(`the builder's ${field} field refuses ${c.address}`, async ({ page }) => {
       await page.goto(`${base()}link.html`);

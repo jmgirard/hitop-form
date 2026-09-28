@@ -53,8 +53,10 @@
 //       query, in the fragment, or twice in the query is accepted
 //   G16: a complete or completeSaved address holding another spelling of
 //       the token after the ? or the # (another letter case, alone and
-//       beside an exact token; both braces or one brace as %7B and %7D,
-//       alone) is refused naming that spelling, with the address shown
+//       beside an exact token; both braces, the opening one or the closing
+//       one as %7B and %7D; both as %257B and %257D; doubled braces; a
+//       space inside the braces, each alone) is refused naming that
+//       spelling as the address holds it, with the address shown
 //
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
@@ -522,13 +524,18 @@ const TOKEN_VARIANTS = [
   { address: 'https://example.org/done?code=%7Bparticipant%7D', spelling: '%7Bparticipant%7D' },
   { address: 'https://example.org/done?code=%7bparticipant}', spelling: '%7bparticipant}' },
   { address: 'https://example.org/done?a={participant}#b={Participant}', spelling: '{Participant}' },
+  { address: 'https://example.org/done?code={participant%7D', spelling: '{participant%7D' },
+  { address: 'https://example.org/done?code=%257Bparticipant%257D', spelling: '%257Bparticipant%257D' },
+  { address: 'https://example.org/done?code={{participant}}', spelling: '{{participant}}' },
+  // The URL encodes the spaces, and the message names the spelling so.
+  { address: 'https://example.org/done?code={ participant }', spelling: '{%20participant%20}' },
 ];
 for (const field of ['complete', 'completeSaved']) {
   for (const { address, spelling } of TOKEN_VARIANTS) {
     test(`a ${field} address holding ${spelling} after the ? or #, ${address.slice(8, 60)}…, is refused naming that spelling`, async ({ page }) => {
       await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g16', complete: COMPLETE_OK, [field]: address });
       await expect(page.locator('[role=alert]')).toHaveText(
-        `The study link's ${field} field could not be used: the {participant} token must be written exactly so, in lower case with its braces typed, and ${JSON.stringify(spelling)} is another spelling of it. The address is ${JSON.stringify(address)}.`,
+        `The study link's ${field} field could not be used: the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and ${JSON.stringify(spelling)} is another spelling of it. The address is ${JSON.stringify(address)}.`,
       );
       await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
     });

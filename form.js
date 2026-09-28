@@ -322,10 +322,16 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
 // URL keeps the braces there as typed. In the path it encodes them, and a
 // token in the host would give a host the identifier cannot fill, so the
 // token is refused in either, in its typed or its encoded form. Only the
-// exact spelling is replaced, so any other spelling after the ? or the #
-// (another letter case, a brace encoded as %7B or %7D) is refused too:
-// left in place, it would reach the site unfilled.
+// exact spelling is replaced, so another spelling after the ? or the # is
+// refused too: another letter case, doubled braces, a space inside the
+// braces, or a brace encoded as %7B or %7D, or twice as %257B or %257D.
+// Left in place, it would reach the site unfilled, or with a brace around
+// the identifier.
 export const PARTICIPANT_TOKEN = '{participant}';
+
+// A brace, typed or encoded once or twice, and the spellings between a
+// brace and the word that the list above names.
+const TOKEN_LIKE = /(?:\{|%7b|%257b)(?:\{|%7b|%257b|\s|%20|\+)*participant(?:\}|%7d|%257d|\s|%20|\+)*(?:\}|%7d|%257d)/i;
 
 export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
   // A value that is not text is refused with the value shown, as every
@@ -336,13 +342,12 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
   refuseCredentials(u, url, bad, 'it');
-  const token = /(?:\{|%7b)participant(?:\}|%7d)/i;
-  if (token.test(u.host) || token.test(u.pathname)) {
+  if (TOKEN_LIKE.test(u.host) || TOKEN_LIKE.test(u.pathname)) {
     throw bad(`the ${PARTICIPANT_TOKEN} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(url)}.`);
   }
-  const variant = (u.search + u.hash).match(new RegExp(token.source, 'gi'))?.find((m) => m !== PARTICIPANT_TOKEN);
+  const variant = (u.search + u.hash).match(new RegExp(TOKEN_LIKE.source, 'gi'))?.find((m) => m !== PARTICIPANT_TOKEN);
   if (variant !== undefined) {
-    throw bad(`the ${PARTICIPANT_TOKEN} token must be written exactly so, in lower case with its braces typed, and ${JSON.stringify(variant)} is another spelling of it. The address is ${JSON.stringify(url)}.`);
+    throw bad(`the ${PARTICIPANT_TOKEN} token must be written exactly so, in lower case with one typed brace on each side and no space, and ${JSON.stringify(variant)} is another spelling of it. The address is ${JSON.stringify(url)}.`);
   }
   return u.href;
 }

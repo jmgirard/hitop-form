@@ -180,16 +180,16 @@ for (const shuffle of [false, true]) {
 // ---- The {participant} token ---------------------------------------------
 
 // SONA's client-side completion address with the token where SONA's
-// documentation puts XXXX, and a saved-file address of the same shape on
-// another host and experiment so a test tells the two apart. Neither is
-// fetched for real: a route answers.
+// documentation puts XXXX, and a saved-file address with the same path and
+// query on another host so a test tells the two apart. Neither is fetched
+// for real: a route answers.
 const SONA_COMPLETE = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}';
-const SAVED_COMPLETE = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=456&credit_token=def&survey_code={participant}';
+const SAVED_COMPLETE = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}';
 // The filled addresses, written out rather than computed with the code
 // under test.
 const SONA_FILLED_ABC = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=a%26b%20c';
 const SONA_FILLED_12345 = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=12345';
-const SAVED_FILLED_12345 = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=456&credit_token=def&survey_code=12345';
+const SAVED_FILLED_12345 = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=12345';
 const ABC_QUERY = '&id=a%26b%20c';
 
 // Answers every request to an address on either completion host, holding
