@@ -8,7 +8,8 @@
 // items to a page, and at Finish either posts the responses as one JSON row
 // to the store the link names or, with no store, saves them as one CSV to
 // the participant's device. With no store, no answer is transmitted: the
-// only network request after the page's own files is the export fetch. With
+// only network request after the page's own files is the export fetch,
+// besides the move to a completion address when the link names one. With
 // a store, the requests after Finish are the POST to its address, any
 // redirect a webhook answers with, and the OPTIONS preflight the browser
 // sends before a supabase insert; the CSV is saved only when that send is
