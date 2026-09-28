@@ -1426,7 +1426,9 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       id,
       name: id,
       autocomplete: 'off',
-      ...(q.type === 'number' ? { inputmode: 'numeric' } : {}),
+      // The numeric keypad of a phone can lack a minus sign, so a question
+      // that takes a negative answer keeps the full keyboard.
+      ...(q.type === 'number' && q.min >= 0 ? { inputmode: 'numeric' } : {}),
       ...(q.required === true ? { 'aria-required': 'true' } : {}),
       ...(range === null ? {} : { 'aria-describedby': `${id}-hint` }),
       oninput: () => {

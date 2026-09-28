@@ -27,6 +27,10 @@
 //        question by its number
 //   QS8: closing the page asks first once a before question holds an
 //        answer, and not when it holds none
+//   QS9: a number question with a min of 0 or more asks for the numeric
+//        keypad (inputmode="numeric"); one with a negative min or no min
+//        asks for none, so a phone keypad offers a minus sign, and a text
+//        question asks for none
 
 import { test, expect } from '@playwright/test';
 import { useTarget, openForm, begin, walkAll, currentPage, answerPage, nextButton } from './helpers.mjs';
@@ -192,7 +196,6 @@ test('the range line states each bound, and an unbounded number refuses abc as a
   expect(await page.$$eval('.question .range', (ns) => ns.map((n) => n.textContent))).toEqual([
     'A whole number from 18 to 99.', 'A whole number of -3 or more.', 'A whole number of 7 or less.',
   ]);
-  await expect(page.locator('.question[data-name=age] input')).toHaveAttribute('inputmode', 'numeric');
   await expect(page.locator('.question[data-name=age] input')).toHaveAttribute('aria-describedby', 'q-age-hint');
   await page.locator('.question[data-name=n] input').fill('abc');
   await button(page, 'Next').click();
@@ -237,4 +240,24 @@ test('a text answer holding a lone surrogate is refused, naming the question by 
   await button(page, 'Next').click();
   await expect(alert(page)).toHaveText('Question 2 holds a character this page cannot read. Please type it again.');
   await expect(page.locator('.question[data-name=note] input')).toBeFocused();
+});
+
+// QS9
+test('only a number question with a min of 0 or more asks for the numeric keypad', async ({ page }) => {
+  await openForm(page, base(), {
+    ...LINK,
+    questions: {
+      before: [
+        { ...AGE },
+        { name: 'zero', text: 'zero', type: 'number', min: 0 },
+        { name: 'lo', text: 'lo', type: 'number', min: -3, max: 7 },
+        { name: 'hi', text: 'hi', type: 'number', max: 7 },
+        { name: 'n', text: 'n', type: 'number' },
+        NOTE,
+      ],
+    },
+  });
+  await expect(heading(page)).toHaveText('Before you begin');
+  const modes = await page.$$eval('.question input', (ns) => ns.map((n) => [n.closest('.question').dataset.name, n.getAttribute('inputmode')]));
+  expect(modes).toEqual([['age', 'numeric'], ['zero', 'numeric'], ['lo', null], ['hi', null], ['n', null], ['note', null]]);
 });
