@@ -1,7 +1,7 @@
 // The form page. index.html calls boot(); link.html imports encodeLink(),
-// the link readers, the checks (checkParticipantParam() and
-// consentTextFault() among them), fetchExport(), planItems(), storeSql() and
-// PROLIFIC_PARAMS.
+// the link readers, the checks (checkParticipantParam(), consentTextFault()
+// and checkQuestions() among them), fetchExport(), planItems(), storeSql()
+// and PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -23,6 +23,13 @@
 // screen and sends and saves nothing; `completeDeclined`, allowed only
 // beside `consent`, is an https:// address that screen then goes to, such as
 // a recruiting site's code for a participant who did not consent.
+//
+// A link's `questions` field holds the researcher's own questions, in a
+// `before` list, an `after` list or both. The page asks the before list on
+// a screen of its own ahead of the start screen, after any consent screen,
+// and the after list on a screen of its own after the last item page. Each
+// answer is a `q_<name>` column after the item columns, in the row, the file
+// and the Supabase table.
 //
 // Three link fields fit a Prolific study. `prolific: true` takes the
 // participant identifier from the PROLIFIC_PID parameter of the page's
@@ -88,19 +95,20 @@ export function decodeConfig(param) {
   return JSON.parse(base64urlToUtf8(param));
 }
 
-// A link that carries consent text travels as `z` rather than `c`: the
-// config's UTF-8 JSON compressed with deflate-raw, then written as base64url
-// with no padding. Consent text makes a `c` link long, and the compressed
-// form keeps it shorter. The page reads either parameter.
+// A link that carries consent text or questions travels as `z` rather than
+// `c`: the config's UTF-8 JSON compressed with deflate-raw, then written as
+// base64url with no padding. Consent text and questions make a `c` link
+// long, and the compressed form keeps it shorter. The page reads either
+// parameter.
 //
 // The query of a study link, without its `?`: `z=…` for a config that carries
-// `consent`, and `c=…` as before for any other. link.html builds its links
-// with it.
+// `consent` or `questions`, and `c=…` as before for any other. link.html
+// builds its links with it.
 export async function encodeLink(config) {
   const json = JSON.stringify(config);
-  if (config.consent === undefined) return `c=${utf8ToBase64url(json)}`;
+  if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
   if (typeof CompressionStream !== 'function') {
-    throw new Error('This browser cannot make a link with consent text, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.');
+    throw new Error(`This browser cannot make a link with ${config.consent === undefined ? 'questions' : 'consent text'}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
   }
   const stream = new Blob([new TextEncoder().encode(json)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
   return `z=${bytesToBase64url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
@@ -835,17 +843,20 @@ function isIntegerArray(x) {
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (planItems().items): the five study fields as
 // text, an `item_order` text column under `shuffle`, the two Prolific text
-// columns under `prolific`, one integer column per item, row-level security
-// on, the project's default grants to the API roles revoked, and the anon
-// role allowed to insert and nothing else. Shown by link.html; pasted by the
-// researcher into the project's SQL editor.
-export function storeSql(table, items, shuffle = false, prolific = false) {
+// columns under `prolific`, one integer column per item, one text column
+// per question of `questions` (a link's `questions` field) in
+// questionColumns() order, row-level security on, the project's default
+// grants to the API roles revoked, and the anon role allowed to insert and
+// nothing else. Shown by link.html; pasted by the researcher into the
+// project's SQL editor.
+export function storeSql(table, items, shuffle = false, prolific = false, questions = undefined) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
   const lead = leadColumns({ shuffle, prolific });
   const columns = [
     ...lead.map((c) => `  ${q(c)} text`),
     ...items.map((it) => `  ${q(it.name)} integer`),
+    ...questionColumns({ questions }).map((c) => `  ${q(c)} text`),
   ];
   return [
     `create table ${t} (`,

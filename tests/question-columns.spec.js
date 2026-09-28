@@ -14,7 +14,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, useStore, allowLocalStore, openForm, webhook, begin, walkAll, awaitDownload, parseCsv, leadColumns,
+  useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv, leadColumns,
   prolificQuery,
 } from './helpers.mjs';
 
@@ -72,6 +72,49 @@ const MODES = [
   { name: 'shuffle on', config: { participant: 'p1', shuffle: true }, lead: leadColumns({ shuffle: true }) },
   { name: 'prolific: true', config: { prolific: true }, lead: leadColumns({ prolific: true }), extra: prolificQuery() },
 ];
+
+// QC2: a HiTOP-BR walk under the questions of
+// supabase-hitopbr-questions.sql, all left unanswered, posts one row to a
+// webhook and one to a supabase store. Every q_ key is present and "", and
+// the keys equal the fixture's column lines, so the row fits the table the
+// builder makes.
+const FIXTURE_QUESTIONS = {
+  before: [
+    { name: 'age', text: 'Your age', type: 'number', min: 18, max: 99 },
+    { name: 'sex', text: 'Your sex', type: 'choice', options: ['Female', 'Male', 'Another'] },
+  ],
+  after: [
+    { name: 'note', text: 'Anything to add?', type: 'text' },
+    { name: 'days', text: 'Days you work', type: 'multi', options: ['Mon', 'Tue', 'Wed'] },
+  ],
+};
+
+const sqlColumns = async (fixture) => (await readFile(new URL(`./fixtures/${fixture}`, import.meta.url), 'utf8'))
+  .split('\n')
+  .filter((l) => /^ {2}"/.test(l))
+  .map((l) => /^ {2}"([^"]+)"/.exec(l)[1]);
+
+for (const w of [
+  { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
+  { name: 'a supabase store', make: () => supabase(store(), { table: 'hitopbr_responses' }), path: '/rest/v1/hitopbr_responses' },
+]) {
+  test(`an unanswered walk posts every q_ key as "" to ${w.name}, keyed as the SQL fixture`, async ({ page }) => {
+    const from = store().requests.length;
+    await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', participant: 'p001', questions: FIXTURE_QUESTIONS, store: w.make() });
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await begin(page);
+    await walkAll(page);
+    await page.getByRole('button', { name: 'Finish', exact: true }).click();
+    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
+    expect(sent.map((r) => r.path)).toEqual([w.path]);
+    const row = JSON.parse(sent[0].body);
+    const columns = await sqlColumns('supabase-hitopbr-questions.sql');
+    expect(columns.length, 'the fixture has column lines').toBe(5 + 45 + 4);
+    expect(Object.keys(row)).toEqual(columns);
+    expect(['q_age', 'q_sex', 'q_note', 'q_days'].map((k) => row[k])).toEqual(['', '', '', '']);
+  });
+}
 
 for (const mode of MODES) {
   test(`the saved file carries the question columns after the items, ${mode.name}`, async ({ page }) => {
