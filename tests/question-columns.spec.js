@@ -10,12 +10,19 @@
 //        "1 3". Each unanswered question is the empty string. Every q_ value
 //        in the row is a JSON string. Walked with shuffle off, with shuffle
 //        on, and with prolific: true.
+//   QC2: see its comment below.
+//   QC3: a HiTOP-BR walk for study fixture and participant p001, with one
+//        question of each type answered and a fifth left empty, saves the
+//        file responses-hitopbr-questions.csv holds, in every column but
+//        submitted and form_build. Run with WRITE_FIXTURES=1 to rewrite it.
+//        The hitop package's reader test reads a copy.
 
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv, leadColumns,
-  prolificQuery,
+  prolificQuery, FIXTURES, readFixture,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -149,3 +156,40 @@ for (const mode of MODES) {
     for (const k of COLUMNS) expect(typeof row[k], k).toBe('string');
   });
 }
+
+// QC3
+const READER_QUESTIONS = {
+  before: [
+    { name: 'age', text: 'Your age', type: 'number', min: 0, max: 120, required: true },
+    { name: 'sex', text: 'Your sex', type: 'choice', options: ['Female', 'Male', 'Another'] },
+  ],
+  after: [
+    { name: 'days', text: 'Days you work', type: 'multi', options: ['Mon', 'Tue', 'Wed'] },
+    { name: 'note', text: 'Anything to add?', type: 'text' },
+    { name: 'more', text: 'Anything else?', type: 'text' },
+  ],
+};
+
+test('a HiTOP-BR walk with one question of each type saves responses-hitopbr-questions.csv', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'fixture', participant: 'p001', questions: READER_QUESTIONS });
+  const download = awaitDownload(page);
+  await page.locator('.question[data-name=age] input').fill('007');
+  await page.getByLabel('Male', { exact: true }).check();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await begin(page);
+  await walkAll(page);
+  await expect(page.locator('h1')).toHaveText('Before you finish');
+  await page.getByLabel('Wed').check();
+  await page.getByLabel('Mon').check();
+  await page.locator('.question[data-name=note] input').fill('Hello, "world"');
+  await page.getByRole('button', { name: 'Finish', exact: true }).click();
+  const text = await readFile(await (await download).path(), 'utf8');
+  const [header, row] = parseCsv(text);
+  expect(header.slice(-5)).toEqual(['q_age', 'q_sex', 'q_days', 'q_note', 'q_more']);
+  expect(row.slice(-5)).toEqual(['7', '2', '1 3', 'Hello, "world"', '']);
+  if (process.env.WRITE_FIXTURES) await writeFile(path.join(FIXTURES, 'responses-hitopbr-questions.csv'), text);
+  const [fHeader, fRow] = parseCsv(await readFixture('responses-hitopbr-questions.csv'));
+  expect(header).toEqual(fHeader);
+  const skip = new Set(['submitted', 'form_build'].map((c) => header.indexOf(c)));
+  expect(row.filter((_, i) => !skip.has(i))).toEqual(fRow.filter((_, i) => !skip.has(i)));
+});
