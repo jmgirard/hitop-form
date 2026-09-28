@@ -23,7 +23,8 @@
 //        with the question's range, and -0 and 007 are accepted; a number
 //        question with no bound refuses abc as "a whole number"; the range
 //        line under a bounded question states the range
-//   QS7: a text answer holding a lone surrogate is refused by name
+//   QS7: a text answer holding a lone surrogate is refused, naming the
+//        question by its number
 //   QS8: closing the page asks first once a before question holds an
 //        answer, and not when it holds none
 
@@ -227,7 +228,7 @@ for (const typed of ['hello', '']) {
 }
 
 // QS7
-test('a text answer holding a lone surrogate is refused by name', async ({ page }) => {
+test('a text answer holding a lone surrogate is refused, naming the question by its number', async ({ page }) => {
   await openForm(page, base(), { ...LINK, questions: { before: [AGE, NOTE] } });
   await page.locator('.question[data-name=note] input').evaluate((input) => {
     input.value = `bad ${String.fromCharCode(0xd800)}`;

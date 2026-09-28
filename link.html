@@ -307,8 +307,8 @@
     return node;
   }
 
-  // Only a choice question shows its options, and only a number question its
-  // minimum and maximum.
+  // Only a choice or multi question shows its options, and only a number
+  // question its minimum and maximum.
   function showType(group) {
     const type = group.querySelector('[name=qType]').value;
     group.querySelector('.options-field').hidden = type !== 'choice' && type !== 'multi';

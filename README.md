@@ -353,8 +353,10 @@ as "question 2 of the before list".
 
 The Supabase SQL from the builder adds one text column per question. A
 table made before the questions were added has no column for them. The API
-then refuses the row, and the page saves the file instead. Make a new table
-from the builder's SQL whenever the questions change.
+then refuses the row, and the page saves the file instead. The row's keys
+come from the question names alone. If you add a question or change a
+name, make a new table from the builder's SQL. A change to a question's
+text, type, options or order keeps the same columns.
 
 A link with questions is a `z` link, as
 [Make a study link](#make-a-study-link) describes.
@@ -607,7 +609,7 @@ included, makes the page save the file instead.
 The table's columns are fixed by the SQL, so a link for a different
 instrument or module, or a link with the random order or the Prolific
 route sent to a table made without it, needs a table of its own. So does a
-link whose questions differ from those the table was made for. A row with a key the table
+link with a question whose name the table has no column for. A row with a key the table
 has no column for is refused by the API, and the page then saves the file.
 A row that lacks some of the table's columns is stored with those columns
 empty, because the SQL puts no constraint on any column.
@@ -691,7 +693,7 @@ npx playwright test
 | `tests/questions.spec.js` | The refusal, naming the question's list and place, of each fault in a `questions` field: its shape, the 50-question limit, a question's keys, name, text, type and `required`, its options and their labels, and its `min` and `max`. The limits themselves are accepted |
 | `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, and the unload guard counting a question's answer |
 | `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
-| `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce is refused by its number, 51 questions included. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions. Move up, Move down and Remove reorder and renumber the questions |
+| `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions. Move up, Move down and Remove reorder and renumber the questions |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 

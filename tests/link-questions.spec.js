@@ -9,14 +9,16 @@
 //        list first, and "Make the link" builds the same config
 //   LQ3: with a Supabase table, the shown SQL for the questions of
 //        supabase-hitopbr-questions.sql equals that file byte for byte
-//   LQ4: each fault the editor can produce is refused naming the question
-//        by its number in the editor, and no link is built: no name, a name
-//        outside the pattern, a name used twice, no text, a text of white
-//        space, a text of 1,001 characters, a text holding a lone surrogate,
-//        1 or 21 options, an option of 201 characters, an option holding
-//        "|", two options the same after trimming, an option holding a lone
-//        surrogate, a minimum that is not a whole number, a maximum outside
-//        the range, a minimum above the maximum, and 51 questions
+//   LQ4: each fault the editor can produce in one question is refused
+//        naming the question by its number in the editor, and no link is
+//        built: no name, a name outside the pattern, a name used twice, no
+//        text, a text of white space, a text of 1,001 characters, a text
+//        holding a line separator (U+2028, which a text input keeps) or a
+//        lone surrogate, 1 or 21 options, an option of 201 characters, an
+//        option holding "|" or a line separator, two options the same after
+//        trimming, an option holding a lone surrogate, a minimum that is not
+//        a whole number, a maximum outside the range, and a minimum above
+//        the maximum; 51 questions are refused naming the count
 //   LQ5: blank lines in the options box are skipped, a type that takes no
 //        options or bounds leaves the hidden ones out of the link, and with
 //        no question the builder writes ?c= and no questions field; in a
@@ -149,6 +151,8 @@ const REFUSED = [
   { name: 'no text', qs: [{ name: 'a' }], why: bad('question 1: it has no text.') },
   { name: 'a text of white space', qs: [OK, { name: 'a', text: '   ' }], why: bad('question 2: its text is empty or holds only white space.') },
   { name: 'a text of 1,001 characters', qs: [{ name: 'a', text: 'x'.repeat(1_001) }], why: bad('question 1: its text has 1,001 characters, more than the 1,000 it may hold.') },
+  { name: 'a text holding a line separator', qs: [{ name: 'a', text: `one${String.fromCharCode(0x2028)}two` }], why: bad('question 1: its text holds a line break, and a question text is one line.') },
+  { name: 'an option holding a line separator', qs: [{ name: 'a', text: 'a', type: 'choice', options: `Red\nBl${String.fromCharCode(0x2028)}ue` }], why: bad('question 1: its option 2 holds a line break, and an option label is one line.') },
   { name: 'a text holding a lone surrogate', qs: [{ name: 'a', text: `a ${String.fromCharCode(0xd800)}` }], why: bad('question 1: its text holds half of a character (a lone surrogate), which cannot be written.') },
   { name: 'one option', qs: [{ name: 'a', text: 'a', type: 'choice', options: 'Red\n\n' }], why: bad('question 1: it has 1 option, and a question holds 2 to 20.') },
   { name: '21 options', qs: [{ name: 'a', text: 'a', type: 'multi', options: many(21, (i) => `o${i}`).join('\n') }], why: bad('question 1: it has 21 options, and a question holds 2 to 20.') },
