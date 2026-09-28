@@ -973,15 +973,16 @@ for (const c of [
   });
 }
 
-// L27: a c parameter selects the site its fields name and round-trips; a
+// L27: a c parameter selects the site its fields name and round-trips, the
+// printed link ending in that site's ending after the c value; a
 // participantParam that is not text is skipped and selects none.
 for (const c of [
-  { name: 'no site', config: {}, site: '', field: '' },
-  { name: 'Prolific', config: { prolific: true }, site: 'prolific', field: '' },
-  { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '' },
-  { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '' },
-  { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId' },
-  { name: 'a participantParam that is not text, left out of the rebuilt link', config: { participantParam: 7 }, site: '', field: '', built: {} },
+  { name: 'no site', config: {}, site: '', field: '', suffix: '' },
+  { name: 'Prolific', config: { prolific: true }, site: 'prolific', field: '', suffix: PLACEHOLDERS },
+  { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '', suffix: '&id=%SURVEY_CODE%' },
+  { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '', suffix: '' },
+  { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId', suffix: '' },
+  { name: 'a participantParam that is not text, left out of the rebuilt link', config: { participantParam: 7 }, site: '', field: '', built: {}, suffix: '' },
 ]) {
   test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
@@ -993,7 +994,9 @@ for (const c of [
     await page.getByRole('button', { name: 'Make the link' }).click();
     expect(await page.locator('#err').textContent()).toBe('');
     const expected = c.built === undefined ? config : { instrument: 'hitopbr', study: 'prefill', ...c.built };
-    expect(decodeLink(await page.locator('#out').textContent())).toEqual(expected);
+    const printed = await page.locator('#out').textContent();
+    expect(decodeLink(printed)).toEqual(expected);
+    expect(printed, 'the text after the c value is the site\'s ending').toBe(bare(printed) + c.suffix);
   });
 }
 
