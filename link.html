@@ -76,6 +76,7 @@
   .question-edit .moves button { margin: 0 var(--s2) 0 0; }
   /* After the rules above, so a hidden label or range row stays hidden. */
   .question-edit [hidden] { display: none; }
+  #questionsStatus:empty { display: none; }
 </style>
 </head>
 <body>
@@ -165,6 +166,12 @@
       <p class="hint">Optional. Questions of your own, such as age or how the participant heard of the study. The page asks them on a screen before the form or on a screen after its last page, never beside the items. Each answer is written in a column named <code>q_</code> plus the question's name, after the item columns. A text answer is written as typed. A whole number is written in digits. A choice is written as the number of the chosen option, counted from 1, and several choices as those numbers in order, separated by spaces. An unanswered question is written empty. Up to 50 questions. A link with questions is written compressed, as <code>?z=</code>.</p>
       <div id="questionList"></div>
       <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
+      <label>Load questions from a file
+        <span class="hint">A CSV file, saved from a spreadsheet as "CSV UTF-8". Its first row names the columns: list, name, text and type, and as you need them options, required, min and max. Each further row is one question. Write the options in one cell, separated by <code>|</code>. The README describes each column. The questions in the file take the place of the questions above. The file is read in this browser and sent nowhere.</span>
+        <input type="file" id="questionsFile" accept=".csv,text/csv">
+      </label>
+      <p role="alert" id="questionsErr" tabindex="-1"></p>
+      <p role="status" id="questionsStatus" class="muted"></p>
     </fieldset>
     <label>Send responses to
       <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
@@ -214,7 +221,7 @@
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
     consentTextFault, fetchExport, planItems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
-    CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX,
+    CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -406,6 +413,38 @@
   }
 
   addQuestion.addEventListener('click', () => addGroup().querySelector('select').focus());
+
+  // "Load questions from a file" reads the chosen file in this browser with
+  // readQuestionsCsv() and puts its questions in place of the editor's, the
+  // before list first. A refused file leaves the editor as it was. The
+  // control is emptied after each read, so choosing the same file again
+  // reads it again.
+  const questionsFile = document.getElementById('questionsFile');
+  const questionsErr = document.getElementById('questionsErr');
+  const questionsStatus = document.getElementById('questionsStatus');
+  questionsFile.addEventListener('change', async () => {
+    const file = questionsFile.files[0];
+    if (file === undefined) return;
+    questionsErr.textContent = '';
+    questionsStatus.textContent = '';
+    try {
+      let bytes;
+      try {
+        bytes = await file.arrayBuffer();
+      } catch {
+        throw new Error('The file could not be read.');
+      }
+      const questions = readQuestionsCsv(bytes);
+      questionList.replaceChildren();
+      for (const list of ['before', 'after']) for (const q of questions[list] ?? []) addGroup(list, q);
+      const n = questionList.children.length;
+      questionsStatus.textContent = `Loaded ${n} ${n === 1 ? 'question' : 'questions'} from ${file.name}.`;
+    } catch (e) {
+      questionsErr.textContent = e.message;
+    } finally {
+      questionsFile.value = '';
+    }
+  });
 
   // The editor's questions as a link's `questions` field, or undefined when
   // there are none. Each group's fields are read as the form page's check
