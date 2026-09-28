@@ -16,7 +16,8 @@
 //        row, a missing required column, an unknown and a repeated column
 //        name, a row with fewer and with more fields than the header, an
 //        unclosed quote, a quote inside an unquoted field, text after a
-//        closing quote, and field values outside the rules of the file or of
+//        closing quote, a quote fault in the header row and in a field past
+//        the last column, and field values outside the rules of the file or of
 //        a question; rows count records, so a quoted line break above a
 //        fault does not change its row number
 //   LF5: loading a file makes no network request
@@ -24,8 +25,8 @@
 // "Download these questions" and "Download a template":
 //
 //   LF6: the editor's questions, one of each type with a required question,
-//        a negative minimum, a text holding a comma, a double quote and
-//        non-ASCII text, and option labels holding those between them, are
+//        a negative minimum, and a text and an option label each holding a
+//        comma, a double quote and non-ASCII text, are
 //        saved as a UTF-8 file with a byte-order mark and CR LF line ends,
 //        its columns in the file's order and one row per question; loading
 //        that file fills the editor with the same questions, and both build
@@ -173,6 +174,16 @@ const REFUSED = [
     name: 'an unclosed quote',
     content: file(OK_ROW, 'after,two,"Two,text,,,,\nafter,three,Three,text,,,,'),
     message: bad('row 3, column text: its opening quote is never closed.'),
+  },
+  {
+    name: 'an unclosed quote in the header row',
+    content: 'list,"name,text,type\nbefore,ok,Fine,text\n',
+    message: bad('row 1, field 2: its opening quote is never closed.'),
+  },
+  {
+    name: 'a quote in a field past the last column',
+    content: file('before,two,Two,text,,,,,x"y'),
+    message: bad('row 2, field 9: it holds a quote but does not start with one. A field that holds a quote is written in quotes, with each quote in it written twice.'),
   },
   {
     name: 'a quote inside an unquoted field',
@@ -360,7 +371,7 @@ test('LF6: the editor saved as a file loads back as the same questions', async (
   await openBuilder(page);
   await addQ(page, { list: 'after', name: 'note', text: 'Anything, "else"?', type: 'text' });
   await addQ(page, { list: 'before', name: 'age', text: 'Age, in "years" ñ', type: 'number', min: '-5', max: '120', required: true });
-  await addQ(page, { list: 'before', name: 'pick', text: 'Pick one', type: 'choice', options: 'Café, au lait\nTea "green"\nWater' });
+  await addQ(page, { list: 'before', name: 'pick', text: 'Pick one', type: 'choice', options: 'Café, "au" lait\nTea "green"\nWater' });
   await addQ(page, { list: 'after', name: 'days', text: 'Días', type: 'multi', options: 'Mon\nTue' });
   const before = await readEditor(page);
   const { name, bytes } = await download(page, 'Download these questions');
@@ -369,7 +380,7 @@ test('LF6: the editor saved as a file loads back as the same questions', async (
   expect(expectFileForm(bytes)).toBe([
     'list,name,text,type,options,required,min,max',
     'before,age,"Age, in ""years"" ñ",number,,yes,-5,120',
-    'before,pick,Pick one,choice,"Café, au lait|Tea ""green""|Water",no,,',
+    'before,pick,Pick one,choice,"Café, ""au"" lait|Tea ""green""|Water",no,,',
     'after,note,"Anything, ""else""?",text,,no,,',
     'after,days,Días,multi,Mon|Tue,no,,',
   ].map((line) => `${line}\r\n`).join(''));
