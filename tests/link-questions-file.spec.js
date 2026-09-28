@@ -24,11 +24,12 @@
 // "Download these questions" and "Download a template":
 //
 //   LF6: the editor's questions, one of each type with a required question,
-//        a negative minimum, and a text and an option label holding a comma,
-//        a double quote and non-ASCII text, are saved as a UTF-8 file with a
-//        byte-order mark and CR LF line ends, its columns in the file's
-//        order and one row per question; loading that file fills the editor
-//        with the same questions, and both build the same link
+//        a negative minimum, a text holding a comma, a double quote and
+//        non-ASCII text, and option labels holding those between them, are
+//        saved as a UTF-8 file with a byte-order mark and CR LF line ends,
+//        its columns in the file's order and one row per question; loading
+//        that file fills the editor with the same questions, and both build
+//        a link with the same questions field
 //   LF7: the template is saved in the same form and loads as four
 //        questions, one of each type
 //   LF8: "Download these questions" saves nothing and names the fault when

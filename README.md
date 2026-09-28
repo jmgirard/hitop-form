@@ -394,11 +394,12 @@ order. Each further row is one question:
 | `text` | yes | the question, one line |
 | `type` | yes | `text`, `number`, `choice` or `multi`: in the builder, "Text, one line", "Whole number", "One of several options" or "Any of several options" |
 | `options` | no | for `choice` and `multi`, the options in one cell, separated by `\|`, such as `Phone\|Tablet\|Computer` |
-| `required` | no | `yes` or `no`, in upper or lower case, and a blank cell is `no` |
+| `required` | no | `yes` or `no`, in any mix of upper and lower case, and a blank cell is `no` |
 | `min`, `max` | no | for `number`, a whole number such as `18` or `-5`, or a blank cell |
 
-The builder removes spaces and line breaks at both ends of each cell before
-it reads the cell, and skips a row whose cells are all blank. Each list
+The builder removes spaces and line breaks at both ends of each cell's
+value, after it reads any quotes around the value. A quoted cell must start
+with its quote. The builder skips a row whose cells are all blank. Each list
 keeps the order of the rows. A cell can hold a comma or a double quote. The
 spreadsheet then writes the cell in quotes, and the builder reads it back.
 Each question follows the rules of
@@ -406,7 +407,9 @@ Each question follows the rules of
 
 The builder refuses a file with a fault, names the fault, and keeps the
 questions it held. A fault in one cell is named by its row and column,
-such as "row 3, column type". The header is row 1, and a cell that holds a
+such as "row 3, column type". A fault in a cell of the header row, or in a
+cell past the last column, is named by its field number, such as "row 1,
+field 2". The header is row 1, and a cell that holds a
 line break stays in its row. A file that is not UTF-8 is refused with a
 request to save it as "CSV UTF-8". The builder also refuses an empty file
 and a file with no question row. It refuses a missing, unknown or repeated

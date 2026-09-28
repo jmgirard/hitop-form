@@ -427,11 +427,13 @@ const QUESTION_COLUMNS_REQUIRED = ['list', 'name', 'text', 'type'];
 
 // Returns the questions a questions file holds, as checkQuestions() returns
 // them, from its bytes (an ArrayBuffer or a typed array), or throws naming
-// the fault. A fault in one field names its row and its column. Rows count
-// the file's records, the header being row 1, so a quoted line break does
-// not start a row. The file is read as RFC 4180 describes CSV, with LF also
-// ending a line. Every field is trimmed before it is read, and a row whose
-// fields are all blank is skipped. Each list keeps the order of the file.
+// the fault. A fault in one field names its row and its column, or its
+// field number in the header row or past the last column. Rows count the
+// file's records, the header being row 1, so a quoted line break does not
+// start a row. The file is read as RFC 4180 describes CSV, with LF also
+// ending a line. Every field's value is trimmed once its quotes are read,
+// and a row whose fields are all blank is skipped. Each list keeps the
+// order of the file.
 export function readQuestionsCsv(bytes) {
   const bad = (why) => new Error(`The file could not be used: ${why}`);
   let text;
