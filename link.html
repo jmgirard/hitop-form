@@ -175,7 +175,7 @@
         <button type="button" class="secondary" id="downloadQuestions">Download these questions</button>
       </p>
       <label>Load questions from a file
-        <span class="hint">A CSV file, saved from a spreadsheet as "CSV UTF-8". Its first row names the columns: list, name, text and type, and as you need them options, required, min and max. Each further row is one question. Write the options in one cell, separated by <code>|</code>. The README describes each column. The questions in the file take the place of the questions above. The file is read in this browser and sent nowhere.</span>
+        <span class="hint">A CSV file, saved from a spreadsheet as "CSV UTF-8". Its first row names the columns in lower case: list, name, text and type, and as you need them options, required, min and max. Each further row is one question. A list is before or after, and a type is text, number, choice or multi, in lower case. Write the options in one cell, separated by <code>|</code>. The README describes each column. The questions in the file take the place of the questions above. The file is read in this browser and sent nowhere.</span>
         <input type="file" id="questionsFile" accept=".csv,text/csv">
       </label>
       <p role="alert" id="questionsErr" tabindex="-1"></p>

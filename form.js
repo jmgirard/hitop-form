@@ -436,13 +436,17 @@ const QUESTION_COLUMNS_REQUIRED = ['list', 'name', 'text', 'type'];
 // order of the file.
 export function readQuestionsCsv(bytes) {
   const bad = (why) => new Error(`The file could not be used: ${why}`);
+  const notUtf8 = () => bad('it is not UTF-8 text. In your spreadsheet, save it as "CSV UTF-8" and load that file.');
   let text;
   try {
     // The decoder drops a byte-order mark.
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    throw bad('it is not UTF-8 text. In your spreadsheet, save it as "CSV UTF-8" and load that file.');
+    throw notUtf8();
   }
+  // UTF-16 text with no byte-order mark can also be valid UTF-8, with a NUL
+  // beside each ASCII character. A spreadsheet writes no NUL in a CSV file.
+  if (text.includes('\u0000')) throw notUtf8();
   if (text.trim() === '') throw bad('it is empty.');
   // The columns, once the header row is read. Until then a field is named
   // by its position in the row.

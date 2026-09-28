@@ -11,7 +11,8 @@
 //        columns and no line end after its last row loads
 //   LF3: a load takes the place of the questions the editor held
 //   LF4: each fault is refused with its message, and the editor keeps the
-//        questions it held: a file that is not UTF-8, an empty file, a file
+//        questions it held: a file that is not UTF-8, a file in UTF-16 with
+//        no byte-order mark, an empty file, a file
 //        of only a byte-order mark, a file with a header and no question
 //        row, a missing required column, an unknown and a repeated column
 //        name, a row with fewer and with more fields than the header, an
@@ -139,6 +140,11 @@ const REFUSED = [
   {
     name: 'a file that is not UTF-8',
     content: Buffer.concat([Buffer.from('list,name,text,type\nbefore,cafe,Caf', 'latin1'), Buffer.from([0xe9]), Buffer.from(',text\n')]),
+    message: bad('it is not UTF-8 text. In your spreadsheet, save it as "CSV UTF-8" and load that file.'),
+  },
+  {
+    name: 'a file in UTF-16 with no byte-order mark',
+    content: Buffer.from('list,name,text,type\nbefore,ok,Fine,text\n', 'utf16le'),
     message: bad('it is not UTF-8 text. In your spreadsheet, save it as "CSV UTF-8" and load that file.'),
   },
   { name: 'an empty file', content: '', message: bad('it is empty.') },

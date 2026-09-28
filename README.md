@@ -389,17 +389,20 @@ order. Each further row is one question:
 
 | Column | Required | Holds |
 |---|---|---|
-| `list` | yes | `before` or `after`: the page asks the question before the form or after it |
+| `list` | yes | `before` or `after`, in lower case: the page asks the question before the form or after it |
 | `name` | yes | the question's name, which gives its column `q_` plus the name |
 | `text` | yes | the question, one line |
-| `type` | yes | `text`, `number`, `choice` or `multi`: in the builder, "Text, one line", "Whole number", "One of several options" or "Any of several options" |
+| `type` | yes | `text`, `number`, `choice` or `multi`, in lower case: in the builder, "Text, one line", "Whole number", "One of several options" or "Any of several options" |
 | `options` | no | for `choice` and `multi`, the options in one cell, separated by `\|`, such as `Phone\|Tablet\|Computer` |
 | `required` | no | `yes` or `no`, in any mix of upper and lower case, and a blank cell is `no` |
 | `min`, `max` | no | for `number`, a whole number such as `18` or `-5`, or a blank cell |
 
-The builder removes spaces and line breaks at both ends of each cell's
-value, after it reads any quotes around the value. A quoted cell must start
-with its quote. The builder skips a row whose cells are all blank. Each list
+The builder first reads any quotes around a cell's value. It then removes
+white space, such as spaces, tabs and line breaks, at both ends of the
+value. A quoted cell must start with its quote and end with its closing
+quote. A space before the opening quote or after the closing quote is a
+fault.
+The builder skips a row whose cells are all blank. Each list
 keeps the order of the rows. A cell can hold a comma or a double quote. The
 spreadsheet then writes the cell in quotes, and the builder reads it back.
 Each question follows the rules of
@@ -411,7 +414,8 @@ such as "row 3, column type". A fault in a cell of the header row, or in a
 cell past the last column, is named by its field number, such as "row 1,
 field 2". The header is row 1, and a cell that holds a
 line break stays in its row. A file that is not UTF-8 is refused with a
-request to save it as "CSV UTF-8". The builder also refuses an empty file
+request to save it as "CSV UTF-8", and so is a file in UTF-16. The builder
+also refuses an empty file
 and a file with no question row. It refuses a missing, unknown or repeated
 column name, and a row with more or fewer cells than the header. It
 refuses a quote that breaks the CSV rules too.
