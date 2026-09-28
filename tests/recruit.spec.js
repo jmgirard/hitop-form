@@ -20,9 +20,9 @@
 //       same link without it, the identifier given as participant instead
 //
 // The {participant} token in a completion address, on a SONA-shaped
-// address except where a test names another (P11's saved-file address, P13's
-// Prolific address). Each use of the address, and each source of the
-// identifier:
+// address (P11's saved-file address a second one, on another host) except
+// P13's address without the token. Each use of the address, and each
+// source of the identifier:
 //
 //   P8: a confirmed send, identifier "a&b c" from the address: at the held
 //       navigation request the sent screen's link is the filled address,
@@ -180,15 +180,16 @@ for (const shuffle of [false, true]) {
 // ---- The {participant} token ---------------------------------------------
 
 // SONA's client-side completion address with the token where SONA's
-// documentation puts XXXX, and a saved-file address on another host so a
-// test tells the two apart. Neither is fetched for real: a route answers.
+// documentation puts XXXX, and a saved-file address of the same shape on
+// another host and experiment so a test tells the two apart. Neither is
+// fetched for real: a route answers.
 const SONA_COMPLETE = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code={participant}';
-const SAVED_COMPLETE = 'https://saved.example.org/done?code={participant}&from=saved';
+const SAVED_COMPLETE = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=456&credit_token=def&survey_code={participant}';
 // The filled addresses, written out rather than computed with the code
 // under test.
 const SONA_FILLED_ABC = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=a%26b%20c';
 const SONA_FILLED_12345 = 'https://yourschool.sona-systems.com/webstudy_credit.aspx?experiment_id=123&credit_token=abc&survey_code=12345';
-const SAVED_FILLED_12345 = 'https://saved.example.org/done?code=12345&from=saved';
+const SAVED_FILLED_12345 = 'https://saved.sona-systems.com/webstudy_credit.aspx?experiment_id=456&credit_token=def&survey_code=12345';
 const ABC_QUERY = '&id=a%26b%20c';
 
 // Answers every request to an address on either completion host, holding
@@ -197,7 +198,7 @@ async function serveCompletion(page, { hold = false } = {}) {
   const requests = [];
   let release;
   const held = new Promise((resolve) => { release = resolve; });
-  await page.route((url) => url.hostname === 'yourschool.sona-systems.com' || url.hostname === 'saved.example.org', async (route) => {
+  await page.route((url) => url.hostname === 'yourschool.sona-systems.com' || url.hostname === 'saved.sona-systems.com', async (route) => {
     requests.push(route.request().url());
     if (hold) await held;
     return route.fulfill({
@@ -285,7 +286,7 @@ test('with no store, the saved screen links to completeSaved filled with the lin
   const link = page.locator('p.complete a');
   await expect(link).toHaveCount(1);
   await expect(link).toHaveAttribute('href', SAVED_FILLED_12345);
-  await expect(link).toHaveText('saved.example.org');
+  await expect(link).toHaveText('saved.sona-systems.com');
   await page.waitForTimeout(2000);
   expect(requests, 'nothing requested of either address').toEqual([]);
 });

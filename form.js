@@ -186,10 +186,12 @@ export function readProlific(search) {
 // carries the link itself, nor one of the three Prolific names, which
 // `prolific: true` reads together with the two columns it writes. Returns
 // the name or throws naming the fault with the value shown. link.html runs
-// the same check on the builder's field.
+// the same check on the builder's field, with `prolificAdvice` naming its
+// Prolific choice in place of the link field.
 export function checkParticipantParam(
   name,
   bad = (why) => new Error(`The study link's participantParam field could not be used: ${why}`),
+  prolificAdvice = 'For a Prolific study use prolific: true',
 ) {
   if (typeof name !== 'string') throw bad(`it is not text, and it is ${JSON.stringify(name)}.`);
   if (name === '') throw bad('it is empty, and it is "".');
@@ -199,7 +201,7 @@ export function checkParticipantParam(
   }
   if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
   if (PROLIFIC_PARAMS.includes(name)) {
-    throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. For a Prolific study use prolific: true, which also keeps STUDY_ID and SESSION_ID.`);
+    throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. ${prolificAdvice}, which also keeps STUDY_ID and SESSION_ID.`);
   }
   return name;
 }
@@ -319,7 +321,10 @@ export function checkStoreUrl(url, bad = (why) => new Error(`The store address c
 // carries each participant's own code, as SONA's `survey_code=` does. A
 // URL keeps the braces there as typed. In the path it encodes them, and a
 // token in the host would give a host the identifier cannot fill, so the
-// token is refused in either, in its typed or its encoded form.
+// token is refused in either, in its typed or its encoded form. Only the
+// exact spelling is replaced, so any other spelling after the ? or the #
+// (another letter case, a brace encoded as %7B or %7D) is refused too:
+// left in place, it would reach the site unfilled.
 export const PARTICIPANT_TOKEN = '{participant}';
 
 export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's complete field could not be used: ${why}`)) {
@@ -331,9 +336,13 @@ export function checkCompleteUrl(url, bad = (why) => new Error(`The study link's
     throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
   }
   refuseCredentials(u, url, bad, 'it');
-  const token = /\{participant\}|%7bparticipant%7d/i;
+  const token = /(?:\{|%7b)participant(?:\}|%7d)/i;
   if (token.test(u.host) || token.test(u.pathname)) {
     throw bad(`the ${PARTICIPANT_TOKEN} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(url)}.`);
+  }
+  const variant = (u.search + u.hash).match(new RegExp(token.source, 'gi'))?.find((m) => m !== PARTICIPANT_TOKEN);
+  if (variant !== undefined) {
+    throw bad(`the ${PARTICIPANT_TOKEN} token must be written exactly so, in lower case with its braces typed, and ${JSON.stringify(variant)} is another spelling of it. The address is ${JSON.stringify(url)}.`);
   }
   return u.href;
 }

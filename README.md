@@ -98,7 +98,9 @@ the form:
    as SONA's does, write `{participant}` after its `?` or `#`. The page
    replaces each `{participant}` with the identifier, encoded for an
    address, before it sends the participant there or links to it. The
-   builder refuses `{participant}` in the host or the path.
+   builder refuses `{participant}` in the host or the path, and it refuses
+   any other spelling of it (`{Participant}`, `%7Bparticipant%7D`), which
+   the page would leave unfilled.
 8. Choose where responses go. "A file on the participant's device" is the
    default: the page saves a file and sends nothing. "A web address" is the
    `https://` address of an endpoint that accepts one JSON row per
@@ -195,6 +197,10 @@ In a hitop-form link the address sits inside the study link, so a
 participant can read the key before they finish, not only at the end. SONA
 names the server-side completion URL as the alternative. The external study
 loads that URL from its own server, and this page has no server.
+A participant does not need to read the key to try another code. If the
+address carries no survey code, for example because the participant
+removed `id` from it, the start screen asks for the identifier. The page
+then puts whatever the participant types into the completion URL.
 
 **CloudResearch Connect.** Connect asks studies to record each
 participant's Connect ID from a variable named `participantId`, and to end

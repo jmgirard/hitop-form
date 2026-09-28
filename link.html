@@ -225,12 +225,16 @@
   kindSelect.addEventListener('change', showKind);
 
   // Only the chosen recruiting site's hint, or the other site's field, shows.
+  // The hints sit outside the menu's label, so the shown one is tied to the
+  // menu by aria-describedby for a screen reader to read with it.
   const siteSelect = f.elements.site;
+  const SITE_HINTS = { prolific: 'prolificHint', sona: 'sonaHint', connect: 'connectHint' };
   function showSite() {
-    document.getElementById('prolificHint').hidden = siteSelect.value !== 'prolific';
-    document.getElementById('sonaHint').hidden = siteSelect.value !== 'sona';
-    document.getElementById('connectHint').hidden = siteSelect.value !== 'connect';
+    for (const [site, id] of Object.entries(SITE_HINTS)) document.getElementById(id).hidden = siteSelect.value !== site;
     document.getElementById('otherFields').hidden = siteSelect.value !== 'other';
+    const hint = SITE_HINTS[siteSelect.value];
+    if (hint) siteSelect.setAttribute('aria-describedby', hint);
+    else siteSelect.removeAttribute('aria-describedby');
   }
   siteSelect.addEventListener('change', showSite);
 
@@ -390,7 +394,11 @@
       let param;
       try {
         param = site === 'other'
-          ? checkParticipantParam(data.get('participantParam').trim(), (why) => new Error(`The address parameter could not be used: ${why}`))
+          ? checkParticipantParam(
+            data.get('participantParam').trim(),
+            (why) => new Error(`The address parameter could not be used: ${why}`),
+            'For a Prolific study choose Prolific as the recruiting site',
+          )
           : SITES[site].param;
       } catch (e) {
         err.textContent = e.message;
