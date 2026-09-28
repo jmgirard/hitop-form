@@ -65,6 +65,7 @@
                padding: var(--s3) var(--s4); margin: 0 0 var(--s5); word-break: break-all; }
   #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
   #prefilled ul { margin: 0; padding-left: 1.25rem; }
+  .site-hint { color: var(--muted); font-size: .875rem; margin-top: calc(-1 * var(--s2)); }
 </style>
 </head>
 <body>
@@ -110,13 +111,27 @@
       Show the items in a random order
       <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
     </label>
-    <label class="check">
-      <input name="prolific" type="checkbox" value="true">
-      Recruit through Prolific
-      <span class="hint">The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. Prolific's "I'll use URL parameters" option appends the three parameters to the study URL itself, so a pasted link carries each parameter once unless that option adds it again, and the page then reads the filled value. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</span>
+    <label>Recruiting site
+      <span class="hint">Optional. A site that puts each participant's identifier into the study link's address. The page then takes the identifier from there, so leave the participant field empty.</span>
+      <select name="site">
+        <option value="">None</option>
+        <option value="prolific">Prolific</option>
+        <option value="sona">SONA</option>
+        <option value="connect">CloudResearch Connect</option>
+        <option value="other">Another site</option>
+      </select>
     </label>
+    <p class="site-hint" id="prolificHint" hidden>The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. Prolific's "I'll use URL parameters" option appends the three parameters to the study URL itself, so a pasted link carries each parameter once unless that option adds it again, and the page then reads the filled value. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</p>
+    <p class="site-hint" id="sonaHint" hidden>The page takes each participant's SONA survey code from the <code>id</code> parameter of the address as their identifier, so leave the participant field empty. The link below ends in <code>id=%SURVEY_CODE%</code>. Paste it as the Study URL in SONA, which puts each participant's survey code in place of <code>%SURVEY_CODE%</code>. For the completion URL, give SONA's client-side completion URL with <code>{participant}</code> in place of its <code>XXXX</code>. That URL carries the study's credit token, and a participant can read it in the study link.</p>
+    <p class="site-hint" id="connectHint" hidden>The page takes each participant's Connect ID from the <code>participantId</code> parameter of the address as their identifier, so leave the participant field empty. Give the link below as the project URL in Connect. For the completion URL, give the completion redirect URL Connect shows for the study.</p>
+    <div id="otherFields" hidden>
+      <label>Address parameter
+        <span class="hint">The name of the parameter the site adds to the study link's address with the participant's identifier. Letters A-Z and a-z, digits, "_", "." and "-", up to 64, and not <code>c</code> or a Prolific parameter.</span>
+        <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
+      </label>
+    </div>
     <label>Completion URL
-      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page.</span>
+      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page. Where the address must carry the participant's identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>, and the page puts the identifier there.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
@@ -161,7 +176,7 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the Prolific box is checked, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, and one column per item in the order the file keeps them, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -169,12 +184,26 @@
 </main>
 <script type="module">
   import {
-    encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, fetchExport, planItems, storeSql, PROLIFIC_PARAMS,
+    encodeConfig, decodeConfig, checkModule, checkStore, checkCompleteUrl, checkParticipantParam, fetchExport, planItems,
+    storeSql, PROLIFIC_PARAMS,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
   // after the page's own parameter.
   const PROLIFIC_SUFFIX = PROLIFIC_PARAMS.map((p) => `&${p}={{%${p}%}}`).join('');
+
+  // The recruiting sites the menu offers besides Prolific: the address
+  // parameter each fills with the participant's identifier, and what the
+  // printed link ends in. SONA fills a %SURVEY_CODE% placeholder the
+  // researcher puts in the Study URL, as `id` in its Qualtrics guide.
+  // Connect's help asks for `participantId` to be read from the address and
+  // names no placeholder, so its link ends in nothing. "Another site" takes
+  // the name from its field.
+  const SITES = {
+    sona: { param: 'id', suffix: '&id=%SURVEY_CODE%' },
+    connect: { param: 'participantId', suffix: '' },
+  };
+  const siteOf = (param) => Object.keys(SITES).find((s) => SITES[s].param === param) ?? 'other';
 
   const f = document.getElementById('f');
   const err = document.getElementById('err');
@@ -194,6 +223,16 @@
     document.getElementById('supabaseFields').hidden = kindSelect.value !== 'supabase';
   }
   kindSelect.addEventListener('change', showKind);
+
+  // Only the chosen recruiting site's hint, or the other site's field, shows.
+  const siteSelect = f.elements.site;
+  function showSite() {
+    document.getElementById('prolificHint').hidden = siteSelect.value !== 'prolific';
+    document.getElementById('sonaHint').hidden = siteSelect.value !== 'sona';
+    document.getElementById('connectHint').hidden = siteSelect.value !== 'connect';
+    document.getElementById('otherFields').hidden = siteSelect.value !== 'other';
+  }
+  siteSelect.addEventListener('change', showSite);
 
   // A study link's own `c` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
@@ -252,7 +291,16 @@
     address('complete', 'Completion URL', config.complete);
     address('completeSaved', 'Completion URL after a saved file', config.completeSaved);
     f.elements.shuffle.checked = config.shuffle === true;
-    f.elements.prolific.checked = config.prolific === true;
+    // The site follows the link's fields: Prolific for prolific: true, SONA
+    // for participantParam "id", Connect for "participantId", another site
+    // with its name filled for any other text, and none otherwise, a
+    // participantParam that is not text included.
+    if (config.prolific === true) {
+      siteSelect.value = 'prolific';
+    } else if (typeof config.participantParam === 'string') {
+      siteSelect.value = siteOf(config.participantParam);
+      if (siteSelect.value === 'other') text('participantParam', config.participantParam);
+    }
     const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
     if (isPlainObject(config.module)) f.elements.module.value = JSON.stringify(config.module, null, 2);
     const store = config.store;
@@ -281,6 +329,7 @@
     refuse('could not be read.');
   }
   showKind();
+  showSite();
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
   // when it holds text, else to the notice when it shows.
@@ -324,15 +373,35 @@
     // The box checked puts `shuffle: true` in the link; unchecked, the link
     // carries no shuffle field, as links made before the box did.
     if (data.get('shuffle') === 'true') config.shuffle = true;
-    // The Prolific box likewise puts `prolific: true` in the link. The form
-    // page refuses that beside a participant, so the builder refuses it
+    // Prolific as the recruiting site puts `prolific: true` in the link. The
+    // form page refuses that beside a participant, so the builder refuses it
     // here, at the researcher.
-    const prolific = data.get('prolific') === 'true';
+    const site = data.get('site');
+    const prolific = site === 'prolific';
     if (prolific && participant !== '') {
       err.textContent = 'The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.';
       return;
     }
     if (prolific) config.prolific = true;
+    // Another site puts `participantParam` in the link: the site's own
+    // name for SONA and Connect, the field's for another site, which takes
+    // the form page's own check. It too is refused beside a participant.
+    if (site === 'sona' || site === 'connect' || site === 'other') {
+      let param;
+      try {
+        param = site === 'other'
+          ? checkParticipantParam(data.get('participantParam').trim(), (why) => new Error(`The address parameter could not be used: ${why}`))
+          : SITES[site].param;
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
+      if (participant !== '') {
+        err.textContent = `The participant field must be empty when a recruiting site fills the identifier: the page takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`;
+        return;
+      }
+      config.participantParam = param;
+    }
     // The completion URL takes the form page's own check, with the message
     // naming the field as the builder shows it.
     const complete = data.get('complete').trim();
@@ -413,9 +482,11 @@
     }
     const url = new URL('./', window.location.href);
     url.search = `?c=${encodeConfig(config)}`;
-    // A Prolific link ends in the three placeholders, appended as text so
-    // that the braces and percent signs reach Prolific as it expects them.
-    const href = url.href + (prolific ? PROLIFIC_SUFFIX : '');
+    // A Prolific link ends in the three placeholders and a SONA link in
+    // its one, appended as text so that the braces and percent signs reach
+    // the site as it expects them.
+    const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
+    const href = url.href + suffix;
     out.textContent = href;
     const a = document.createElement('a');
     a.href = href;

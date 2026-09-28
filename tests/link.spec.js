@@ -27,20 +27,20 @@
 //       printed order is not followed; checked, the link carries
 //       shuffle: true and opens a page that renders a rearrangement;
 //       unchecked, the link carries no shuffle field
-//  L10: the builder has a checkbox "Recruit through Prolific" whose hint
-//       says the Prolific ID in the address is the identifier, that the
-//       participant field stays empty, that the link is pasted as the study
-//       URL with its placeholders, and names the two columns; checked, the
+//  L10: the "Recruiting site" menu starts at None; Prolific chosen shows a
+//       hint that says the Prolific ID in the address is the identifier,
+//       that the participant field stays empty, that the link is pasted as
+//       the study URL with its placeholders, and names the two columns; the
 //       link carries prolific: true and the printed link ends in the three
 //       placeholders, and opened as printed it asks for the identifier
-//       (the placeholders read as absent); unchecked, the link carries no
+//       (the placeholders read as absent); with no site, the link carries no
 //       prolific field and no placeholders
-//  L11: the box checked beside a filled participant field is refused,
+//  L11: Prolific chosen beside a filled participant field is refused,
 //       naming both, and no link is built
 //  L12: the "Completion URL" field puts complete in the link; an http://
 //       address is refused through the form page's check, naming the fault,
 //       and no link is built
-//  L13: with the Prolific box checked, the SQL shown for a Supabase store
+//  L13: with Prolific as the recruiting site, the SQL shown for a Supabase store
 //       equals supabase-hitopbr-prolific.sql, and with the random-order box
 //       too supabase-hitopbr-prolific-shuffle.sql, byte for byte
 //  L14: the "Completion URL after a saved file" field, whose hint says it
@@ -48,7 +48,7 @@
 //       holds one code per outcome, puts completeSaved in the link beside
 //       complete; an http:// address is refused naming the field, and the
 //       field filled beside an empty completion field is refused, and no
-//       link is built either way; the Prolific box's hint says Prolific's
+//       link is built either way; the Prolific hint says Prolific's
 //       URL-parameters option appends the parameters and the page reads the
 //       filled value
 //  L15: a pasted descriptor whose items are not in ascending order,
@@ -92,6 +92,30 @@
 //       notice for every L20 load that shows it, and on no element for
 //       every L20 silent load; this is focus in Chromium, not what a screen
 //       reader speaks
+//  L24: the "Recruiting site" menu offers None, Prolific, SONA, CloudResearch
+//       Connect and Another site, in that order; each choice shows its own
+//       hint (for another site, the "Address parameter" field) and hides
+//       the others'; the SONA hint names the id parameter, the
+//       id=%SURVEY_CODE% ending, {participant} in place of XXXX and the
+//       readable credit token; the Connect hint names participantId; the
+//       completion hint says where {participant} goes
+//  L25: each choice builds its link: no field and no ending for None;
+//       prolific: true and the three placeholders for Prolific;
+//       participantParam "id" and the ending &id=%SURVEY_CODE% for SONA;
+//       participantParam "participantId" and no ending for Connect; the
+//       trimmed typed name and no ending for another site
+//  L26: the builder refuses, with the form page's messages under the
+//       field's name, an address parameter that is empty, holds a space, is
+//       over 64 characters, is c, or is a Prolific name; and SONA or another
+//       site beside a filled participant field; no link is built
+//  L27: a c parameter selects Prolific for prolific: true, SONA for "id",
+//       Connect for "participantId", another site with the field filled for
+//       any other name, and None with no field; a participantParam that is
+//       not text selects None; each round-trips through "Make the link"
+//  L28: the SONA link opened through "Open the link", %SURVEY_CODE%
+//       unfilled, shows the start screen's identifier question
+//  L29: the Supabase SQL under SONA equals the SQL with no site, with the
+//       random-order box clear and checked
 
 import { test, expect } from '@playwright/test';
 import {
@@ -159,11 +183,11 @@ async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = f
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption(instrument);
   await page.locator('input[name="study"]').fill('link');
-  // The Prolific box needs the participant field empty.
+  // Prolific as the recruiting site needs the participant field empty.
   if (!prolific) await page.locator('input[name="participant"]').fill('l6');
   if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
   if (shuffle) await page.locator('input[name="shuffle"]').check();
-  if (prolific) await page.locator('input[name="prolific"]').check();
+  if (prolific) await page.locator('select[name="site"]').selectOption('prolific');
   await page.locator('select[name="storeKind"]').selectOption('supabase');
   await page.locator('input[name="supabaseUrl"]').fill(url);
   await page.locator('input[name="supabaseKey"]').fill(key);
@@ -313,22 +337,26 @@ test('the random-order box: its label and hint, and the link it builds', async (
   expect(seen.map((s) => s.position)).toEqual(numbers.map((_, i) => i + 1));
 });
 
-// L10: the Prolific box. Its hint is checked sentence by sentence; a link
-// built with it checked carries prolific: true and the placeholders, and
-// opened as printed asks for the identifier; one built with it clear
-// carries neither.
-test('the Prolific box: its label and hint, and the link it builds', async ({ page }) => {
+// L10: Prolific as the recruiting site. Its hint is checked sentence by
+// sentence; a link built with it chosen carries prolific: true and the
+// placeholders, and opened as printed asks for the identifier; one built
+// with no site carries neither.
+test('Prolific as the recruiting site: its hint, and the link it builds', async ({ page }) => {
   await page.goto(`${base()}link.html`);
-  const box = page.getByRole('checkbox', { name: /Recruit through Prolific/ });
+  const box = page.getByRole('combobox', { name: /Recruiting site/ });
   await expect(box).toBeVisible();
-  await expect(box).not.toBeChecked();
-  const hint = page.locator('label.check', { hasText: 'Recruit through Prolific' }).locator('.hint');
+  await expect(box).toHaveValue('');
+  const hint = page.locator('#prolificHint');
+  await expect(hint).toBeHidden();
+  await box.selectOption('prolific');
+  await expect(hint).toBeVisible();
   await expect(hint).toContainText("takes each participant's Prolific ID from the address as their identifier");
   await expect(hint).toContainText('leave the participant field empty');
   await expect(hint).toContainText('Paste the link below, with its three placeholders, as the study URL on Prolific');
   await expect(hint).toContainText('prolific_study');
   await expect(hint).toContainText('prolific_session');
 
+  await box.selectOption('');
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
   await page.getByRole('button', { name: 'Make the link' }).click();
@@ -337,7 +365,7 @@ test('the Prolific box: its label and hint, and the link it builds', async ({ pa
   expect(plain).not.toContain('PROLIFIC_PID');
   expect(decodeLink(plain)).toEqual({ instrument: 'hitopbr', study: 'link' });
 
-  await box.check();
+  await box.selectOption('prolific');
   await page.getByRole('button', { name: 'Make the link' }).click();
   const href = await page.locator('#out').textContent();
   expect(href.endsWith(PLACEHOLDERS), 'the printed link ends in the placeholders').toBe(true);
@@ -350,13 +378,13 @@ test('the Prolific box: its label and hint, and the link it builds', async ({ pa
   await expect(page.locator('input[name="participant"]')).toBeVisible();
 });
 
-// L11: the box beside a participant.
-test('the Prolific box beside a filled participant field is refused, naming both', async ({ page }) => {
+// L11: Prolific beside a participant.
+test('Prolific as the recruiting site beside a filled participant field is refused, naming both', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
   await page.locator('input[name="participant"]').fill('l11');
-  await page.locator('input[name="prolific"]').check();
+  await page.locator('select[name="site"]').selectOption('prolific');
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#err')).toHaveText(
     "The participant field must be empty when recruiting through Prolific: the page takes each participant's identifier from the Prolific ID in the address.",
@@ -392,7 +420,7 @@ test('the Completion URL after a saved file field puts completeSaved in the link
   const hint = page.locator('label', { hasText: 'Completion URL after a saved file' }).locator('.hint');
   await expect(hint).toContainText("the study's completion code for a saved file");
   await expect(hint).toContainText('one code per outcome, each with its own ?cc= address');
-  const prolificHint = page.locator('label.check', { hasText: 'Recruit through Prolific' }).locator('.hint');
+  const prolificHint = page.locator('#prolificHint');
   await expect(prolificHint).toContainText('"I\'ll use URL parameters" option appends the three parameters to the study URL itself');
   await expect(prolificHint).toContainText('the page then reads the filled value');
 
@@ -557,8 +585,7 @@ for (const w of PREFILL_STORES) {
     await expect(page.locator('input[name="study"]')).toHaveValue('prefill');
     await expect(page.locator('input[name="participant"]')).toHaveValue(w.participant ?? '');
     await expect(page.locator('input[name="shuffle"]')).toBeChecked();
-    if (w.prolific) await expect(page.locator('input[name="prolific"]')).toBeChecked();
-    else await expect(page.locator('input[name="prolific"]')).not.toBeChecked();
+    await expect(page.locator('select[name="site"]')).toHaveValue(w.prolific ? 'prolific' : '');
     await expect(page.locator('input[name="complete"]')).toHaveValue(COMPLETE_URL);
     await expect(page.locator('input[name="completeSaved"]')).toHaveValue(COMPLETE_SAVED_URL);
     expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
@@ -842,3 +869,149 @@ test('a refused build with the study empty empties and hides the notice', async 
   await expect(page.locator('#prefilled')).toBeHidden();
   await expect(page.locator('#prefilled li')).toHaveCount(0);
 });
+
+// ---- The recruiting site ---------------------------------------------------
+
+// The menu's choices, stated here rather than read from link.html, and the
+// element each shows: its hint, or for another site the name field.
+const SITE_CHOICES = [
+  { value: '', label: 'None', shows: null },
+  { value: 'prolific', label: 'Prolific', shows: '#prolificHint' },
+  { value: 'sona', label: 'SONA', shows: '#sonaHint' },
+  { value: 'connect', label: 'CloudResearch Connect', shows: '#connectHint' },
+  { value: 'other', label: 'Another site', shows: '#otherFields' },
+];
+const SITE_ELEMENTS = SITE_CHOICES.map((c) => c.shows).filter(Boolean);
+
+// Fills the builder for the HiTOP-BR with a site chosen and presses the
+// button; returns the alert and the built link.
+async function buildSite(page, { site, param, participant = '' }) {
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('link');
+  if (participant !== '') await page.locator('input[name="participant"]').fill(participant);
+  await page.locator('select[name="site"]').selectOption(site);
+  if (param !== undefined) await page.locator('input[name="participantParam"]').fill(param);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  return { err: await page.locator('#err').textContent(), href: await page.locator('#out').textContent() };
+}
+
+// The printed link with only the page's own parameter, for a config.
+const bare = (href) => `${new URL(href).origin}${new URL(href).pathname}?c=${new URL(href).searchParams.get('c')}`;
+
+// L24: the menu's choices in order, and the one element each shows.
+test('the recruiting-site menu offers five choices and shows only the chosen one\'s hint or field', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  const options = await page.$$eval('select[name="site"] option', (nodes) => nodes.map((n) => ({ value: n.value, label: n.textContent })));
+  expect(options).toEqual(SITE_CHOICES.map(({ value, label }) => ({ value, label })));
+  for (const c of SITE_CHOICES) {
+    await page.locator('select[name="site"]').selectOption(c.value);
+    for (const sel of SITE_ELEMENTS) await expect(page.locator(sel), `${sel} under ${c.value || 'none'}`).toBeVisible({ visible: sel === c.shows });
+  }
+  const sona = page.locator('#sonaHint');
+  await expect(sona).toContainText("takes each participant's SONA survey code from the id parameter of the address as their identifier");
+  await expect(sona).toContainText('The link below ends in id=%SURVEY_CODE%');
+  await expect(sona).toContainText('with {participant} in place of its XXXX');
+  await expect(sona).toContainText('a participant can read it in the study link');
+  await expect(page.locator('#connectHint')).toContainText('from the participantId parameter of the address');
+  await expect(page.locator('label', { hasText: 'Completion URL' }).first().locator('.hint')).toContainText('write {participant} after its ? or #');
+});
+
+// L25: the link each choice builds.
+for (const c of [
+  { site: '', config: {}, suffix: '' },
+  { site: 'prolific', config: { prolific: true }, suffix: PLACEHOLDERS },
+  { site: 'sona', config: { participantParam: 'id' }, suffix: '&id=%SURVEY_CODE%' },
+  { site: 'connect', config: { participantParam: 'participantId' }, suffix: '' },
+  { site: 'other', param: 'workerId', config: { participantParam: 'workerId' }, suffix: '' },
+  { site: 'other', param: '  survey.code-1  ', config: { participantParam: 'survey.code-1' }, suffix: '' },
+]) {
+  test(`the recruiting site ${JSON.stringify(c.site)}${c.param ? ` with ${JSON.stringify(c.param)}` : ''} builds its link`, async ({ page }) => {
+    const { err, href } = await buildSite(page, { site: c.site, param: c.param });
+    expect(err).toBe('');
+    expect(decodeLink(href)).toEqual({ instrument: 'hitopbr', study: 'link', ...c.config });
+    expect(href).toBe(bare(href) + c.suffix);
+    await expect(page.locator('#open a')).toHaveAttribute('href', href);
+  });
+}
+
+// L26: the builder's refusals, each through the form page's own check or
+// the participant conflict; no link is built.
+const LONG_PARAM = 'p'.repeat(65);
+for (const c of [
+  { site: 'other', param: '', names: 'The address parameter could not be used: it is empty, and it is "".' },
+  { site: 'other', param: 'survey code', names: 'The address parameter could not be used: it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is "survey code".' },
+  { site: 'other', param: LONG_PARAM, names: `The address parameter could not be used: it is longer than 64 characters, and it is "${LONG_PARAM}".` },
+  { site: 'other', param: 'c', names: 'The address parameter could not be used: it is "c", the parameter that carries the study link itself.' },
+  { site: 'other', param: 'PROLIFIC_PID', names: 'The address parameter could not be used: it is "PROLIFIC_PID", one of Prolific\'s parameters. For a Prolific study use prolific: true, which also keeps STUDY_ID and SESSION_ID.' },
+  { site: 'sona', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the page takes each participant\'s identifier from the address parameter "id".' },
+  { site: 'other', param: 'workerId', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the page takes each participant\'s identifier from the address parameter "workerId".' },
+]) {
+  test(`the builder refuses ${c.participant ? `the site ${c.site} beside a participant` : `the address parameter ${JSON.stringify(c.param).slice(0, 30)}`}`, async ({ page }) => {
+    const { err, href } = await buildSite(page, c);
+    expect(err).toBe(c.names);
+    expect(href, 'no link is built').toBe('');
+  });
+}
+
+// L27: a c parameter selects the site its fields name and round-trips; a
+// participantParam that is not text is skipped and selects none.
+for (const c of [
+  { name: 'no site', config: {}, site: '', field: '' },
+  { name: 'Prolific', config: { prolific: true }, site: 'prolific', field: '' },
+  { name: 'SONA', config: { participantParam: 'id' }, site: 'sona', field: '' },
+  { name: 'Connect', config: { participantParam: 'participantId' }, site: 'connect', field: '' },
+  { name: 'another site', config: { participantParam: 'workerId' }, site: 'other', field: 'workerId' },
+  { name: 'a participantParam that is not text', config: { participantParam: 7 }, site: '', field: '', built: {} },
+]) {
+  test(`a c parameter selects the recruiting site and round-trips: ${c.name}`, async ({ page }) => {
+    const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
+    await openBuilder(page, { config });
+    await expect(page.locator('#err')).toHaveText('');
+    await expect(page.locator('select[name="site"]')).toHaveValue(c.site);
+    await expect(page.locator('input[name="participantParam"]')).toHaveValue(c.field);
+    await expect(page.locator('#otherFields')).toBeVisible({ visible: c.site === 'other' });
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    expect(await page.locator('#err').textContent()).toBe('');
+    const expected = c.built === undefined ? config : { instrument: 'hitopbr', study: 'prefill', ...c.built };
+    expect(decodeLink(await page.locator('#out').textContent())).toEqual(expected);
+  });
+}
+
+// L28: the SONA link opened as printed, %SURVEY_CODE% unfilled, asks for the
+// identifier.
+test('the SONA link opened as printed shows the start screen\'s identifier question', async ({ page }) => {
+  const { href } = await buildSite(page, { site: 'sona' });
+  expect(href.endsWith('&id=%SURVEY_CODE%')).toBe(true);
+  await page.goto(await page.locator('#open a').getAttribute('href'));
+  await expect(page.locator('h1')).toHaveText('HiTOP-BR');
+  await expect(page.locator('input[name="participant"]')).toBeVisible();
+  await expect(page.locator('input[name="participant"]')).toHaveValue('');
+});
+
+// L29: the Supabase SQL under SONA equals the SQL with no site, with the
+// random order off and on.
+for (const shuffle of [false, true]) {
+  test(`the Supabase SQL under SONA equals the SQL with no site${shuffle ? ' under shuffle' : ''}`, async ({ page }) => {
+    const sqls = [];
+    for (const site of ['sona', '']) {
+      await page.goto(`${base()}link.html`);
+      await page.locator('select[name="instrument"]').selectOption('hitopbr');
+      await page.locator('input[name="study"]').fill('link');
+      if (site === '') await page.locator('input[name="participant"]').fill('l29');
+      if (shuffle) await page.locator('input[name="shuffle"]').check();
+      await page.locator('select[name="site"]').selectOption(site);
+      await page.locator('select[name="storeKind"]').selectOption('supabase');
+      await page.locator('input[name="supabaseUrl"]').fill('https://abc.supabase.co');
+      await page.locator('input[name="supabaseKey"]').fill('sb_publishable_x');
+      await page.locator('input[name="supabaseTable"]').fill('hitopbr_responses');
+      await page.getByRole('button', { name: 'Make the link' }).click();
+      await expect(page.locator('#sqlBlock')).toBeVisible();
+      expect(await page.locator('#err').textContent()).toBe('');
+      sqls.push(await page.locator('#sql').inputValue());
+    }
+    expect(sqls[0]).toContain('"study" text');
+    expect(sqls[0].includes('"item_order" text')).toBe(shuffle);
+    expect(sqls[0]).toBe(sqls[1]);
+  });
+}
