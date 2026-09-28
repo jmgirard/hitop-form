@@ -18,13 +18,14 @@
 //        options, an option of 201 characters, an option holding "|", a line
 //        separator, U+0085, a vertical tab or a form feed, two options the same after
 //        trimming, an option holding a lone surrogate, a minimum that is not
-//        a whole number, a maximum outside the range, and a minimum above
+//        a whole number, a maximum outside the range, a bound of more digits
+//        than a JavaScript number holds, quoted as typed, and a minimum above
 //        the maximum; 51 questions are refused naming the count
 //   LQ5: blank lines in the options box are skipped, a type that takes no
 //        options or bounds leaves the hidden ones out of the link, and with
 //        no question the builder writes ?c= and no questions field; in a
-//        browser without CompressionStream a link with questions is refused
-//        naming the questions
+//        browser without CompressionStream a link with questions, consent
+//        text, or both is refused naming what it holds
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
 
@@ -171,6 +172,10 @@ const REFUSED = [
   { name: 'a minimum of 2.5', qs: [{ name: 'a', text: 'a', type: 'number', min: '2.5' }], why: bad('question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "2.5".') },
   { name: 'a minimum of abc', qs: [{ name: 'a', text: 'a', type: 'number', min: 'abc' }], why: bad('question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "abc".') },
   { name: 'a maximum of 2147483648', qs: [{ name: 'a', text: 'a', type: 'number', max: '2147483648' }], why: bad('question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is 2147483648.') },
+  // Past the digits a JavaScript number holds exactly, the refusal quotes
+  // what was typed, not the number it rounds to (1e+23, or null for Infinity).
+  { name: 'a minimum of 23 nines', qs: [{ name: 'a', text: 'a', type: 'number', min: '9'.repeat(23) }], why: bad(`question 1: its min is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "${'9'.repeat(23)}".`) },
+  { name: 'a maximum of minus 400 nines', qs: [{ name: 'a', text: 'a', type: 'number', max: `-${'9'.repeat(400)}` }], why: bad(`question 1: its max is not a whole number from -2,147,483,647 to 2,147,483,647, and it is "-${'9'.repeat(400)}".`) },
   { name: 'a minimum above the maximum', qs: [{ name: 'a', text: 'a', type: 'number', min: '10', max: '5' }], why: bad('question 1: its min 10 is above its max 5.') },
 ];
 
@@ -226,14 +231,21 @@ test('blank option lines are skipped, hidden fields stay out, and no question wr
   });
 });
 
-test('in a browser without CompressionStream a link with questions is refused naming the questions', async ({ page }) => {
-  await page.addInitScript(() => { delete window.CompressionStream; });
-  await openBuilder(page);
-  await addQ(page, { name: 'a', text: 'A' });
-  await make(page);
-  await expect(page.locator('#err')).toHaveText('This browser cannot make a link with questions, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.');
-  await expect(page.locator('#out')).toHaveText('');
-});
+for (const { parts, consent, question } of [
+  { parts: 'questions', question: true },
+  { parts: 'consent text', consent: true },
+  { parts: 'consent text and questions', consent: true, question: true },
+]) {
+  test(`in a browser without CompressionStream a link with ${parts} is refused naming ${parts}`, async ({ page }) => {
+    await page.addInitScript(() => { delete window.CompressionStream; });
+    await openBuilder(page);
+    if (consent) await page.locator('textarea[name="consentText"]').fill('You agree to take part.');
+    if (question) await addQ(page, { name: 'a', text: 'A' });
+    await make(page);
+    await expect(page.locator('#err')).toHaveText(`This browser cannot make a link with ${parts}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
+    await expect(page.locator('#out')).toHaveText('');
+  });
+}
 
 // LQ6
 test('Move up, Move down and Remove reorder and renumber the questions', async ({ page }) => {

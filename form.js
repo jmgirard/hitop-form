@@ -108,7 +108,8 @@ export async function encodeLink(config) {
   const json = JSON.stringify(config);
   if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
   if (typeof CompressionStream !== 'function') {
-    throw new Error(`This browser cannot make a link with ${config.consent === undefined ? 'questions' : 'consent text'}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
+    const parts = [config.consent === undefined ? null : 'consent text', config.questions === undefined ? null : 'questions'];
+    throw new Error(`This browser cannot make a link with ${parts.filter((p) => p !== null).join(' and ')}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
   }
   const stream = new Blob([new TextEncoder().encode(json)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
   return `z=${bytesToBase64url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;

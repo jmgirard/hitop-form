@@ -408,8 +408,9 @@
   // The editor's questions as a link's `questions` field, or undefined when
   // there are none. Each group's fields are read as the form page's check
   // reads a link: an empty name or text is left out, and a minimum or maximum
-  // that is not digits with an optional minus sign is passed on as typed, so
-  // the check names it. The text and the options are read from the controls,
+  // that is not digits with an optional minus sign, or that holds more digits
+  // than a JavaScript number keeps exactly, is passed on as typed, so the
+  // check names it as typed. The text and the options are read from the controls,
   // not a FormData, which would hold a lone surrogate as U+FFFD. The check
   // runs with the editor's own numbers in its messages.
   function readQuestions() {
@@ -431,7 +432,7 @@
       if (q.type === 'number') {
         for (const [bound, input] of [['min', 'qMin'], ['max', 'qMax']]) {
           const typed = get(input).value.trim();
-          if (typed !== '') q[bound] = /^-?\d+$/.test(typed) ? Number(typed) : typed;
+          if (typed !== '') q[bound] = /^-?\d+$/.test(typed) && Number.isSafeInteger(Number(typed)) ? Number(typed) : typed;
         }
       }
       if (get('qRequired').checked) q.required = true;
