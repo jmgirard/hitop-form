@@ -21,8 +21,9 @@
 //       or outside -2,147,483,647 to 2,147,483,647, and min above max
 //   Q2: the limits are accepted: 50 questions, a 30-character name, a
 //       1,000-character text, a 200-character option, 20 options, min and
-//       max at the ends of the range and equal to each other, and a text
-//       holding a paired character
+//       max at the ends of the range and equal to each other, a text
+//       holding a paired character, and a text and an option holding a tab
+//       and a no-break space, which are not line breaks
 
 import { test, expect } from '@playwright/test';
 import { useTarget, openForm } from './helpers.mjs';
@@ -74,8 +75,8 @@ const REFUSED = [
   { name: 'a text of 7', questions: { before: [{ ...TEXT_Q, text: 7 }] }, why: first('its text is not a string.') },
   { name: 'a text of white space', questions: { before: [{ ...TEXT_Q, text: ' \t ' }] }, why: first('its text is empty or holds only white space.') },
   { name: 'a text of 1,001 characters', questions: { before: [{ ...TEXT_Q, text: 'x'.repeat(1_001) }] }, why: first('its text has 1,001 characters, more than the 1,000 it may hold.') },
-  ...['\n', '\r', String.fromCharCode(0x2028)].map((br) => ({
-    name: `a text holding ${JSON.stringify(br)}`,
+  ...['\n', '\r', '\v', '\f', String.fromCharCode(0x85), String.fromCharCode(0x2028)].map((br) => ({
+    name: `a text holding U+${br.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`,
     questions: { before: [{ ...TEXT_Q, text: `one${br}two` }] },
     why: first('its text holds a line break, and a question text is one line.'),
   })),
@@ -99,7 +100,11 @@ const REFUSED = [
   { name: 'an option of 7', questions: { before: [{ ...CHOICE_Q, options: ['Red', 7] }] }, why: first('its option 2 is not a string.') },
   { name: 'an option of white space', questions: { before: [{ ...CHOICE_Q, options: ['Red', '  '] }] }, why: first('its option 2 is empty or holds only white space.') },
   { name: 'an option of 201 characters', questions: { before: [{ ...CHOICE_Q, options: ['Red', 'y'.repeat(201)] }] }, why: first('its option 2 has 201 characters, more than the 200 it may hold.') },
-  { name: 'an option holding a line break', questions: { before: [{ ...CHOICE_Q, options: ['Red', 'Bl\nue'] }] }, why: first('its option 2 holds a line break, and an option label is one line.') },
+  ...['\n', '\v', '\f', String.fromCharCode(0x85)].map((br) => ({
+    name: `an option holding U+${br.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`,
+    questions: { before: [{ ...CHOICE_Q, options: ['Red', `Bl${br}ue`] }] },
+    why: first('its option 2 holds a line break, and an option label is one line.'),
+  })),
   { name: 'an option holding "|"', questions: { before: [{ ...CHOICE_Q, options: ['Red', 'Blue | Green'] }] }, why: first('its option 2 holds "|", which an option label may not hold.') },
   { name: 'an option holding a lone surrogate', questions: { before: [{ ...CHOICE_Q, options: ['Red', 'Blue \udc00'] }] }, why: first('its option 2 holds half of a character (a lone surrogate), which cannot be written.') },
   { name: 'two options the same after trimming', questions: { before: [{ ...CHOICE_Q, options: ['Red', 'Blue', ' Red '] }] }, why: first('its options 1 and 3 are the same after trimming: "Red".') },
@@ -130,6 +135,7 @@ const ACCEPTED = [
   { name: 'min and max at the ends of the range', questions: { before: [{ ...NUMBER_Q, min: -2_147_483_647, max: 2_147_483_647 }] } },
   { name: 'min equal to max', questions: { before: [{ ...NUMBER_Q, min: 3, max: 3, required: true }] } },
   { name: 'a text holding a paired character', questions: { before: [{ ...TEXT_Q, text: 'How do you feel? 😀' }] } },
+  { name: 'a text and an option holding a tab and a no-break space', questions: { before: [{ ...CHOICE_Q, text: 'Your\tcolour', options: ['Red', `Bl\tue${String.fromCharCode(0xa0)}green`] }] } },
 ];
 
 for (const probe of ACCEPTED) {

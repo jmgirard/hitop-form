@@ -286,9 +286,10 @@ export const OPTION_LABEL_MAX = 200;
 export const QUESTION_INT_MAX = 2_147_483_647;
 export const QUESTION_NAME = /^[a-z][a-z0-9_]{0,29}$/;
 
-// CR, LF, and the line and paragraph separators U+2028 and U+2029, built
-// from their code points so the source holds no literal separator.
-const LINE_BREAK = new RegExp(`[\\r\\n${String.fromCharCode(0x2028, 0x2029)}]`);
+// Unicode's mandatory line breaks: LF, vertical tab, form feed, CR, U+0085
+// (next line), and the line and paragraph separators U+2028 and U+2029,
+// built from their code points so the source holds no literal separator.
+const LINE_BREAK = new RegExp(`[\\n\\v\\f\\r${String.fromCharCode(0x85, 0x2028, 0x2029)}]`);
 
 // The fault in a question text or an option label, as the end of a
 // sentence, or null when there is none.

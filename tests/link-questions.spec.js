@@ -13,9 +13,10 @@
 //        naming the question by its number in the editor, and no link is
 //        built: no name, a name outside the pattern, a name used twice, no
 //        text, a text of white space, a text of 1,001 characters, a text
-//        holding a line separator (U+2028, which a text input keeps) or a
-//        lone surrogate, 1 or 21 options, an option of 201 characters, an
-//        option holding "|" or a line separator, two options the same after
+//        holding a line separator (U+2028), U+0085, a vertical tab or a form
+//        feed (each of which a text input keeps) or a lone surrogate, 1 or 21
+//        options, an option of 201 characters, an option holding "|", a line
+//        separator, U+0085, a vertical tab or a form feed, two options the same after
 //        trimming, an option holding a lone surrogate, a minimum that is not
 //        a whole number, a maximum outside the range, and a minimum above
 //        the maximum; 51 questions are refused naming the count
@@ -153,6 +154,13 @@ const REFUSED = [
   { name: 'a text of 1,001 characters', qs: [{ name: 'a', text: 'x'.repeat(1_001) }], why: bad('question 1: its text has 1,001 characters, more than the 1,000 it may hold.') },
   { name: 'a text holding a line separator', qs: [{ name: 'a', text: `one${String.fromCharCode(0x2028)}two` }], why: bad('question 1: its text holds a line break, and a question text is one line.') },
   { name: 'an option holding a line separator', qs: [{ name: 'a', text: 'a', type: 'choice', options: `Red\nBl${String.fromCharCode(0x2028)}ue` }], why: bad('question 1: its option 2 holds a line break, and an option label is one line.') },
+  ...['\v', '\f', String.fromCharCode(0x85)].flatMap((br) => {
+    const code = `U+${br.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
+    return [
+      { name: `a text holding ${code}`, qs: [{ name: 'a', text: `one${br}two` }], why: bad('question 1: its text holds a line break, and a question text is one line.') },
+      { name: `an option holding ${code}`, qs: [{ name: 'a', text: 'a', type: 'choice', options: `Red\nBl${br}ue` }], why: bad('question 1: its option 2 holds a line break, and an option label is one line.') },
+    ];
+  }),
   { name: 'a text holding a lone surrogate', qs: [{ name: 'a', text: `a ${String.fromCharCode(0xd800)}` }], why: bad('question 1: its text holds half of a character (a lone surrogate), which cannot be written.') },
   { name: 'one option', qs: [{ name: 'a', text: 'a', type: 'choice', options: 'Red\n\n' }], why: bad('question 1: it has 1 option, and a question holds 2 to 20.') },
   { name: '21 options', qs: [{ name: 'a', text: 'a', type: 'multi', options: many(21, (i) => `o${i}`).join('\n') }], why: bad('question 1: it has 21 options, and a question holds 2 to 20.') },
