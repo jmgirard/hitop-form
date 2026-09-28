@@ -1,6 +1,7 @@
-// The form page. index.html calls boot(); link.html imports encodeConfig(),
-// the checks (checkParticipantParam() among them), fetchExport(), planItems(),
-// storeSql() and PROLIFIC_PARAMS.
+// The form page. index.html calls boot(); link.html imports encodeLink(),
+// the link readers, the checks (checkParticipantParam() and
+// consentTextFault() among them), fetchExport(), planItems(), storeSql() and
+// PROLIFIC_PARAMS.
 //
 // The page reads one study link, fetches one JSON export from the hitop
 // package's site, renders the instrument (or the module the link names) 15
@@ -11,8 +12,16 @@
 // a store, the requests after Finish are the POST to its address, any
 // redirect a webhook answers with, and the OPTIONS preflight the browser
 // sends before a supabase insert; the CSV is saved only when that send is
-// not confirmed. (The link's own contents, study, participant, module and store,
-// are in the page's address, which the host serving the page sees.)
+// not confirmed. (The link's own contents, study, participant, module, store
+// and consent text, are in the page's address, which the host serving the
+// page sees.)
+//
+// A link's `consent` field holds the researcher's consent text, which the
+// page shows on a screen of its own before the start screen, as plain text.
+// "I agree" goes on to the start screen. "I do not agree" shows a closing
+// screen and sends and saves nothing; `completeDeclined`, allowed only
+// beside `consent`, is an https:// address that screen then goes to, such as
+// a recruiting site's code for a participant who did not consent.
 //
 // Three link fields fit a Prolific study. `prolific: true` takes the
 // participant identifier from the PROLIFIC_PID parameter of the page's
@@ -48,19 +57,25 @@ export const INSTRUMENTS = {
 
 // ---- The study link -------------------------------------------------------
 
-function utf8ToBase64url(s) {
-  const bytes = new TextEncoder().encode(s);
+function bytesToBase64url(bytes) {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function base64urlToUtf8(s) {
+function base64urlToBytes(s) {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
   const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
   const bin = atob(b64 + pad);
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+function utf8ToBase64url(s) {
+  return bytesToBase64url(new TextEncoder().encode(s));
+}
+
+function base64urlToUtf8(s) {
+  return new TextDecoder().decode(base64urlToBytes(s));
 }
 
 // Builds the `c` parameter of a study link from a config object.
@@ -72,27 +87,181 @@ export function decodeConfig(param) {
   return JSON.parse(base64urlToUtf8(param));
 }
 
-function isNonEmptyString(x) {
-  return typeof x === 'string' && x.trim() !== '';
+// A link that carries consent text travels as `z` rather than `c`: the
+// config's UTF-8 JSON compressed with deflate-raw, then written as base64url
+// with no padding. Consent text makes a `c` link long, and the compressed
+// form keeps it shorter. The page reads either parameter.
+//
+// The query of a study link, without its `?`: `z=…` for a config that carries
+// `consent`, and `c=…` as before for any other. link.html builds its links
+// with it.
+export async function encodeLink(config) {
+  const json = JSON.stringify(config);
+  if (config.consent === undefined) return `c=${utf8ToBase64url(json)}`;
+  if (typeof CompressionStream !== 'function') {
+    throw new Error('This browser cannot make a link with consent text, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.');
+  }
+  const stream = new Blob([new TextEncoder().encode(json)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return `z=${bytesToBase64url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
 }
 
-// Reads the `?c=` parameter into a config, or throws with a message the
-// participant can pass on to the study team.
-export function parseLink(search) {
-  const params = new URLSearchParams(search);
-  const c = params.get('c');
-  if (!c) {
-    throw new Error('This page needs a study link. The link you opened carries no form.');
+// The most bytes a `z` parameter may decompress to. The page stops reading
+// there, so a small link cannot make it inflate without end.
+export const MAX_LINK_BYTES = 100_000;
+
+// Whether this browser can read a `z` parameter.
+export function canInflate() {
+  return typeof DecompressionStream === 'function';
+}
+
+// A `z` parameter's config, or a throw through `bad` naming the fault: the
+// value is not base64url, does not decompress (a truncated stream and bytes
+// after its end included), decompresses to more than MAX_LINK_BYTES, or to
+// bytes that are not UTF-8 or not JSON. The caller checks canInflate()
+// first, and whether the result is an object. link.html reads a `z` it
+// opens through the same function, with its own `bad`.
+export async function inflateConfig(z, bad) {
+  if (!/^[A-Za-z0-9_-]+$/.test(z) || z.length % 4 === 1) throw bad('is not base64url text');
+  const reader = new Blob([base64urlToBytes(z)]).stream()
+    .pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    let step;
+    try {
+      step = await reader.read();
+    } catch {
+      throw bad('does not decompress');
+    }
+    if (step.done) break;
+    total += step.value.length;
+    if (total > MAX_LINK_BYTES) {
+      reader.cancel().catch(() => {});
+      throw bad('decompresses to more than 100,000 bytes');
+    }
+    chunks.push(step.value);
   }
-  let config;
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.length;
+  }
+  let text;
   try {
-    config = decodeConfig(c);
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    throw new Error('The study link could not be read. Ask the study team for a new link.');
+    throw bad('is not UTF-8 text');
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw bad('is not JSON');
+  }
+}
+
+// Reads the link's `c` or `z` parameter into the object it encodes, or
+// throws with a message the participant can pass on to the study team. A
+// link with both is refused, since the two could hold different forms.
+export async function decodeLink(search) {
+  const params = new URLSearchParams(search);
+  if (params.has('c') && params.has('z')) {
+    throw new Error('The study link carries both a c and a z parameter, and a study link carries one. Ask the study team for a new link.');
+  }
+  const c = params.get('c');
+  const z = params.get('z');
+  let config;
+  if (z) {
+    if (!canInflate()) {
+      throw new Error("This browser cannot read the study link, because it cannot decompress the link's z parameter. Open the link in a current version of Chrome, Edge, Firefox or Safari.");
+    }
+    config = await inflateConfig(z, (why) => new Error(`The study link could not be read: its z parameter ${why}. Ask the study team for a new link.`));
+  } else if (c) {
+    try {
+      config = decodeConfig(c);
+    } catch {
+      throw new Error('The study link could not be read. Ask the study team for a new link.');
+    }
+  } else {
+    throw new Error('This page needs a study link. The link you opened carries no form.');
   }
   if (config === null || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('The study link could not be read: it does not hold a form.');
   }
+  return config;
+}
+
+function isNonEmptyString(x) {
+  return typeof x === 'string' && x.trim() !== '';
+}
+
+// The limits on a link's consent text and on its decline text, in
+// characters as a JavaScript string counts them (UTF-16 code units).
+export const CONSENT_TEXT_MAX = 20_000;
+export const CONSENT_DECLINED_MAX = 2_000;
+
+// A lone surrogate: half of a character written as two UTF-16 code units.
+// Under the u flag a whole pair is one code point, which this does not match.
+const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
+
+// The fault in a consent or decline text, as the end of a sentence, or null
+// when there is none: text that is blank after trimming white space, longer
+// than `max`, or holding a lone surrogate. link.html states the same faults
+// for its two boxes.
+export function consentTextFault(s, max) {
+  if (s.trim() === '') return 'is empty or holds only white space';
+  if (s.length > max) {
+    return `has ${s.length.toLocaleString('en-US')} characters, more than the ${max.toLocaleString('en-US')} it may hold`;
+  }
+  if (LONE_SURROGATE.test(s)) return 'holds half of a character (a lone surrogate), which cannot be written';
+  return null;
+}
+
+// A link's `consent` field: `{ text, declined }`, `declined` optional. The
+// text shows on a screen of its own before the start screen, and `declined`
+// on the screen after "I do not agree". Returns the field or throws naming
+// the fault.
+export function checkConsent(consent) {
+  const bad = (why) => new Error(`The study link's consent field could not be used: ${why}`);
+  if (consent === null || typeof consent !== 'object' || Array.isArray(consent)) throw bad('it is not an object.');
+  const extra = Object.keys(consent).find((k) => k !== 'text' && k !== 'declined');
+  if (extra !== undefined) {
+    throw bad(`it has a field ${JSON.stringify(extra)}, and it takes only text and declined.`);
+  }
+  if (consent.text === undefined) throw bad('it has no text.');
+  if (typeof consent.text !== 'string') throw bad('its text is not a string.');
+  const textFault = consentTextFault(consent.text, CONSENT_TEXT_MAX);
+  if (textFault !== null) throw bad(`its text ${textFault}.`);
+  if (consent.declined !== undefined) {
+    if (typeof consent.declined !== 'string') throw bad('its declined text is not a string.');
+    const declinedFault = consentTextFault(consent.declined, CONSENT_DECLINED_MAX);
+    if (declinedFault !== null) throw bad(`its declined text ${declinedFault}.`);
+  }
+  return consent;
+}
+
+// A consent or decline text as paragraphs, each an array of its lines. CR
+// LF and a lone CR become LF; a run of blank lines (empty, or white space
+// alone) ends a paragraph, and a single line break stays inside one.
+export function textParagraphs(text) {
+  const paragraphs = [];
+  let lines = [];
+  for (const line of text.replace(/\r\n?/g, '\n').split('\n')) {
+    if (line.trim() === '') {
+      if (lines.length) paragraphs.push(lines);
+      lines = [];
+    } else {
+      lines.push(line);
+    }
+  }
+  if (lines.length) paragraphs.push(lines);
+  return paragraphs;
+}
+
+// Reads the link's `c` or `z` parameter into a config, or throws with a
+// message the participant can pass on to the study team.
+export async function parseLink(search) {
+  const config = await decodeLink(search);
   if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
     throw new Error(
       `The study link names an instrument this page does not know: ${JSON.stringify(config.instrument)}.`,
@@ -160,6 +329,17 @@ export function parseLink(search) {
     }
     config.completeSaved = checkCompleteUrl(config.completeSaved, bad);
   }
+  if (config.consent !== undefined) config.consent = checkConsent(config.consent);
+  // `completeDeclined` takes the same check under its own name, and means
+  // nothing without a `consent` beside it: only the consent screen's "I do
+  // not agree" leads to it.
+  if (config.completeDeclined !== undefined) {
+    const bad = (why) => new Error(`The study link's completeDeclined field could not be used: ${why}`);
+    if (config.consent === undefined) {
+      throw bad(`it needs a consent field beside it, and the link carries none; it is ${JSON.stringify(config.completeDeclined)}.`);
+    }
+    config.completeDeclined = checkCompleteUrl(config.completeDeclined, bad);
+  }
   return config;
 }
 
@@ -185,8 +365,8 @@ export function readProlific(search) {
 // names, for a site that fills the participant's identifier into the study
 // URL under a name of its own or the researcher's choosing (SONA's
 // `%SURVEY_CODE%` placeholder, CloudResearch Connect's `participantId`). It
-// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c`, which
-// carries the link itself, nor one of the three Prolific names, which
+// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c` or `z`,
+// which carry the link itself, nor one of the three Prolific names, which
 // `prolific: true` reads together with the two columns it writes. Returns
 // the name or throws naming the fault with the value shown. link.html runs
 // the same check on the builder's field, with `prolificAdvice` naming its
@@ -203,6 +383,7 @@ export function checkParticipantParam(
     throw bad(`it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(name)}.`);
   }
   if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
+  if (name === 'z') throw bad('it is "z", the parameter that carries a compressed study link.');
   if (PROLIFIC_PARAMS.includes(name)) {
     throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. ${prolificAdvice}, which also keeps STUDY_ID and SESSION_ID.`);
   }
@@ -804,7 +985,7 @@ function versionLine(exp) {
 export async function boot(root, search) {
   let config;
   try {
-    config = parseLink(search);
+    config = await parseLink(search);
   } catch (e) {
     showError(root, e.message);
     return;
