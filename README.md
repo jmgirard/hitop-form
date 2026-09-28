@@ -363,6 +363,56 @@ text, type, options or order keeps the same columns.
 A link with questions is a `z` link, as
 [Make a study link](#make-a-study-link) describes.
 
+To write the questions in a spreadsheet instead, see
+[Write your questions in a spreadsheet](#write-your-questions-in-a-spreadsheet).
+
+## Write your questions in a spreadsheet
+
+The builder can read the questions from a CSV file, so you can write them
+in a spreadsheet. Press "Download a template" to save
+`questions-template.csv`. It holds the columns and one example question of
+each type. Open it in your spreadsheet, change the rows, and save the file
+as "CSV UTF-8". Then choose the file under "Load questions from a file".
+The questions in the file take the place of the questions in the builder.
+The builder reads the file in your browser and sends it nowhere.
+
+"Download these questions" saves the builder's questions as
+`questions.csv`, in the same form. Use it to edit questions you made in
+the builder, or to keep them for another link. It first checks the
+questions as "Make the link" does. If a question breaks a rule, it saves
+nothing and names the fault, so every file it saves loads back. A saved
+file is UTF-8 with a byte-order mark, a mark at its start that tells a
+spreadsheet the file is UTF-8, and its lines end in CR LF.
+
+The first row of the file names the columns, in lower case and in any
+order. Each further row is one question:
+
+| Column | Required | Holds |
+|---|---|---|
+| `list` | yes | `before` or `after`: the page asks the question before the form or after it |
+| `name` | yes | the question's name, which gives its column `q_` plus the name |
+| `text` | yes | the question, one line |
+| `type` | yes | `text`, `number`, `choice` or `multi`: in the builder, "Text, one line", "Whole number", "One of several options" or "Any of several options" |
+| `options` | no | for `choice` and `multi`, the options in one cell, separated by `\|`, such as `Phone\|Tablet\|Computer` |
+| `required` | no | `yes` or `no`, in upper or lower case, and a blank cell is `no` |
+| `min`, `max` | no | for `number`, a whole number such as `18` or `-5`, or a blank cell |
+
+The builder removes spaces and line breaks at both ends of each cell before
+it reads the cell, and skips a row whose cells are all blank. Each list
+keeps the order of the rows. A cell can hold a comma or a double quote. The
+spreadsheet then writes the cell in quotes, and the builder reads it back.
+Each question follows the rules of
+[Ask your own questions](#ask-your-own-questions).
+
+The builder refuses a file with a fault, names the fault, and keeps the
+questions it held. A fault in one cell is named by its row and column,
+such as "row 3, column type". The header is row 1, and a cell that holds a
+line break stays in its row. A file that is not UTF-8 is refused with a
+request to save it as "CSV UTF-8". The builder also refuses an empty file
+and a file with no question row. It refuses a missing, unknown or repeated
+column name, and a row with more or fewer cells than the header. It
+refuses a quote that breaks the CSV rules too.
+
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
@@ -696,6 +746,7 @@ npx playwright test
 | `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, the unload guard counting a question's answer, and the numeric keypad asked for only when a number question's `min` is 0 or more |
 | `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
 | `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions, consent text, or both, and names what the link holds. A bound outside the range is quoted as typed, with any zeros in front. A setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens. The min and max boxes ask for no numeric keypad, and negative bounds are built. Move up, Move down and Remove reorder and renumber the questions |
+| `tests/link-questions-file.spec.js` | "Load questions from a file" fills the editor from a file with a byte-order mark, CR LF, its columns in another order and each quoting form. It also fills it from a file with LF and only the required columns. A load takes the place of the editor's questions. Each fault in a file is refused with its message, naming the row and column where there is one, and the editor keeps its questions. A load makes no network request. "Download these questions" saves a file that loads back as the same questions, and "Download a template" one that loads as one question of each type. Both files have a byte-order mark and CR LF. An empty or faulty editor saves nothing and names the fault |
 | `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
