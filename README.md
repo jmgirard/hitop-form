@@ -103,7 +103,11 @@ the form:
    letter case, doubled braces, a space inside the braces, or a brace
    written as `%7B`, `%7D`, `%257B` or `%257D` (`{Participant}`,
    `{{participant}}`, `%7Bparticipant%7D`).
-8. Choose where responses go. "A file on the participant's device" is the
+8. Optionally give consent text, a declined text and a completion URL after
+   a decline. The page then shows the consent text before the form, as
+   [Show consent text before the form](#show-consent-text-before-the-form)
+   describes.
+9. Choose where responses go. "A file on the participant's device" is the
    default: the page saves a file and sends nothing. "A web address" is the
    `https://` address of an endpoint that accepts one JSON row per
    participant. The web app in
@@ -118,16 +122,29 @@ the form:
 
 Press "Make the link". The link carries the instrument, the study, the
 participant, the module, the random-order choice, the recruiting site, the
-completion URLs and the store folded into its address, so it needs
+completion URLs, the consent text and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
 a module descriptor is a few hundred characters long. If a mail client or a
 course system truncates it, the page reports that the link cannot be read.
+The builder prints the link's length in characters beside "Open the link".
 
-A study link's own `c` parameter, opened on `link.html`
-(`link.html?c=…`), fills the fields from the link, so a link can be edited
-and made again. The instrument, the study, the participant, the module
-descriptor, the random-order box, the recruiting site, the completion URLs
-and the store are filled, and the store kind's fields are shown. The site
+A link without consent text carries its fields in one parameter, `c`: the
+fields as JSON, written as base64url. A link with consent text carries them
+in `z` in place of `c`. That is the same JSON compressed with deflate-raw,
+then written as base64url with no padding, so a long consent text makes a
+shorter link. The page reads either parameter and refuses a link that
+carries both. It also refuses a `z` it cannot read, and names the fault.
+The faults are a character outside base64url, data that does not
+decompress, and more than 100,000 bytes once decompressed. Text that is not
+UTF-8 or not JSON is refused too. A browser without `DecompressionStream`
+cannot read a `z` link, and the page then names the browser as the cause.
+
+A study link's own `c` or `z` parameter, opened on `link.html`
+(`link.html?c=…` or `link.html?z=…`), fills the fields from the link, so a
+link can be edited and made again. The instrument, the study, the
+participant, the module descriptor, the random-order box, the recruiting
+site, the completion URLs, the consent and declined texts and the store are
+filled, and the store kind's fields are shown. The site
 is Prolific for a link with `prolific: true`, SONA for one whose
 `participantParam` is `id`, CloudResearch Connect for `participantId`, and
 another site, with its name in the "Address parameter" field, for any other
@@ -139,16 +156,17 @@ instrument the builder does not offer is refused in a message naming the
 `c` parameter, and no field is filled from it.
 
 Anyone can send a link, so a `c` can fill in addresses you did not choose.
-When a `c` puts a non-empty address in the web address, the Supabase
-project URL, the completion URL or the completion URL after a saved file, a
-notice between the three steps and the form lists each one after its
+When a `c` or a `z` puts a non-empty address in the web address, the
+Supabase project URL, the completion URL, the completion URL after a saved
+file or the completion URL after a decline, a notice between the three steps and the form lists each one after its
 field's name. Check them before you make a link. The notice goes when you
 press "Make the link". When the page opens, focus moves to the refusal or
 to the notice, whichever is shown.
 
 The page's host, GitHub Pages, sees the address when the page is requested.
-So the study name, the participant identifier, the module composition and
-the store, a Supabase key included, reach that host's request logs. The
+So the study name, the participant identifier, the module composition, the
+consent text and the store, a Supabase key included, reach that host's
+request logs. The
 answers never do: with a store they go to that store and nowhere else, and
 without one they stay on the participant's device. If the identifier must not reach any
 server, leave it out of the link. The participant then types it on the start
@@ -156,8 +174,9 @@ screen, and it is written only into the row or the file. Under the Prolific
 route the three Prolific parameters, the participant's Prolific ID among
 them, reach the host with each page load as the rest of the address does,
 and under a recruiting site's parameter so does the identifier it carries.
-Opening a link on `link.html` to edit it (`link.html?c=…`) sends the same
-`c` to the host in that page's address. The config, a Supabase key
+Opening a link on `link.html` to edit it (`link.html?c=…` or
+`link.html?z=…`) sends the same parameter to the host in that page's
+address. The config, a Supabase key
 included, then reaches the host's request logs from that request too.
 
 ## Recruit through SONA or CloudResearch Connect
@@ -216,9 +235,9 @@ IDs, `assignmentId` and `projectId`, are not recorded.
 
 **Another site.** Choose "Another site" and type the parameter's name into
 the "Address parameter" field: letters `A-Z` and `a-z`, digits, `_`, `.`
-and `-`, up to 64 of them. The name `c` is refused, because it carries the
-link itself, and so are the three Prolific names, which the Prolific choice
-reads. The builder also refuses `id` and `participantId`, the names the
+and `-`, up to 64 of them. The names `c` and `z` are refused, because they
+carry the link itself, and so are the three Prolific names, which the
+Prolific choice reads. The builder also refuses `id` and `participantId`, the names the
 SONA and Connect choices write, and names the choice to use instead. The
 builder reads a link with either name back as SONA or Connect, so every
 link it builds opens again under the choice that made it. The form page
@@ -226,10 +245,54 @@ itself accepts both names. The builder adds nothing to the
 link, so put the site's own placeholder on the link's end by hand if the
 site needs one.
 
+## Show consent text before the form
+
+The consent text is yours and your review board's. The page shows the text
+you give and adds no consent wording of its own. Put the text your board
+approved into the builder's "Consent text" box. The link then carries it as
+its `consent` field, and the page shows it on a screen of its own, headed
+"Consent to take part", before the start screen. Under the text are an "I
+agree" and an "I do not agree" button. "I agree" opens the start screen,
+and the form goes on as it does without consent text.
+
+The page reads the text as plain text. A run of blank lines starts a new
+paragraph, where a blank line is empty or holds only white space. A single
+line break stays a line break. A tag or an entity in the text, such as
+`<b>` or `&amp;`, shows as typed, so the text cannot carry formatting or
+links. The text can hold up to 20,000 characters. The count is the length
+JavaScript gives a string, so a character such as an emoji counts as two.
+The builder and the page refuse a text that is blank or over the limit.
+They also refuse a text that holds half of a two-part character.
+
+"I do not agree" shows a screen headed "Thank you" and ends the session.
+The page sends no answer and saves no file, and the screen has no way back
+to the form. The screen shows the text of the "Declined text" box, split
+into paragraphs in the same way. That text can hold up to 2,000
+characters. Without one, the screen shows "You chose not to take part. You
+can close this page."
+
+A recruiting site can give a study one completion address per outcome. For
+example, a Prolific study can hold a completion code for participants who
+do not consent
+([Custom completion codes](https://researcher-help.prolific.com/en/articles/445170-custom-completion-codes)).
+Give that address as the "Completion URL after a decline". The link then
+carries it as `completeDeclined`, and the page accepts it only beside
+`consent`. After "I do not agree", the page draws the declined screen with
+a "Continue to <host>." link to the address. It then sends the participant
+there. A `{participant}` in the address is filled as in the completion URL,
+with the identifier from the page's address or from the link. The start
+screen has not asked for one yet, so without either the token becomes
+nothing.
+
+A link with consent text is a `z` link, as
+[Make a study link](#make-a-study-link) describes. The consent text reaches
+the page's host in the address, as the rest of the link does.
+
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
-count, and a "Begin" button. The start screen says where the answers go.
+count, and a "Begin" button. A link with consent text shows its consent
+screen first, and the start screen after "I agree". The start screen says where the answers go.
 With a send address, it names the address's host. Without one, it says the
 answers are saved to a file on this device. When the link carries no
 participant identifier, the start screen asks for one. Under the Prolific
