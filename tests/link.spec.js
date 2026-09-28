@@ -453,7 +453,7 @@ test('the Completion URL after a saved file field puts completeSaved in the link
   expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
 });
 
-// L13: the SQL under the Prolific box, with and without the random order.
+// L13: the SQL under Prolific, with and without the random order.
 for (const w of [
   { name: 'the HiTOP-BR under Prolific', fixture: 'supabase-hitopbr-prolific.sql' },
   { name: 'the HiTOP-BR under Prolific and shuffle', shuffle: true, fixture: 'supabase-hitopbr-prolific-shuffle.sql' },
