@@ -6,9 +6,9 @@
 //   I1: each fault in instruments is refused naming the field and the
 //       fault, and no screen of the form shows: the field beside an
 //       instrument field, a value that is not a list (a string, null, an
-//       object), a list of 0, 1 or 4 names, an unknown name, a name that is
-//       not text, a repeated name, and two PID-5 forms (each pair of the
-//       three)
+//       object), a list of 0, 1 or 4 names, an unknown name, an entry that
+//       is not text (a number, a list, null, an object), a repeated name,
+//       two PID-5 forms (each pair of the three) and all three
 //   I2: a module beside a list without "hitopsr" is refused naming the
 //       rule; beside a list with "hitopsr", a descriptor of another
 //       instrument is refused naming "hitopsr", and ones of another format
@@ -73,6 +73,18 @@ const REFUSED = [
     fields: { instruments: ['hitopbr', 5] },
     why: fault('entry 2 is 5, an instrument this page does not know.'),
   },
+  // A list or an object as an entry is not a name, even where it holds
+  // one: ["hitopbr"] would otherwise read as the key "hitopbr".
+  ...[
+    [['hitopbr', ['hitopbr']], 2, ['hitopbr']],
+    [['pid5', ['pid5bf']], 2, ['pid5bf']],
+    [[null, 'hitopbr'], 1, null],
+    [['hitopbr', { hitopbr: 1 }], 2, { hitopbr: 1 }],
+  ].map(([instruments, n, value]) => ({
+    name: `the entry ${JSON.stringify(value)}`,
+    fields: { instruments },
+    why: fault(`entry ${n} is ${JSON.stringify(value)}, an instrument this page does not know.`),
+  })),
   {
     name: 'a repeated name',
     fields: { instruments: ['hitopbr', 'pid5bf', 'hitopbr'] },
@@ -83,6 +95,11 @@ const REFUSED = [
     fields: { instruments: [a, 'hitopbr', b] },
     why: fault(`it names "${a}" and "${b}", two forms of the PID-5, and a list holds one.`),
   })),
+  {
+    name: 'all three PID-5 forms',
+    fields: { instruments: ['pid5bf', 'pid5', 'pid5sf'] },
+    why: fault('it names "pid5bf", "pid5" and "pid5sf", three forms of the PID-5, and a list holds one.'),
+  },
 ];
 
 for (const probe of REFUSED) {

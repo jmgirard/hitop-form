@@ -72,7 +72,8 @@ export const PID5_FORMS = ['pid5', 'pid5sf', 'pid5bf'];
 
 // Returns the list, or throws through `bad` naming the fault: a value that
 // is not a list, a list of fewer than 2 or more than INSTRUMENTS_MAX names,
-// a name the page does not know, a name given twice, and two PID-5 forms.
+// an entry that is not a name the page knows (an entry that is not text
+// included), a name given twice, and two or three PID-5 forms.
 // Each entry is named by `entry(i)`, `i` counted from 0, and each
 // instrument by `label(name)`. link.html runs the same check on its
 // instrument rows, with its own `bad`, `entry` and `label`.
@@ -92,7 +93,9 @@ export function checkInstruments(
     throw bad(`it names ${list.length} instruments, and a list names 2 or ${INSTRUMENTS_MAX}.`);
   }
   list.forEach((name, i) => {
-    if (!Object.hasOwn(INSTRUMENTS, name)) {
+    // An entry that is not text is refused here: Object.hasOwn() reads
+    // ["hitopbr"] as the key "hitopbr".
+    if (typeof name !== 'string' || !Object.hasOwn(INSTRUMENTS, name)) {
       throw bad(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
     }
     const first = list.indexOf(name);
@@ -100,7 +103,9 @@ export function checkInstruments(
   });
   const pid = list.filter((name) => PID5_FORMS.includes(name));
   if (pid.length > 1) {
-    throw bad(`it names ${pid.map(label).join(' and ')}, two forms of the PID-5, and a list holds one.`);
+    const names = pid.map(label);
+    const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    throw bad(`it names ${listed}, ${pid.length === 2 ? 'two' : 'three'} forms of the PID-5, and a list holds one.`);
   }
   return list;
 }

@@ -10,8 +10,8 @@
 //        three rows make a link with `instruments` in row order and no
 //        `instrument`
 //   LI3: the builder refuses the faults its rows can hold, naming the rows
-//        and the instruments: a repeated instrument, and each pair of the
-//        three PID-5 forms. A module beside a list without the HiTOP-SR is
+//        and the instruments: a repeated instrument, each pair of the three
+//        PID-5 forms, and all three. A module beside a list without the HiTOP-SR is
 //        refused; beside a list with it, a module of another instrument is
 //        refused by the module check naming hitopsr, and a good module is
 //        accepted
@@ -23,8 +23,10 @@
 //        same config
 //   LI5: an opened link is refused by name, with the instrument list back at
 //        its one HiTOP-SR row (and, for a c link, the study field empty),
-//        when it carries both fields, or a list the form page refuses (four
-//        names, two PID-5 forms, a list of one, not a list)
+//        when it carries both fields, or a list the form page refuses (a
+//        value that is not a list, a list of 0, 1 or 4 names, an unknown
+//        name, a list as an entry, a repeated name, two and three PID-5
+//        forms)
 
 import { test, expect } from '@playwright/test';
 import { useTarget, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';
@@ -123,6 +125,10 @@ const REFUSED = [
     stems: [a, b],
     why: `The instruments could not be used: it names ${{ pid5: 'PID-5', pid5sf: 'PID-5-SF', pid5bf: 'PID-5-BF' }[a]} and ${{ pid5: 'PID-5', pid5sf: 'PID-5-SF', pid5bf: 'PID-5-BF' }[b]}, two forms of the PID-5, and a list holds one.`,
   })),
+  {
+    stems: ['pid5sf', 'pid5bf', 'pid5'],
+    why: 'The instruments could not be used: it names PID-5-SF, PID-5-BF and PID-5, three forms of the PID-5, and a list holds one.',
+  },
 ];
 
 for (const probe of REFUSED) {
@@ -210,10 +216,36 @@ const OPENED_REFUSED = [
     config: { instruments: ['hitopbr'] },
     why: "The link's c parameter holds an instruments field that could not be used: it names 1 instrument, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
   },
+  ...['hitopbr pid5bf', 5, null, { 0: 'hitopbr', 1: 'pid5bf' }].map((instruments) => ({
+    name: `the value ${JSON.stringify(instruments)}`,
+    config: { instruments },
+    why: `The link's c parameter holds an instruments field that could not be used: it is not a list, and it is ${JSON.stringify(instruments)}. Fill in the form above to make a new link.`,
+  })),
   {
-    name: 'a string',
-    config: { instruments: 'hitopbr pid5bf' },
-    why: 'The link\'s c parameter holds an instruments field that could not be used: it is not a list, and it is "hitopbr pid5bf". Fill in the form above to make a new link.',
+    name: 'an empty list',
+    config: { instruments: [] },
+    why: "The link's c parameter holds an instruments field that could not be used: it names 0 instruments, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
+  },
+  {
+    name: 'an unknown name',
+    config: { instruments: ['hitopbr', 'pid5x'] },
+    why: 'The link\'s c parameter holds an instruments field that could not be used: entry 2 is "pid5x", an instrument this page does not know. Fill in the form above to make a new link.',
+  },
+  // A list as an entry is not a name, even where it holds one.
+  ...[['hitopbr', ['hitopbr']], ['pid5', ['pid5bf']]].map((instruments) => ({
+    name: `the entry ${JSON.stringify(instruments[1])}`,
+    config: { instruments },
+    why: `The link's c parameter holds an instruments field that could not be used: entry 2 is ${JSON.stringify(instruments[1])}, an instrument this page does not know. Fill in the form above to make a new link.`,
+  })),
+  {
+    name: 'a repeated name',
+    config: { instruments: ['pid5bf', 'hitopbr', 'pid5bf'] },
+    why: 'The link\'s c parameter holds an instruments field that could not be used: it names "pid5bf" twice, as entry 1 and entry 3. Fill in the form above to make a new link.',
+  },
+  {
+    name: 'three PID-5 forms',
+    config: { instruments: ['pid5', 'pid5sf', 'pid5bf'] },
+    why: 'The link\'s c parameter holds an instruments field that could not be used: it names "pid5", "pid5sf" and "pid5bf", three forms of the PID-5, and a list holds one. Fill in the form above to make a new link.',
   },
 ];
 
