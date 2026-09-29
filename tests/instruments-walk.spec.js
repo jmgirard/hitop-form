@@ -20,6 +20,10 @@
 //       before, each instrument, after, for two and for three instruments;
 //       Back on the after screen goes to the last page of the last
 //       instrument, and Back on a later page of an instrument stays within it
+//   W6: closing the page asks first with an item answered on the first
+//       page, and not with none; it also asks on the second instrument's
+//       first page, where only the first instrument holds answers
+//   W7: the start screen of a link with one instrument shows no part line
 
 import { test, expect } from '@playwright/test';
 import {
@@ -205,3 +209,46 @@ for (const stems of [['hitopbr', 'pid5bf'], ['pid5bf', 'hitopsr', 'hitopbr']]) {
     await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
   });
 }
+
+// W6: the unload guard under a list link. Chromium shows a beforeunload
+// dialog only after the page had a user gesture; the press of Begin is one,
+// so the unanswered control has one too.
+async function closeDialogs(page) {
+  const dialogs = [];
+  page.on('dialog', async (d) => {
+    dialogs.push(d.type());
+    await d.accept();
+  });
+  await page.close({ runBeforeUnload: true });
+  await expect.poll(() => page.isClosed()).toBe(true);
+  return dialogs;
+}
+
+for (const answered of [true, false]) {
+  test(`closing a list link's first page with ${answered ? 'an item answered asks first' : 'no item answered does not ask'}`, async ({ page }) => {
+    await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'walk', participant: 'w6' }));
+    await begin(page);
+    if (answered) await page.locator('fieldset.item').first().locator('input[type=radio]').first().check();
+    expect(await closeDialogs(page)).toEqual(answered ? ['beforeunload'] : []);
+  });
+}
+
+test('closing the second instrument\'s first page asks first, with the answers held in the first', async ({ page }) => {
+  const stems = ['hitopbr', 'pid5bf'];
+  const exps = await exportsFor(stems);
+  await page.goto(formUrl(base(), { instruments: stems, study: 'walk', participant: 'w6' }));
+  await walkPart(page, { k: 0, stems, exps });
+  await expect(page.locator('.part')).toHaveText('Part 2 of 2');
+  await begin(page);
+  await expect(page.locator('fieldset.item').first()).toHaveAttribute('data-stem', 'pid5bf');
+  await expect(page.locator('input[type=radio]:checked')).toHaveCount(0);
+  expect(await closeDialogs(page)).toEqual(['beforeunload']);
+});
+
+// W7: a link with one instrument shows no part line.
+test('the start screen of a single-instrument link shows no part line', async ({ page }) => {
+  await page.goto(formUrl(base(), { instrument: 'hitopbr', study: 'walk', participant: 'w7' }));
+  await expect(page.locator('h1')).toHaveText('HiTOP-BR');
+  await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(1);
+  await expect(page.locator('.part')).toHaveCount(0);
+});

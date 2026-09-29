@@ -1,10 +1,13 @@
-// The page transmits nothing: over the recorded walks N1 to N7, every request
-// the page makes is one of its own files, the one export fetch, or the store
-// and completion addresses the link names; N8 covers the link builder.
+// The page transmits nothing: over the recorded walks N1 to N7 and N9, every
+// request the page makes is one of its own files, an export fetch (one per
+// instrument), or the store and completion addresses the link names; N8
+// covers the link builder.
 //
 //   N1: the full HiTOP-BR through save
 //   N2: the shuffled module through save
 //   N3: the altered-format refusal
+//   N9: an instruments list of the HiTOP-BR and the PID-5-BF through save:
+//       the set is the page, form.js and the two exports
 //
 // Each walk records every request the page issues and asserts the set of
 // URLs (query strings dropped: the page's own address carries the study link)
@@ -175,6 +178,20 @@ test('N8: link.html opened with a Supabase config in its c requests only link.ht
   await page.goto(`${base()}link.html?c=${encodeConfig(config)}`, { waitUntil: 'networkidle' });
   await expect(page.locator('input[name="supabaseTable"]')).toHaveValue('prefill_responses');
   expect([...urls].sort()).toEqual([`${base()}link.html`, `${base()}form.js`].sort());
+});
+
+test('N9: an instruments list walk through save requests only its files and the two exports', async ({ page }) => {
+  const urls = record(page);
+  await openForm(page, base(), { instruments: ['hitopbr', 'pid5bf'], study: 'net', participant: 'n9' });
+  await begin(page);
+  await walkAll(page);
+  await expect(page.locator('.part')).toHaveText('Part 2 of 2');
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  expect([...urls].sort()).toEqual([base(), `${base()}form.js`, exportUrl('hitopbr'), exportUrl('pid5bf')].sort());
 });
 
 test('N3: the altered-format refusal requests only its files and the export', async ({ page }) => {
