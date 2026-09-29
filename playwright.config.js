@@ -2,8 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests',
-  // The page fetches one JSON file and renders it. Nothing boots and nothing
-  // compiles, so Playwright's defaults are generous; the longest walk answers
+  // The page fetches one JSON file per instrument and renders it. Nothing
+  // boots and nothing compiles, so Playwright's defaults are generous; the longest walk answers
   // 405 items over 27 pages.
   timeout: 2 * 60 * 1000,
   expect: { timeout: 15 * 1000 },

@@ -632,7 +632,7 @@
   // page names in a `z`, a config that is not a plain object, an instrument
   // the menu does not offer, and an `instruments` list beside an
   // `instrument` or refused by the form page's check. A list fills one row
-  // per entry. A field of another type than its control takes
+  // per entry. A field of a type its control does not take
   // is skipped and the rest are filled; the form page's own checks refuse
   // such a link when it is opened. Nothing is fetched. A throw past these
   // checks (a module nested deep enough to stop JSON.stringify) is
@@ -784,7 +784,7 @@
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    // A Supabase build waits on the export fetch; a second press meanwhile
+    // A Supabase build waits on the export fetches; a second press meanwhile
     // could finish first and be overwritten by the stale build.
     if (makeButton.disabled) return;
     makeButton.disabled = true;

@@ -15,7 +15,7 @@ without a survey platform, and it scores nothing: scoring is the job of the
 Live page: <https://jmgirard.github.io/hitop-form/>
 Make a study link: <https://jmgirard.github.io/hitop-form/link.html>
 
-The page reads the instrument from the hitop package's JSON export
+The page reads each instrument from the hitop package's JSON export
 (`https://jmgirard.github.io/hitop/downloads/hitopsr.json`, `hitopbr.json`,
 `pid5.json`, `pid5sf.json` and `pid5bf.json`). Item text, response options and instructions are the
 package's, shown unchanged. The export's build date and package version are
@@ -125,7 +125,7 @@ the form:
    name must be lower-case letters, digits and underscores, up to 63 of
    them, and its first character must not be a digit.
 
-Press "Make the link". The link carries the instrument, the study, the
+Press "Make the link". The link carries the instruments, the study, the
 participant, the module, the random-order choice, the recruiting site, the
 completion URLs, the consent text, the questions and the store folded into its address, so it needs
 no server and no account. Copy it and send it to the participant. A link with
@@ -146,7 +146,7 @@ cannot read a `z` link, and the page then names the browser as the cause.
 
 A study link's own `c` or `z` parameter, opened on `link.html`
 (`link.html?c=…` or `link.html?z=…`), fills the fields from the link, so a
-link can be edited and made again. The instrument, the study, the
+link can be edited and made again. The instruments, the study, the
 participant, the module descriptor, the random-order box, the recruiting
 site, the completion URLs, the consent and declined texts, the questions
 and the store are filled, and the store kind's fields are shown. The site
@@ -439,9 +439,8 @@ two forms of the PID-5 (`pid5`, `pid5sf` and `pid5bf`). The page also
 refuses a link with both an `instrument` and an `instruments` field. It
 refuses an `instruments` field that is not a list or holds fewer than 2 or
 more than 3 names. It refuses an entry that is not the text of a name it
-knows. A module descriptor
-applies to the HiTOP-SR in the list. The builder and the page refuse a
-module beside a list without `hitopsr`.
+knows. A module descriptor applies to the HiTOP-SR in the list. The
+builder and the page refuse a module beside a list without `hitopsr`.
 
 The page fetches the export of each instrument before it shows the first
 screen. When an export cannot be used, the page names the instrument, such
@@ -677,6 +676,12 @@ for a link with the random order. A sheet that already holds rows without
 `item_order` puts that column after the item columns.
 `read_form_responses()` reads it there too, but the download then lacks
 the column order above.
+
+Use one sheet for each link that lists several instruments. If two links
+list the same instruments in a different order and post to one sheet, each
+row's `instrument` cell lists them in its own order, and the columns keep
+the first link's order. `read_form_responses()` then refuses the download
+and names the first row that differs.
 
 Anyone with the URL can post a row to the sheet, and only you can read it.
 The URL sits inside every study link you send out. So a participant, or

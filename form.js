@@ -12,9 +12,9 @@
 // store, no answer is transmitted: the only network requests after the
 // page's own files are the export fetches, besides the move to a
 // completion address when the link names one. With a store, the requests
-// after Finish are the POST to its address, any
-// redirect a webhook answers with, and the OPTIONS preflight the browser
-// sends before a supabase insert; the CSV is saved only when that send is
+// after Finish are the POST to its address, any redirect a webhook answers
+// with, and the OPTIONS preflight the browser sends before a supabase
+// insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module, store
 // and consent text, are in the page's address, which the host serving the
 // page sees.)

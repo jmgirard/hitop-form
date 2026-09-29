@@ -12,8 +12,8 @@
 // Each walk records every request the page issues and asserts the set of
 // URLs (query strings dropped: the page's own address carries the study link)
 // equals { the page, form.js, one export per instrument }. A request the
-// page never made
-// cannot be in the set, and one it made to anywhere else fails the walk.
+// page never made cannot be in the set, and one it made to anywhere else
+// fails the walk.
 //
 // With a store in the link, the requests beyond that set are the POST to
 // the store's address and any redirect it answers with, and the POST is
