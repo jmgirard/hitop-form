@@ -280,9 +280,16 @@ export function expectShuffled(header, values, { exp, numbers, shown, prolific }
   }
 }
 
+// The pattern for the instrument at place `k` (from 0) of a list link:
+// chosenIndex() moved on by `k` options, so no two instruments of a walk
+// are answered alike. Place 0 is chosenIndex() itself.
+export function chosenIndexFor(k) {
+  return (position, optionCount) => (chosenIndex(position, optionCount) + k) % optionCount;
+}
+
 // Answers every item on the current page, except those whose position on the
-// page (1-based) is in `skip`.
-export async function answerPage(page, { skip = [] } = {}) {
+// page (1-based) is in `skip`, choosing each option by `choose`.
+export async function answerPage(page, { skip = [], choose = chosenIndex } = {}) {
   const items = page.locator('fieldset.item');
   const n = await items.count();
   for (let i = 0; i < n; i++) {
@@ -290,7 +297,7 @@ export async function answerPage(page, { skip = [] } = {}) {
     const item = items.nth(i);
     const position = Number(await item.getAttribute('data-position'));
     const radios = item.locator('input[type=radio]');
-    await radios.nth(chosenIndex(position, await radios.count())).check();
+    await radios.nth(choose(position, await radios.count())).check();
   }
 }
 
@@ -410,13 +417,16 @@ export async function currentPage(page) {
 
 // Walks every page from the first, answering each, collecting the items seen,
 // and pressing Finish on the last (with a double click when `finish` is
-// 'dblclick'). Returns the items in rendered order.
-export async function walkAll(page, { finish = 'click' } = {}) {
+// 'dblclick'). Returns the items in rendered order. Under a list link it
+// walks the pages of the instrument on screen, and its last press leads to
+// the next start screen, or after the last instrument to the after screen
+// or Finish. `choose` is answerPage()'s.
+export async function walkAll(page, { finish = 'click', choose } = {}) {
   const seen = [];
   for (;;) {
     const { page: p, of } = await currentPage(page);
     seen.push(...(await readItems(page)));
-    await answerPage(page);
+    await answerPage(page, { choose });
     if (p === of) {
       if (finish === 'dblclick') await nextButton(page).dblclick();
       else await nextButton(page).click();

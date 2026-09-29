@@ -74,6 +74,10 @@
   .question-edit .bounds { display: flex; gap: var(--s4); }
   .question-edit .bounds label { flex: 1; }
   .question-edit .moves button { margin: 0 var(--s2) 0 0; }
+  .instrument-row { margin: 0 0 var(--s4); }
+  .instrument-row label { margin: 0 0 var(--s2); }
+  .instrument-row .moves { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0; }
+  .instrument-row .moves button.secondary { margin-left: 0; }
   /* After the rules above, so a hidden label or range row stays hidden. */
   .question-edit [hidden] { display: none; }
   #questionsStatus:empty { display: none; }
@@ -88,9 +92,9 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text or questions) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads the instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
+  <p class="muted">The link opens the form page with the instrument or instruments, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text or questions) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads each instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
   <ol class="steps">
-    <li>Choose the instrument and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
+    <li>Choose the instrument, or up to three in order, and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
     <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
     <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
   </ol>
@@ -99,15 +103,12 @@
     <ul id="prefilledList"></ul>
   </div>
   <form id="f" novalidate>
-    <label>Instrument
-      <select name="instrument">
-        <option value="hitopsr">HiTOP-SR (405 items)</option>
-        <option value="hitopbr">HiTOP-BR (45 items)</option>
-        <option value="pid5">PID-5 (220 items)</option>
-        <option value="pid5sf">PID-5-SF (100 items)</option>
-        <option value="pid5bf">PID-5-BF (25 items)</option>
-      </select>
-    </label>
+    <fieldset id="instrumentsBlock">
+      <legend>Instruments</legend>
+      <p class="hint">Choose one instrument, or add a second and a third. The page gives them one after another in one session, in this order, each with its own start screen and pages. A list holds at most one form of the PID-5. The saved file and the table hold one group of item columns per instrument, in this order.</p>
+      <div id="instrumentList"></div>
+      <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
+    </fieldset>
     <label>Study
       <span class="hint">Written into every saved file. Required.</span>
       <input name="study" type="text" autocomplete="off">
@@ -117,7 +118,7 @@
       <input name="participant" type="text" autocomplete="off">
     </label>
     <label>Module descriptor
-      <span class="hint">Optional, HiTOP-SR only. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
+      <span class="hint">Optional, HiTOP-SR only. With several instruments it applies to the HiTOP-SR among them. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
@@ -219,7 +220,7 @@
   <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them, and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them (one group per instrument, in the list's order), and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -228,8 +229,9 @@
 <script type="module">
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
-    consentTextFault, fetchExport, planItems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
+    consentTextFault, fetchExports, planStems, linkStems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
     CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv, writeQuestionsCsv, saveFile,
+    checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -281,6 +283,90 @@
     else siteSelect.removeAttribute('aria-describedby');
   }
   siteSelect.addEventListener('change', showSite);
+
+  // The instrument list: one row per instrument, in the order the page gives
+  // them, each a menu of the five instruments with Move up, Move down and
+  // Remove. "Add an instrument" adds a row, up to INSTRUMENTS_MAX, and is
+  // disabled at that count. Remove is disabled while one row is left. Each
+  // row's menu is named `instrument`.
+  const OFFERED = [
+    ['hitopsr', 'HiTOP-SR (405 items)'],
+    ['hitopbr', 'HiTOP-BR (45 items)'],
+    ['pid5', 'PID-5 (220 items)'],
+    ['pid5sf', 'PID-5-SF (100 items)'],
+    ['pid5bf', 'PID-5-BF (25 items)'],
+  ];
+  const instrumentList = document.getElementById('instrumentList');
+  const addInstrument = document.getElementById('addInstrument');
+
+  // Each row's label and the names of its three buttons carry its number,
+  // counted from 1 in the list's order.
+  function renumberInstruments() {
+    const rows = [...instrumentList.children];
+    rows.forEach((row, k) => {
+      const n = k + 1;
+      row.querySelector('.label').textContent = `Instrument ${n}`;
+      row.querySelector('.up').setAttribute('aria-label', `Move instrument ${n} up`);
+      row.querySelector('.down').setAttribute('aria-label', `Move instrument ${n} down`);
+      row.querySelector('.remove').setAttribute('aria-label', `Remove instrument ${n}`);
+      row.querySelector('.remove').disabled = rows.length === 1;
+    });
+    addInstrument.disabled = rows.length >= INSTRUMENTS_MAX;
+  }
+
+  // A new row at the end, its menu set to `stem`, or to the first of the
+  // menu when it is not given.
+  function addInstrumentRow(stem) {
+    const row = control('div', { class: 'instrument-row' });
+    const label = control('label');
+    const text = control('span', { class: 'label' });
+    const select = control('select', { name: 'instrument' });
+    for (const [value, name] of OFFERED) {
+      const o = control('option', { value });
+      o.textContent = name;
+      select.append(o);
+    }
+    if (stem !== undefined) select.value = stem;
+    label.append(text, select);
+    const moves = control('p', { class: 'moves' });
+    const up = button('Move up', () => {
+      if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
+      renumberInstruments();
+      up.focus();
+    });
+    const down = button('Move down', () => {
+      if (row.nextElementSibling) instrumentList.insertBefore(row.nextElementSibling, row);
+      renumberInstruments();
+      down.focus();
+    });
+    const remove = button('Remove', () => {
+      const next = row.nextElementSibling ?? row.previousElementSibling;
+      row.remove();
+      renumberInstruments();
+      next.querySelector('select').focus();
+    });
+    up.classList.add('up');
+    down.classList.add('down');
+    remove.classList.add('remove');
+    moves.append(up, down, remove);
+    row.append(label, moves);
+    instrumentList.append(row);
+    renumberInstruments();
+    return row;
+  }
+
+  // The list as it stands: one row holding each stem of `stems`.
+  function setInstruments(stems) {
+    instrumentList.replaceChildren();
+    for (const stem of stems) addInstrumentRow(stem);
+  }
+
+  addInstrument.addEventListener('click', () => {
+    // The new row's menu starts at the first instrument not in the list.
+    const taken = [...instrumentList.querySelectorAll('select')].map((s) => s.value);
+    addInstrumentRow(OFFERED.map(([v]) => v).find((v) => !taken.includes(v))).querySelector('select').focus();
+  });
+  setInstruments([OFFERED[0][0]]);
 
   // The question editor: one group of fields per question, in the order the
   // researcher added and moved them. Each group sets the list the question
@@ -543,8 +629,10 @@
   // another page can hand a module over. The parameter is decoded as the
   // form page decodes it, and these faults are refused by name: a link
   // with both parameters, a `c` that cannot be decoded, each fault the form
-  // page names in a `z`, a config that is not a plain object, and an
-  // instrument the select does not offer. A field of another type than its control takes
+  // page names in a `z`, a config that is not a plain object, an instrument
+  // the menu does not offer, and an `instruments` list beside an
+  // `instrument` or refused by the form page's check. A list fills one row
+  // per entry. A field of a type its control does not take
   // is skipped and the rest are filled; the form page's own checks refuse
   // such a link when it is opened. Nothing is fetched. A throw past these
   // checks (a module nested deep enough to stop JSON.stringify) is
@@ -594,12 +682,28 @@
       refuse('does not hold a form.');
       return filled;
     }
-    const offered = [...f.elements.instrument.options].map((o) => o.value);
-    if (!offered.includes(config.instrument)) {
-      refuse(`names an instrument this page does not offer: ${JSON.stringify(config.instrument)}.`);
-      return filled;
+    // A list fills one row per entry, and takes the form page's own check,
+    // since a row cannot hold an entry the menu does not offer and the list
+    // holds at most INSTRUMENTS_MAX rows.
+    if (config.instruments !== undefined) {
+      if (config.instrument !== undefined) {
+        refuse('carries both an instrument field and an instruments field.');
+        return filled;
+      }
+      try {
+        checkInstruments(config.instruments, { bad: (why) => new Error(why) });
+      } catch (e) {
+        refuse(`holds an instruments field that could not be used: ${e.message}`);
+        return filled;
+      }
+      setInstruments(config.instruments);
+    } else {
+      if (!OFFERED.some(([v]) => v === config.instrument)) {
+        refuse(`names an instrument this page does not offer: ${JSON.stringify(config.instrument)}.`);
+        return filled;
+      }
+      setInstruments([config.instrument]);
     }
-    f.elements.instrument.value = config.instrument;
     const text = (name, v) => {
       if (typeof v === 'string') f.elements[name].value = v;
     };
@@ -665,6 +769,7 @@
   } catch {
     f.reset();
     questionList.replaceChildren();
+    setInstruments([OFFERED[0][0]]);
     refuse('could not be read.');
   }
   showKind();
@@ -679,7 +784,7 @@
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    // A Supabase build waits on the export fetch; a second press meanwhile
+    // A Supabase build waits on the export fetches; a second press meanwhile
     // could finish first and be overwritten by the stale build.
     if (makeButton.disabled) return;
     makeButton.disabled = true;
@@ -702,7 +807,26 @@
     sqlBlock.hidden = true;
     sql.value = '';
     const data = new FormData(f);
-    const config = { instrument: data.get('instrument'), study: data.get('study').trim() };
+    // One row makes an `instrument` link, as before the list. Two or three
+    // make an `instruments` list, which takes the form page's own check with
+    // each row named by its number and each instrument by its menu name.
+    const stems = [...instrumentList.querySelectorAll('select')].map((s) => s.value);
+    const config = {};
+    if (stems.length === 1) {
+      config.instrument = stems[0];
+    } else {
+      try {
+        config.instruments = checkInstruments(stems, {
+          bad: (why) => new Error(`The instruments could not be used: ${why}`),
+          entry: (i) => `instrument ${i + 1}`,
+          label: (name) => INSTRUMENTS[name] ?? JSON.stringify(name),
+        });
+      } catch (e) {
+        err.textContent = e.message;
+        return;
+      }
+    }
+    config.study = data.get('study').trim();
     if (config.study === '') {
       err.textContent = 'Give the study a name.';
       return;
@@ -852,10 +976,15 @@
         err.textContent = 'The module descriptor is not JSON.';
         return;
       }
-      // The same check the form page runs on the link, so a bad descriptor
+      // The same checks the form page runs on the link, so a bad descriptor
       // is refused here, at the researcher, and never at a participant.
+      // Under a list the module applies to its HiTOP-SR row.
+      if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
+        err.textContent = 'The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.';
+        return;
+      }
       try {
-        checkModule(m, config.instrument);
+        checkModule(m, config.instruments !== undefined ? 'hitopsr' : config.instrument);
       } catch (e) {
         err.textContent = e.message;
         return;
@@ -883,10 +1012,11 @@
     }
     if (kind === 'supabase') {
       // The table's columns are the items the page will show, named as the
-      // export names them, so the export is read here as the page reads it.
+      // exports name them, one group per instrument in the list's order, so
+      // the exports are read here as the page reads them.
       let items;
       try {
-        items = planItems(await fetchExport(config.instrument), config.module, config.shuffle === true).items;
+        items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
       } catch (e) {
         err.textContent = e.message;
         return;

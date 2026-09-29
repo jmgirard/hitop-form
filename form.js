@@ -1,18 +1,20 @@
 // The form page. index.html calls boot(); link.html imports encodeLink(),
-// the link readers, the checks (checkParticipantParam(), consentTextFault()
-// and checkQuestions() among them), readQuestionsCsv(), writeQuestionsCsv(),
-// saveFile(), fetchExport(), planItems(), storeSql() and PROLIFIC_PARAMS.
+// the link readers, the checks (checkParticipantParam(), consentTextFault(),
+// checkQuestions() and checkInstruments() among them), readQuestionsCsv(),
+// writeQuestionsCsv(), saveFile(), fetchExports(), planStems(), linkStems(),
+// storeSql(), PROLIFIC_PARAMS, INSTRUMENTS and INSTRUMENTS_MAX.
 //
-// The page reads one study link, fetches one JSON export from the hitop
-// package's site, renders the instrument (or the module the link names) 15
-// items to a page, and at Finish either posts the responses as one JSON row
-// to the store the link names or, with no store, saves them as one CSV to
-// the participant's device. With no store, no answer is transmitted: the
-// only network request after the page's own files is the export fetch,
-// besides the move to a completion address when the link names one. With
-// a store, the requests after Finish are the POST to its address, any
-// redirect a webhook answers with, and the OPTIONS preflight the browser
-// sends before a supabase insert; the CSV is saved only when that send is
+// The page reads one study link, fetches the JSON export of each instrument
+// it names from the hitop package's site, renders each instrument in turn
+// (or the module the link names) 15 items to a page, and at Finish either
+// posts the responses as one JSON row to the store the link names or, with
+// no store, saves them as one CSV to the participant's device. With no
+// store, no answer is transmitted: the only network requests after the
+// page's own files are the export fetches, besides the move to a
+// completion address when the link names one. With a store, the requests
+// after Finish are the POST to its address, any redirect a webhook answers
+// with, and the OPTIONS preflight the browser sends before a supabase
+// insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module, store
 // and consent text, are in the page's address, which the host serving the
 // page sees.)
@@ -62,6 +64,59 @@ export const INSTRUMENTS = {
   pid5sf: 'PID-5-SF',
   pid5bf: 'PID-5-BF',
 };
+
+// A link names what it gives in one of two fields: `instrument`, one name
+// from INSTRUMENTS, or `instruments`, a list of 2 to INSTRUMENTS_MAX
+// distinct names that the page gives one after another in one session, in
+// the list's order. A list holds at most one of the three PID-5 forms.
+export const INSTRUMENTS_MAX = 3;
+export const PID5_FORMS = ['pid5', 'pid5sf', 'pid5bf'];
+
+// Returns the list, or throws through `bad` naming the fault: a value that
+// is not a list, a list of fewer than 2 or more than INSTRUMENTS_MAX names,
+// an entry that is not a name the page knows (an entry that is not text
+// included), a name given twice, and two or three PID-5 forms.
+// Each entry is named by `entry(i)`, `i` counted from 0, and each
+// instrument by `label(name)`. link.html runs the same check on its
+// instrument rows, with its own `bad`, `entry` and `label`.
+export function checkInstruments(
+  list,
+  {
+    bad = (why) => new Error(`The study link's instruments field could not be used: ${why}`),
+    entry = (i) => `entry ${i + 1}`,
+    label = (name) => JSON.stringify(name),
+  } = {},
+) {
+  if (!Array.isArray(list)) throw bad(`it is not a list, and it is ${JSON.stringify(list)}.`);
+  if (list.length < 2) {
+    throw bad(`it names ${list.length} ${list.length === 1 ? 'instrument' : 'instruments'}, and a list names 2 or ${INSTRUMENTS_MAX}. For one instrument, use the instrument field.`);
+  }
+  if (list.length > INSTRUMENTS_MAX) {
+    throw bad(`it names ${list.length} instruments, and a list names 2 or ${INSTRUMENTS_MAX}.`);
+  }
+  list.forEach((name, i) => {
+    // An entry that is not text is refused here: Object.hasOwn() reads
+    // ["hitopbr"] as the key "hitopbr".
+    if (typeof name !== 'string' || !Object.hasOwn(INSTRUMENTS, name)) {
+      throw bad(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
+    }
+    const first = list.indexOf(name);
+    if (first !== i) throw bad(`it names ${label(name)} twice, as ${entry(first)} and ${entry(i)}.`);
+  });
+  const pid = list.filter((name) => PID5_FORMS.includes(name));
+  if (pid.length > 1) {
+    const names = pid.map(label);
+    const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    throw bad(`it names ${listed}, ${pid.length === 2 ? 'two' : 'three'} forms of the PID-5, and a list holds one.`);
+  }
+  return list;
+}
+
+// The stems a checked link gives, in order: its `instruments` list, or its
+// one `instrument`.
+export function linkStems(config) {
+  return config.instruments ?? [config.instrument];
+}
 
 // ---- The study link -------------------------------------------------------
 
@@ -642,7 +697,14 @@ export function questionValue(q, a) {
 // message the participant can pass on to the study team.
 export async function parseLink(search) {
   const config = await decodeLink(search);
-  if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
+  if (config.instruments !== undefined) {
+    if (config.instrument !== undefined) {
+      throw new Error(
+        'The study link carries both an instrument field and an instruments field, and a link carries one: instrument for one instrument, or instruments for a list of 2 or 3.',
+      );
+    }
+    checkInstruments(config.instruments);
+  } else if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
     throw new Error(
       `The study link names an instrument this page does not know: ${JSON.stringify(config.instrument)}.`,
     );
@@ -660,7 +722,16 @@ export async function parseLink(search) {
   if (typeof config.participant === 'string' && config.participant.trim() === '') {
     delete config.participant;
   }
-  if (config.module !== undefined) checkModule(config.module, config.instrument);
+  // Under an `instruments` list, a module applies to the list's HiTOP-SR
+  // entry, so a list without one refuses it.
+  if (config.module !== undefined) {
+    if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
+      throw new Error(
+        'The study link carries a module, and its instruments list holds no "hitopsr". A module applies to the HiTOP-SR entry of the list.',
+      );
+    }
+    checkModule(config.module, moduleStem(config));
+  }
   if (config.store !== undefined) config.store = checkStore(config.store);
   // `shuffle` asks for a fresh random order on each load. Only the two
   // booleans are read; anything else, `null` and the string "true"
@@ -1009,10 +1080,11 @@ function isIntegerArray(x) {
 }
 
 // The SQL that makes the table a supabase store names, for `items` in the
-// order the row keeps them (planItems().items): the five study fields as
-// text, an `item_order` text column under `shuffle`, the two Prolific text
-// columns under `prolific`, one integer column per item, one text column
-// per question of `questions` (a link's `questions` field) in
+// order the row keeps them (the `items` of each planStems() plan, one group
+// per instrument in the link's order, joined into one list): the five study
+// fields as text, an `item_order` text column under `shuffle`, the two
+// Prolific text columns under `prolific`, one integer column per item, one
+// text column per question of `questions` (a link's `questions` field) in
 // questionColumns() order, row-level security on, the project's default
 // grants to the API roles revoked, and the anon role allowed to insert and
 // nothing else. Shown by link.html; pasted by the researcher into the
@@ -1108,6 +1180,33 @@ export async function fetchExport(instrument) {
   return checkExport(exp, instrument);
 }
 
+// The exports of `stems`, fetched together, in the order of `stems`. When
+// one or more are refused, the refusal of the first in that order is
+// thrown. Under a list of two or more, its message opens with the
+// instrument's name, as "PID-5-BF: The instrument could not be fetched…".
+export async function fetchExports(stems) {
+  const settled = await Promise.allSettled(stems.map((stem) => fetchExport(stem)));
+  const failed = settled.findIndex((s) => s.status === 'rejected');
+  if (failed >= 0) {
+    const e = settled[failed].reason;
+    throw stems.length === 1 ? e : new Error(`${INSTRUMENTS[stems[failed]]}: ${e.message}`);
+  }
+  return settled.map((s) => s.value);
+}
+
+// The stem a link's module applies to: its one instrument, or the HiTOP-SR
+// entry of its list.
+export function moduleStem(config) {
+  return config.instruments !== undefined ? 'hitopsr' : config.instrument;
+}
+
+// planItems() for each stem of a checked link, in order, with the module
+// passed only to the stem it applies to.
+export function planStems(config, exps) {
+  return linkStems(config).map((stem, k) =>
+    planItems(exps[k], stem === moduleStem(config) ? config.module : undefined, config.shuffle === true));
+}
+
 // The items the page will use, as two lists of the same item objects:
 // `items`, the order the row and the file keep their item columns in, and
 // `shown`, the order the page renders. Without `shuffle` the two are one
@@ -1174,14 +1273,18 @@ export function leadColumns({ shuffle = false, prolific = false } = {}) {
   ];
 }
 
-// The lead values of one record, in leadColumns() order. `itemOrder`, when
-// given, is the item numbers in the order shown, joined by single spaces.
-// `prolific`, when given, is `{ study, session }` from the address, each
-// written as it was read (the empty string when absent or a placeholder).
+// The lead values of one record, in leadColumns() order. `instrument` and
+// `formBuild` are each instrument's stem and each export's build date, in
+// the link's order, joined by single spaces. `itemOrder`, when given, holds
+// one list per instrument of its item numbers in the order shown. Each list
+// is joined by single spaces, and the lists by " | ", so one instrument's
+// cell is its numbers alone. `prolific`, when given, is `{ study, session }`
+// from the address, each written as it was read (the empty string when
+// absent or a placeholder).
 function leadValues({ study, participant, instrument, formBuild, submitted, itemOrder, prolific }) {
   return [
     study, participant, instrument, formBuild, submitted,
-    ...(itemOrder !== undefined ? [itemOrder.join(' ')] : []),
+    ...(itemOrder !== undefined ? [itemOrder.map((shown) => shown.join(' ')).join(' | ')] : []),
     ...(prolific !== undefined ? [prolific.study, prolific.session] : []),
   ];
 }
@@ -1199,16 +1302,27 @@ function questionCells({ questions, questionValues }) {
   return QUESTION_LISTS.flatMap((list) => (questions?.[list] ?? []).map((q) => questionValues.get(q.name)));
 }
 
-// One header row and one data row. `answers` maps item number to the chosen
-// option value. `items` is the column order; the lead columns are
-// leadColumns()' for the record's `itemOrder` and `prolific`. Without either
-// the file has five lead columns. The question columns follow the items.
+// The item columns of one record and their values: one group per
+// instrument, in the link's order. Each of `groups` is `{ items, answers }`,
+// `items` the group's column order and `answers` a map from item number to
+// the chosen option value. Item numbers repeat across instruments, so each
+// group keeps its own map.
+function itemCells({ groups }) {
+  return {
+    names: groups.flatMap(({ items }) => items.map((it) => it.name)),
+    values: groups.flatMap(({ items, answers }) => items.map((it) => answers.get(it.number))),
+  };
+}
+
+// One header row and one data row. The lead columns are leadColumns()' for
+// the record's `itemOrder` and `prolific`, so without either the file has
+// five. The item columns of itemCells() follow, then the question columns.
 export function buildCsv(record) {
-  const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const row = leadValues(record);
-  header.push(...items.map((it) => it.name), ...questionColumns(record));
-  row.push(...items.map((it) => answers.get(it.number)), ...questionCells(record));
+  const { names, values } = itemCells(record);
+  header.push(...names, ...questionColumns(record));
+  row.push(...values, ...questionCells(record));
   return `${header.map(csvField).join(',')}\r\n${row.map(csvField).join(',')}\r\n`;
 }
 
@@ -1224,14 +1338,14 @@ export const SEND_TIMEOUT_MS = 30_000;
 
 // One JSON object per finished form: the lead fields buildCsv() writes as
 // columns, key for column and in the same order, then one key per item in
-// `items` order, each value the chosen option's integer value, then one
+// itemCells() order, each value the chosen option's integer value, then one
 // string per question, keyed and ordered as questionColumns().
 export function buildRow(record) {
-  const { items, answers } = record;
   const header = leadColumns({ shuffle: record.itemOrder !== undefined, prolific: record.prolific !== undefined });
   const values = leadValues(record);
   const row = Object.fromEntries(header.map((k, i) => [k, values[i]]));
-  for (const it of items) row[it.name] = answers.get(it.number);
+  const items = itemCells(record);
+  items.names.forEach((k, i) => { row[k] = items.values[i]; });
   const cells = questionCells(record);
   questionColumns(record).forEach((k, i) => { row[k] = cells[i]; });
   return row;
@@ -1375,10 +1489,12 @@ function focusHeading(root) {
   if (h) h.focus({ preventScroll: true });
 }
 
-function versionLine(exp) {
+// An export's version line. `title`, when given, opens it with the
+// instrument's name, for a screen that shows the lines of several exports.
+function versionLine(exp, title) {
   return el('p', {
     class: 'version',
-    text: `Form build ${exp.buildDate} · ${exp.package} ${exp.packageVersion}`,
+    text: `${title === undefined ? 'Form' : `${title} form`} build ${exp.buildDate} · ${exp.package} ${exp.packageVersion}`,
   });
 }
 
@@ -1390,16 +1506,16 @@ export async function boot(root, search) {
     showError(root, e.message);
     return;
   }
-  let exp;
+  let exps;
   try {
-    exp = await fetchExport(config.instrument);
+    exps = await fetchExports(linkStems(config));
   } catch (e) {
     showError(root, e.message);
     return;
   }
-  let plan;
+  let plans;
   try {
-    plan = planItems(exp, config.module, config.shuffle === true);
+    plans = planStems(config, exps);
   } catch (e) {
     showError(root, e.message);
     return;
@@ -1408,28 +1524,39 @@ export async function boot(root, search) {
   // `prolific: true`, and the parameter a `participantParam` names only
   // under that field; any other link ignores the address's parameters.
   runForm(
-    root, config, exp, plan,
+    root, config, exps, plans,
     config.prolific === true ? readProlific(search) : undefined,
     config.participantParam !== undefined ? readParticipantParam(search, config.participantParam) : '',
   );
 }
 
-// `plan.shown` is the order the pages render and the positions count in;
-// `plan.items` the order the row and the file keep. `prolific`, under
-// `prolific: true`, is the address's three parameters from readProlific():
-// a PROLIFIC_PID that is not empty is the participant identifier, and the
-// start screen then asks for none. `fromAddress`, under `participantParam`,
-// is the identifier readParticipantParam() read, and likewise takes the
-// place of the start screen's question when it is not empty.
-function runForm(root, config, exp, plan, prolific, fromAddress) {
-  const items = plan.shown;
-  const title = INSTRUMENTS[config.instrument];
-  const options = exp.instructions.options;
-  const answers = new Map();
-  const pageCount = Math.ceil(items.length / PAGE_SIZE);
+// `exps` and `plans` hold one export and one planItems() plan per stem of
+// the link, in its order. The page gives each instrument in turn: its start
+// screen, then its item pages. Of each plan, `shown` is the order the pages
+// render and the positions count in, and `items` the order the row and the
+// file keep. Positions and page labels count within each instrument.
+// `prolific`, under `prolific: true`, is the address's three parameters
+// from readProlific(): a PROLIFIC_PID that is not empty is the participant
+// identifier, and the first start screen then asks for none. `fromAddress`,
+// under `participantParam`, is the identifier readParticipantParam() read,
+// and likewise takes the place of that screen's question when it is not
+// empty.
+function runForm(root, config, exps, plans, prolific, fromAddress) {
+  // One part per instrument. Each keeps its own answers, by item number,
+  // since item numbers repeat across instruments.
+  const parts = linkStems(config).map((stem, k) => ({
+    exp: exps[k],
+    plan: plans[k],
+    title: INSTRUMENTS[stem],
+    pageCount: Math.ceil(plans[k].shown.length / PAGE_SIZE),
+    answers: new Map(),
+  }));
+  const multi = parts.length > 1;
   let participant = prolific && prolific.pid !== ''
     ? prolific.pid
     : fromAddress !== '' ? fromAddress : config.participant;
+  // The part and the page within it that showPage() draws.
+  let part = 0;
   let page = 0;
   let finished = false;
   let sending = false;
@@ -1445,14 +1572,18 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   // A reload or a back gesture would lose every answer, since they live only
   // in memory until Finish writes the file. The browser asks first.
   window.addEventListener('beforeunload', (ev) => {
-    if (finished || (answers.size === 0 && ![...before, ...after].some((q) => isAnswered(q, questionAnswers.get(q.name))))) return;
+    if (finished || (parts.every((p) => p.answers.size === 0) && ![...before, ...after].some((q) => isAnswered(q, questionAnswers.get(q.name))))) return;
     ev.preventDefault();
     ev.returnValue = '';
   });
 
-  function start() {
+  // The start screen of part `k`. Under a list link it says which part it
+  // is. Only the first asks for the participant identifier when the page
+  // holds none, and only the first says where the answers go.
+  function start(k) {
+    const { exp, plan, title, pageCount } = parts[k];
     const alert = el('p', { role: 'alert' });
-    const askParticipant = participant === undefined;
+    const askParticipant = k === 0 && participant === undefined;
     const input = askParticipant
       ? el('input', { type: 'text', name: 'participant', autocomplete: 'off', required: '' })
       : null;
@@ -1471,27 +1602,27 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
         }
         participant = v;
       }
+      part = k;
       page = 0;
       showPage();
     };
+    const counts = `${plan.shown.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}.`;
+    const where = store
+      ? `When you finish, your answers are sent to the study team at ${storeHost}. If the send cannot be confirmed, they are saved as one file in this browser's downloads folder instead.`
+      : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.';
     root.replaceChildren(
       heading(title),
       versionLine(exp),
+      ...(multi ? [el('p', { class: 'part', text: `Part ${k + 1} of ${parts.length}` })] : []),
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
-      el('p', {
-        class: 'muted',
-        text: `${items.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}. ${
-          store
-            ? `When you finish, your answers are sent to the study team at ${storeHost}. If the send cannot be confirmed, they are saved as one file in this browser's downloads folder instead.`
-            : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.'
-        }`,
-      }),
+      el('p', { class: 'muted', text: k === 0 ? `${counts} ${where}` : counts }),
       ...(askParticipant
         ? [el('label', { class: 'field' }, ['Participant identifier', input])]
         : []),
       alert,
       el('div', { class: 'nav' }, [el('button', { type: 'button', text: 'Begin', onclick: begin })]),
     );
+    window.scrollTo(0, 0);
     if (input) input.focus();
     else focusHeading(root);
   }
@@ -1633,7 +1764,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     const nav = list === 'before'
       ? el('div', { class: 'nav' }, [
           el('span', { class: 'spacer' }),
-          el('button', { type: 'button', text: 'Next', onclick: () => { if (checked()) start(); } }),
+          el('button', { type: 'button', text: 'Next', onclick: () => { if (checked()) start(0); } }),
         ])
       : el('div', { class: 'nav' }, [
           el('button', {
@@ -1642,7 +1773,8 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
             text: 'Back',
             onclick: () => {
               if (sending) return;
-              page = pageCount - 1;
+              part = parts.length - 1;
+              page = parts[part].pageCount - 1;
               showPage();
             },
           }),
@@ -1665,12 +1797,15 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
   // has one, then the start screen.
   function proceed() {
     if (before.length > 0) showQuestions('before');
-    else start();
+    else start(0);
   }
 
-  function itemNode(it, position) {
+  // An item of part `p` at its position within that part.
+  function itemNode(p, it, position) {
+    const { answers } = p;
     const fs = el('fieldset', {
       class: 'item',
+      'data-stem': p.exp.stem,
       'data-number': String(it.number),
       'data-position': String(position),
     });
@@ -1684,7 +1819,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       ]),
     );
     const group = el('div', { class: 'options' });
-    for (const o of options) {
+    for (const o of p.exp.instructions.options) {
       const input = el('input', {
         type: 'radio',
         name: `item-${it.number}`,
@@ -1701,12 +1836,19 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     return fs;
   }
 
+  // Page `page` of part `part`. Its first page carries no Back. Past its
+  // last page come the next part's start screen, then the after screen when
+  // the link has one, and Finish on the last page of the last part
+  // otherwise.
   function showPage() {
+    const p = parts[part];
+    const { answers, pageCount } = p;
     const first = page * PAGE_SIZE;
-    const slice = items.slice(first, first + PAGE_SIZE);
+    const slice = p.plan.shown.slice(first, first + PAGE_SIZE);
     const alert = el('p', { role: 'alert' });
-    const nodes = slice.map((it, i) => itemNode(it, first + i + 1));
+    const nodes = slice.map((it, i) => itemNode(p, it, first + i + 1));
     const last = page === pageCount - 1;
+    const lastPart = part === parts.length - 1;
 
     const advance = () => {
       if (sending) return;
@@ -1720,7 +1862,8 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
         nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
         return;
       }
-      if (last && after.length > 0) showQuestions('after');
+      if (last && !lastPart) start(part + 1);
+      else if (last && after.length > 0) showQuestions('after');
       else if (last) finish(nav);
       else {
         page += 1;
@@ -1735,11 +1878,11 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     const nav = el('div', { class: 'nav' }, [
       ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
       el('span', { class: 'spacer' }),
-      el('button', { type: 'button', text: last && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
+      el('button', { type: 'button', text: last && lastPart && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
     ]);
 
     root.replaceChildren(
-      heading(title),
+      heading(p.title),
       el('p', { class: 'progress', text: `Page ${page + 1} of ${pageCount}` }),
       ...nodes,
       alert,
@@ -1766,19 +1909,19 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
     const record = {
       study: config.study,
       participant,
-      instrument: exp.stem,
-      formBuild: exp.buildDate,
+      instrument: parts.map((p) => p.exp.stem).join(' '),
+      formBuild: parts.map((p) => p.exp.buildDate).join(' '),
       submitted,
-      // The columns keep `plan.items`; under shuffle the shown order goes
-      // into `item_order`, and without it the file is as it always was.
-      items: plan.items,
-      itemOrder: config.shuffle === true ? plan.shown.map((it) => it.number) : undefined,
+      // Each part's columns keep its `plan.items`; under shuffle the shown
+      // orders go into `item_order`, and without it the file is as it
+      // always was. A copy of each part's answers: the radios stay live
+      // during a send, and the file saved on an unconfirmed send must hold
+      // the answers the row was posted with.
+      groups: parts.map((p) => ({ items: p.plan.items, answers: new Map(p.answers) })),
+      itemOrder: config.shuffle === true ? parts.map((p) => p.plan.shown.map((it) => it.number)) : undefined,
       // Under `prolific: true` the two columns are always written, each
       // empty when the address gave nothing for it.
       prolific: prolific ? { study: prolific.study, session: prolific.session } : undefined,
-      // A copy: the radios stay live during a send, and the file saved on an
-      // unconfirmed send must hold the answers the row was posted with.
-      answers: new Map(answers),
       // The researcher's questions and the value each writes, by name.
       questions: config.questions,
       questionValues: new Map([...before, ...after].map((q) => [q.name, questionValue(q, questionAnswers.get(q.name))])),
@@ -1817,7 +1960,7 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
               el('a', { href: complete, text: new URL(complete).host }),
               '.',
             ]),
-        versionLine(exp),
+        ...versionLines(),
       );
       focusHeading(root);
       if (complete !== undefined) window.location.assign(complete);
@@ -1873,9 +2016,15 @@ function runForm(root, config, exp, plan, prolific, fromAddress) {
       el('button', { type: 'button', text: 'Save the file', onclick: saveAgain }),
       status,
       ...complete,
-      versionLine(exp),
+      ...versionLines(),
     );
     focusHeading(root);
+  }
+
+  // The version lines of the closing screens: the one export's line, or
+  // under a list one line per export, each opening with its instrument.
+  function versionLines() {
+    return multi ? parts.map((p) => versionLine(p.exp, p.title)) : [versionLine(parts[0].exp)];
   }
 
   if (config.consent !== undefined) showConsent();
