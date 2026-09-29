@@ -63,6 +63,54 @@ export const INSTRUMENTS = {
   pid5bf: 'PID-5-BF',
 };
 
+// A link names what it gives in one of two fields: `instrument`, one name
+// from INSTRUMENTS, or `instruments`, a list of 2 to INSTRUMENTS_MAX
+// distinct names that the page gives one after another in one session, in
+// the list's order. A list holds at most one of the three PID-5 forms.
+export const INSTRUMENTS_MAX = 3;
+export const PID5_FORMS = ['pid5', 'pid5sf', 'pid5bf'];
+
+// Returns the list, or throws through `bad` naming the fault: a value that
+// is not a list, a list of fewer than 2 or more than INSTRUMENTS_MAX names,
+// a name the page does not know, a name given twice, and two PID-5 forms.
+// Each entry is named by `entry(i)`, `i` counted from 0, and each
+// instrument by `label(name)`. link.html runs the same check on its
+// instrument rows, with its own `bad`, `entry` and `label`.
+export function checkInstruments(
+  list,
+  {
+    bad = (why) => new Error(`The study link's instruments field could not be used: ${why}`),
+    entry = (i) => `entry ${i + 1}`,
+    label = (name) => JSON.stringify(name),
+  } = {},
+) {
+  if (!Array.isArray(list)) throw bad(`it is not a list, and it is ${JSON.stringify(list)}.`);
+  if (list.length < 2) {
+    throw bad(`it names ${list.length} ${list.length === 1 ? 'instrument' : 'instruments'}, and a list names 2 or ${INSTRUMENTS_MAX}. For one instrument, use the instrument field.`);
+  }
+  if (list.length > INSTRUMENTS_MAX) {
+    throw bad(`it names ${list.length} instruments, and a list names 2 or ${INSTRUMENTS_MAX}.`);
+  }
+  list.forEach((name, i) => {
+    if (!Object.hasOwn(INSTRUMENTS, name)) {
+      throw bad(`its ${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
+    }
+    const first = list.indexOf(name);
+    if (first !== i) throw bad(`it names ${label(name)} twice, as its ${entry(first)} and its ${entry(i)}.`);
+  });
+  const pid = list.filter((name) => PID5_FORMS.includes(name));
+  if (pid.length > 1) {
+    throw bad(`it names ${pid.map(label).join(' and ')}, two forms of the PID-5, and a list holds one.`);
+  }
+  return list;
+}
+
+// The stems a checked link gives, in order: its `instruments` list, or its
+// one `instrument`.
+export function linkStems(config) {
+  return config.instruments ?? [config.instrument];
+}
+
 // ---- The study link -------------------------------------------------------
 
 function bytesToBase64url(bytes) {
@@ -642,7 +690,14 @@ export function questionValue(q, a) {
 // message the participant can pass on to the study team.
 export async function parseLink(search) {
   const config = await decodeLink(search);
-  if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
+  if (config.instruments !== undefined) {
+    if (config.instrument !== undefined) {
+      throw new Error(
+        'The study link carries both an instrument field and an instruments field, and a link carries one: instrument for one instrument, or instruments for a list of 2 or 3.',
+      );
+    }
+    checkInstruments(config.instruments);
+  } else if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
     throw new Error(
       `The study link names an instrument this page does not know: ${JSON.stringify(config.instrument)}.`,
     );
@@ -660,7 +715,16 @@ export async function parseLink(search) {
   if (typeof config.participant === 'string' && config.participant.trim() === '') {
     delete config.participant;
   }
-  if (config.module !== undefined) checkModule(config.module, config.instrument);
+  // Under an `instruments` list, a module applies to the list's HiTOP-SR
+  // entry, so a list without one refuses it.
+  if (config.module !== undefined) {
+    if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
+      throw new Error(
+        'The study link carries a module, and its instruments list holds no "hitopsr". A module applies to the HiTOP-SR entry of the list.',
+      );
+    }
+    checkModule(config.module, config.instruments !== undefined ? 'hitopsr' : config.instrument);
+  }
   if (config.store !== undefined) config.store = checkStore(config.store);
   // `shuffle` asks for a fresh random order on each load. Only the two
   // booleans are read; anything else, `null` and the string "true"
