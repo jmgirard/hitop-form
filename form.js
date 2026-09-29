@@ -1073,7 +1073,8 @@ function isIntegerArray(x) {
 }
 
 // The SQL that makes the table a supabase store names, for `items` in the
-// order the row keeps them (planItems().items): the five study fields as
+// order the row keeps them (the `items` of each planStems() plan, one group
+// per instrument in the link's order, joined into one list): the five study fields as
 // text, an `item_order` text column under `shuffle`, the two Prolific text
 // columns under `prolific`, one integer column per item, one text column
 // per question of `questions` (a link's `questions` field) in
