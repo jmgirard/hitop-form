@@ -10,10 +10,9 @@
 //       not text, a repeated name, and two PID-5 forms (each pair of the
 //       three)
 //   I2: a module beside a list without "hitopsr" is refused naming the
-//       rule; beside a list with "hitopsr", a descriptor of another format
-//       and one whose items are not ascending are refused by checkModule()'s
-//       messages, so the descriptor is checked against the list's HiTOP-SR
-//       entry
+//       rule; beside a list with "hitopsr", a descriptor of another
+//       instrument is refused naming "hitopsr", and ones of another format
+//       or with items not ascending are refused by checkModule()'s messages
 //
 // Each probe fails at the link check, before any export is fetched.
 

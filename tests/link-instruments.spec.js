@@ -16,13 +16,15 @@
 //        refused by the module check naming hitopsr, and a good module is
 //        accepted
 //   LI4: a link built with two and with three instruments opens the form
-//        at the first instrument's start screen, "Part 1 of N"; opened on
+//        at the first instrument's start screen, "Part 1 of N" (after the
+//        "Before you begin" screen when the link has a question); opened on
 //        the builder through its `c` (and, with a question, its `z`), it
 //        fills the same rows in the same order, and a rebuild writes the
 //        same config
-//   LI5: an opened link is refused by name, with every control left at its
-//        no-link value, when it carries both fields, or a list the form page
-//        refuses (four names, two PID-5 forms, a list of one, not a list)
+//   LI5: an opened link is refused by name, with the instrument list back at
+//        its one HiTOP-SR row (and, for a c link, the study field empty),
+//        when it carries both fields, or a list the form page refuses (four
+//        names, two PID-5 forms, a list of one, not a list)
 
 import { test, expect } from '@playwright/test';
 import { useTarget, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';

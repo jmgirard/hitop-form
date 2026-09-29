@@ -419,7 +419,8 @@ export async function currentPage(page) {
 // and pressing Finish on the last (with a double click when `finish` is
 // 'dblclick'). Returns the items in rendered order. Under a list link it
 // walks the pages of the instrument on screen, and its last press leads to
-// the next start screen. `choose` is answerPage()'s.
+// the next start screen, or after the last instrument to the after screen
+// or Finish. `choose` is answerPage()'s.
 export async function walkAll(page, { finish = 'click', choose } = {}) {
   const seen = [];
   for (;;) {

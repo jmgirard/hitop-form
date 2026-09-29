@@ -9,10 +9,11 @@
 //        columns, then the 25 PID-5-BF ones, each in its export's order and
 //        holding the value its instrument's pattern chose; and the q_
 //        columns after all the items. Walked with shuffle off, with shuffle
-//        on, with prolific: true, and with questions. Under shuffle each
-//        instrument's pages show only its own items (their `data-stem`),
-//        and the `item_order` cell is one group per instrument, in link
-//        order, joined by " | ", each group the numbers in the order shown.
+//        on, with prolific: true, and with questions. In every mode each
+//        instrument's pages show only its own items (their `data-stem`).
+//        Under shuffle the `item_order` cell is one group per instrument, in
+//        link order, joined by " | ", each group the numbers in the order
+//        shown.
 //   IR2: the same for three instruments (the PID-5-BF, a HiTOP-SR module,
 //        the HiTOP-BR) under shuffle, the HiTOP-SR group holding the
 //        module's items.
