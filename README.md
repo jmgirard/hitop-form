@@ -2,7 +2,8 @@
 
 A static page that shows one of five questionnaires in the browser: the
 HiTOP-SR, the HiTOP-BR, or the PID-5 in its full (PID-5), short (PID-5-SF) or
-brief (PID-5-BF) form.
+brief (PID-5-BF) form. A link can also give two or three of them, one after
+another, in one session.
 When a participant finishes, the page sends their answers as one JSON row to
 the store the study link names: a web address, such as a Google Apps Script
 web app that appends to a Google Sheet, or a table in a Supabase project.
@@ -26,7 +27,9 @@ Open [link.html](https://jmgirard.github.io/hitop-form/link.html) and fill in
 the form:
 
 1. Choose the instrument: HiTOP-SR (405 items), HiTOP-BR (45 items),
-   PID-5 (220 items), PID-5-SF (100 items) or PID-5-BF (25 items).
+   PID-5 (220 items), PID-5-SF (100 items) or PID-5-BF (25 items). To give
+   two or three in one session, press "Add an instrument". The section
+   [Give more than one instrument](#give-more-than-one-instrument) tells how.
 2. Give the study a name. The name is written into every row and file.
 3. Optionally give a participant identifier. Leave it empty for one link
    shared with many participants. The page then asks each participant for an
@@ -420,6 +423,60 @@ and a file with no question row. It refuses a missing, unknown or repeated
 column name, and a row with more or fewer cells than the header. It
 refuses a quote that breaks the CSV rules too.
 
+## Give more than one instrument
+
+A link can give two or three instruments, one after another, in one
+session. In the builder's "Instruments" part, press "Add an instrument" to
+add a row, up to three. Choose an instrument in each row. "Move up", "Move
+down" and "Remove" change the order and the rows. The page gives the
+instruments in the order of the rows. One row makes a link with an
+`instrument` field, as before. Two or three rows make a link with an
+`instruments` field, a list of the instruments' names in order, such as
+`["hitopbr", "pid5bf"]`.
+
+The builder and the page refuse a list that names one instrument twice, or
+two forms of the PID-5 (`pid5`, `pid5sf` and `pid5bf`). The page also
+refuses a link with both an `instrument` and an `instruments` field. It
+refuses an `instruments` field that is not a list or holds fewer than 2 or
+more than 3 names. It refuses a name it does not know. A module descriptor
+applies to the HiTOP-SR in the list. The builder and the page refuse a
+module beside a list without `hitopsr`.
+
+The page fetches the export of each instrument before it shows the first
+screen. When an export cannot be used, the page names the instrument, such
+as `PID-5-BF: The instrument could not be fetched from …`.
+
+The screens come in this order:
+
+1. With consent text in the link, the consent screen.
+2. With questions before the form, the "Before you begin" screen.
+3. For each instrument in turn, its start screen and then its item pages.
+4. With questions after the form, the "Before you finish" screen.
+
+Each start screen shows the instrument's name, its version line and its
+part, such as "Part 2 of 3". Then come its instructions and its own item and
+page counts. Only the first start screen says where the answers go. When
+the page holds no participant identifier, only the first asks for one. The
+item numbers and the page numbers start again at 1 for each instrument. The
+first page of each instrument has no "Back". The last page of each
+instrument but the last carries "Next", which opens the next start screen.
+"Back" on the "Before you finish" screen goes to the last page of the last
+instrument. Under the random order, each instrument's items are shuffled
+among that instrument's items only.
+
+The file and the row hold one group of item columns per instrument, in the
+link's order. The `q_` columns follow the last group. The `instrument`
+cell holds the instruments' names joined by single spaces, such as
+`hitopbr pid5bf`. The `form_build` cell holds each export's build date in
+the same order, joined by single spaces. Under the random order, the
+`item_order` cell holds one group per instrument, joined by ` | `, such as
+`3 1 2 | 2 1`. The file name starts with the names joined by `-`, such as
+`hitopbr-pid5bf_Pilot-A_p001_20260920T211531Z.csv`. The builder's Supabase
+SQL makes one column per item in the same groups. The closing screen shows
+one version line per instrument. Read the file with `read_form_responses()`.
+Then score each instrument in its own call, with its columns chosen by name,
+as [Scoring](#scoring) shows.
+
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
@@ -717,6 +774,15 @@ library(hitop)
 responses <- read_form_responses("path/to/pid5bf-files")
 items <- grep("^pid5bf_", names(responses), value = TRUE)
 score_pid5(responses, items, version = "BF")
+```
+
+A file of several instruments reads the same way. Score each instrument in
+its own call:
+
+```r
+responses <- read_form_responses("path/to/hitopbr-pid5bf-files")
+score_hitopbr(responses, grep("^hitopbr_", names(responses), value = TRUE), append = FALSE)
+score_pid5(responses, grep("^pid5bf_", names(responses), value = TRUE), version = "BF", append = FALSE)
 ```
 
 The package's
