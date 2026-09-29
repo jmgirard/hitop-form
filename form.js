@@ -1,7 +1,8 @@
 // The form page. index.html calls boot(); link.html imports encodeLink(),
-// the link readers, the checks (checkParticipantParam(), consentTextFault()
-// and checkQuestions() among them), readQuestionsCsv(), writeQuestionsCsv(),
-// saveFile(), fetchExports(), planStems(), storeSql() and PROLIFIC_PARAMS.
+// the link readers, the checks (checkParticipantParam(), consentTextFault(),
+// checkQuestions() and checkInstruments() among them), readQuestionsCsv(),
+// writeQuestionsCsv(), saveFile(), fetchExports(), planStems(), linkStems(),
+// storeSql(), PROLIFIC_PARAMS, INSTRUMENTS and INSTRUMENTS_MAX.
 //
 // The page reads one study link, fetches the JSON export of each instrument
 // it names from the hitop package's site, renders each instrument in turn
@@ -9,8 +10,9 @@
 // posts the responses as one JSON row to the store the link names or, with
 // no store, saves them as one CSV to the participant's device. With no
 // store, no answer is transmitted: the only network requests after the
-// page's own files are the export fetches, besides the move to a completion address when the link names one. With
-// a store, the requests after Finish are the POST to its address, any
+// page's own files are the export fetches, besides the move to a
+// completion address when the link names one. With a store, the requests
+// after Finish are the POST to its address, any
 // redirect a webhook answers with, and the OPTIONS preflight the browser
 // sends before a supabase insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module, store
@@ -1079,10 +1081,10 @@ function isIntegerArray(x) {
 
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (the `items` of each planStems() plan, one group
-// per instrument in the link's order, joined into one list): the five study fields as
-// text, an `item_order` text column under `shuffle`, the two Prolific text
-// columns under `prolific`, one integer column per item, one text column
-// per question of `questions` (a link's `questions` field) in
+// per instrument in the link's order, joined into one list): the five study
+// fields as text, an `item_order` text column under `shuffle`, the two
+// Prolific text columns under `prolific`, one integer column per item, one
+// text column per question of `questions` (a link's `questions` field) in
 // questionColumns() order, row-level security on, the project's default
 // grants to the API roles revoked, and the anon role allowed to insert and
 // nothing else. Shown by link.html; pasted by the researcher into the

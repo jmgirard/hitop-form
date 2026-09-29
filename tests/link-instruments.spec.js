@@ -11,10 +11,10 @@
 //        `instrument`
 //   LI3: the builder refuses the faults its rows can hold, naming the rows
 //        and the instruments: a repeated instrument, each pair of the three
-//        PID-5 forms, and all three. A module beside a list without the HiTOP-SR is
-//        refused; beside a list with it, a module of another instrument is
-//        refused by the module check naming hitopsr, and a good module is
-//        accepted
+//        PID-5 forms, and all three. A module beside a list without the
+//        HiTOP-SR is refused; beside a list with it, a module of another
+//        instrument is refused by the module check naming hitopsr, and a
+//        good module is accepted
 //   LI4: a link built with two and with three instruments opens the form
 //        at the first instrument's start screen, "Part 1 of N" (after the
 //        "Before you begin" screen when the link has a question); opened on

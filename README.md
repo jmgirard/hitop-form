@@ -438,7 +438,8 @@ The builder and the page refuse a list that names one instrument twice, or
 two forms of the PID-5 (`pid5`, `pid5sf` and `pid5bf`). The page also
 refuses a link with both an `instrument` and an `instruments` field. It
 refuses an `instruments` field that is not a list or holds fewer than 2 or
-more than 3 names. It refuses a name it does not know. A module descriptor
+more than 3 names. It refuses an entry that is not the text of a name it
+knows. A module descriptor
 applies to the HiTOP-SR in the list. The builder and the page refuse a
 module beside a list without `hitopsr`.
 
@@ -480,10 +481,13 @@ as [Scoring](#scoring) shows.
 ## What the participant sees
 
 The link opens a start screen with the instrument's instructions, the item
-count, and a "Begin" button. A link with consent text shows its consent
-screen first, and the start screen after "I agree". A link with questions
-before the form shows them next, and the start screen after "Next". The start screen says where the answers go.
-With a send address, it names the address's host. Without one, it says the
+count, and a "Begin" button. A link with several instruments gives each
+its own start screen and pages, as
+[Give more than one instrument](#give-more-than-one-instrument) describes.
+A link with consent text shows its consent screen first, and the start
+screen after "I agree". A link with questions before the form shows them
+next, and the start screen after "Next". The start screen says where the
+answers go. With a send address, it names the address's host. Without one, it says the
 answers are saved to a file on this device. When the link carries no
 participant identifier, the start screen asks for one. Under the Prolific
 route the identifier is the Prolific ID in the page's address, and the
@@ -551,8 +555,9 @@ Without a send address, and with one when the send is not confirmed, the
 file is saved where the participant's browser puts downloads. Its name is
 `<instrument>_<study>_<participant>_<timestamp>.csv`, for example
 `hitopbr_Pilot-A_p001_20260920T211531Z.csv` or
-`pid5sf_Pilot-A_p001_20260920T211531Z.csv`. Ask each participant to send you
-the file the way your study collects documents.
+`pid5sf_Pilot-A_p001_20260920T211531Z.csv`. Under an `instruments` link,
+the name starts with the instruments' names joined by `-`. Ask each
+participant to send you the file the way your study collects documents.
 
 The file has two rows. The header is
 `study,participant,instrument,form_build,submitted` followed by one column
@@ -571,10 +576,15 @@ values from the page's address, and each is empty when the address carried
 none or still carried the placeholder. The data row holds the study fields, the
 export's build date and the time of finishing as an ISO-8601 timestamp in
 UTC. Then comes each answer's numeric value: 1 to 4 on the HiTOP forms and 0
-to 3 on the PID-5 forms, as the export's response options number them. Nine
-example files are under `tests/fixtures/`, one per form, one for a
-HiTOP-SR module, one HiTOP-BR file under the random order and two under the
-Prolific route.
+to 3 on the PID-5 forms, as the export's response options number them.
+Under an `instruments` link, the item columns come in one group per
+instrument, and the `instrument`, `form_build` and `item_order` cells hold
+one entry per instrument, as
+[Give more than one instrument](#give-more-than-one-instrument) describes.
+Eleven example files are under `tests/fixtures/`. There is one per form,
+one for a HiTOP-SR module, and one HiTOP-BR file under the random order.
+Two are under the Prolific route, one HiTOP-BR file has questions, and one
+is from a link with three instruments.
 
 ## Send responses to a Google Sheet
 
@@ -582,7 +592,8 @@ With a send address, the page posts one JSON object per participant. Its
 keys are the file's columns in the same order: `study`, `participant`,
 `instrument`, `form_build`, `submitted`, `item_order` under the random
 order, `prolific_study` and `prolific_session` under the Prolific route,
-then one key per item. Its values
+then one key per item, in one group per instrument under an `instruments`
+link. Its values
 are the same as the file's, with each answer as a JSON integer. The request
 is a POST with the body as `text/plain`, sent from the page's origin. The
 endpoint must answer with the JSON `{"ok":true}` and with an
@@ -820,7 +831,12 @@ npx playwright test
 | `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
 | `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions, consent text, or both, and names what the link holds. A bound outside the range is quoted as typed, with any zeros in front. A setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens. The min and max boxes ask for no numeric keypad, and negative bounds are built. Move up, Move down and Remove reorder and renumber the questions |
 | `tests/link-questions-file.spec.js` | "Load questions from a file" fills the editor from a file with a byte-order mark, CR LF, its columns in another order and each quoting form. It also fills it from a file with LF and only the required columns. A load takes the place of the editor's questions. Each fault in a file is refused with its message, naming the row and column where there is one, and the editor keeps its questions. A load makes no network request. "Download these questions" saves a file that loads back as the same questions, and "Download a template" one that loads as one question of each type. Both files have a byte-order mark and CR LF. An empty or faulty editor saves nothing and names the fault |
-| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and the one export fetch, on the HiTOP-BR and a HiTOP-SR module. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
+| `tests/instruments.spec.js` | The refusal, naming the field and the fault, of each fault in an `instruments` field: the field beside `instrument`, a value that is not a list, a list of 0, 1 or 4 names, an unknown name, an entry that is not text (a number, a list, null, an object), a repeated name, two PID-5 forms and all three. A module beside a list without `hitopsr` is refused. Beside a list with it, a module of another instrument, of another format or with items not in ascending order is refused by the module check |
+| `tests/instruments-walk.spec.js` | Every export of a list fetched before the first screen, and a refused export named by its instrument. Walks of two and of three instruments: each start screen's name, version line, "Part n of N", instructions and counts, the identifier question and the notice of where the answers go on the first start screen only, positions and page labels counted within each instrument, and no "Back" on each first page. No radio checked on the PID-5-BF's first page after the HiTOP-BR. The screens in the order consent, before, each instrument, after, and "Back" from the after screen. The leave-page warning with an item answered, with none, and on the second instrument's first page with answers in the first only. No part line on a single-instrument link |
+| `tests/instruments-row.spec.js` | The saved file and the webhook row of the HiTOP-BR then the PID-5-BF, each answered by its own pattern, with shuffle off and on, under Prolific and with questions: the space-joined `instrument` and `form_build` cells, one group of item columns per instrument in link order, each instrument's pages showing only its own items, one `item_order` group per instrument under shuffle, and the `q_` columns last. The same for three instruments under shuffle. The capture of `responses-multi-page-shuffled.csv` |
+| `tests/instruments-store.spec.js` | The builder's Supabase SQL for two instruments, byte for byte, against `supabase-hitopbr-pid5bf.sql` and `supabase-pid5bf-hitopbr-prolific-shuffle-questions.sql`. The keys of the rows posted to a webhook and to a Supabase store under those two links, against the fixtures' columns |
+| `tests/link-instruments.spec.js` | The builder's instrument rows: one row at load, "Add an instrument" up to three rows, and Move up, Move down and Remove. One row writes `instrument`, and two or three write `instruments` in row order. The refusal of a repeated instrument, of two and of three PID-5 forms, and of a module against the list. Links of two and of three instruments built, opened at "Part 1 of N", and reloaded on the builder through `c` and `z` with the same rows. An opened link refused by name for each list fault the form page refuses, with the rows back at one HiTOP-SR row |
+| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
