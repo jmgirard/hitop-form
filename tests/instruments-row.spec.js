@@ -17,14 +17,24 @@
 //        the HiTOP-BR) under shuffle, the HiTOP-SR group holding the
 //        module's items.
 //
+//   IR3: a walk of the HiTOP-BR, the PID-5-BF and the whole HiTOP-SR, for
+//        study fixture and participant p001, under shuffle and with one
+//        question before the form (age, typed 30), saves a file with the
+//        IR1 shape. responses-multi-page-shuffled.csv holds one such file:
+//        its header equals the walk's, and its values follow from its own
+//        item_order cell by the same rule. Run with WRITE_FIXTURES=1 to
+//        rewrite it. The hitop package's reader test reads a copy.
+//
 // The expected cells are worked out here from the exports, the descriptor
 // and the pattern, not read from form.js.
 
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   useTarget, useStore, allowLocalStore, formUrl, webhook, begin, answerPage, currentPage, nextButton, awaitDownload,
-  parseCsv, leadColumns, fetchExport, readDescriptor, chosenIndexFor, prolificQuery, PROLIFIC, PAGE_SIZE,
+  parseCsv, leadColumns, fetchExport, readDescriptor, chosenIndexFor, prolificQuery, PROLIFIC, PAGE_SIZE, FIXTURES,
+  readFixture,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -88,7 +98,7 @@ function expectRecord(header, values, { stems, exps, module, lead, shown, shuffl
     return numbers.map((n) => byNumber.get(n));
   });
   const itemNames = columns.flatMap((items) => items.map((it) => it.name));
-  const qNames = questions ? ['q_age', 'q_note'] : [];
+  const qNames = questions === 'age' ? ['q_age'] : questions ? ['q_age', 'q_note'] : [];
   expect(header).toEqual([...lead, ...itemNames, ...qNames]);
   const cell = (name) => values[header.indexOf(name)];
   expect(cell('instrument')).toBe(stems.join(' '));
@@ -111,7 +121,8 @@ function expectRecord(header, values, { stems, exps, module, lead, shown, shuffl
       at += 1;
     }
   });
-  if (questions) expect(values.slice(at)).toEqual(['42', 'ok']);
+  if (questions === 'age') expect(values.slice(at)).toEqual(['30']);
+  else if (questions) expect(values.slice(at)).toEqual(['42', 'ok']);
 }
 
 const MODES = [
@@ -182,3 +193,31 @@ for (const target of ['file', 'row']) {
     expectRecord(header, values, { stems: THREE, exps, module, lead: leadColumns({ shuffle: true }), shown, shuffle: true });
   });
 }
+
+// IR3
+const PAGE_STEMS = ['hitopbr', 'pid5bf', 'hitopsr'];
+const PAGE_QUESTIONS = { before: [{ name: 'age', text: 'How old are you?', type: 'number' }] };
+
+test('a three-instrument walk under shuffle with one question saves responses-multi-page-shuffled.csv', async ({ page }) => {
+  test.setTimeout(4 * 60 * 1000);
+  const exps = await Promise.all(PAGE_STEMS.map((s) => fetchExport(s)));
+  const lead = leadColumns({ shuffle: true });
+  await page.goto(formUrl(base(), {
+    instruments: PAGE_STEMS, study: 'fixture', participant: 'p001', shuffle: true, questions: PAGE_QUESTIONS,
+  }));
+  const download = page.waitForEvent('download', { timeout: 3 * 60 * 1000 });
+  await page.locator('.question[data-name=age] input').fill('30');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  const shown = await walk(page, PAGE_STEMS);
+  const text = await readFile(await (await download).path(), 'utf8');
+  const [header, row] = parseCsv(text);
+  expectRecord(header, row, { stems: PAGE_STEMS, exps, lead, shown, shuffle: true, questions: 'age' });
+  if (process.env.WRITE_FIXTURES) await writeFile(path.join(FIXTURES, 'responses-multi-page-shuffled.csv'), text);
+  // The committed file: the same header, and values that follow from its
+  // own item_order cell.
+  const [fHeader, fRow] = parseCsv(await readFixture('responses-multi-page-shuffled.csv'));
+  expect(fHeader).toEqual(header);
+  const fShown = fRow[fHeader.indexOf('item_order')].split(' | ').map((g) => g.split(' ').map(Number));
+  expectRecord(fHeader, fRow, { stems: PAGE_STEMS, exps, lead, shown: fShown, shuffle: true, questions: 'age' });
+  expect(fRow.slice(0, 2)).toEqual(['fixture', 'p001']);
+});
