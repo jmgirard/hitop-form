@@ -62,22 +62,22 @@ const REFUSED = [
   {
     name: 'an unknown name',
     fields: { instruments: ['hitopbr', 'pid5x'] },
-    why: fault('its entry 2 is "pid5x", an instrument this page does not know.'),
+    why: fault('entry 2 is "pid5x", an instrument this page does not know.'),
   },
   {
     name: 'a name in upper case',
     fields: { instruments: ['HITOPBR', 'pid5bf'] },
-    why: fault('its entry 1 is "HITOPBR", an instrument this page does not know.'),
+    why: fault('entry 1 is "HITOPBR", an instrument this page does not know.'),
   },
   {
     name: 'a name that is not text',
     fields: { instruments: ['hitopbr', 5] },
-    why: fault('its entry 2 is 5, an instrument this page does not know.'),
+    why: fault('entry 2 is 5, an instrument this page does not know.'),
   },
   {
     name: 'a repeated name',
     fields: { instruments: ['hitopbr', 'pid5bf', 'hitopbr'] },
-    why: fault('it names "hitopbr" twice, as its entry 1 and its entry 3.'),
+    why: fault('it names "hitopbr" twice, as entry 1 and entry 3.'),
   },
   ...[['pid5', 'pid5sf'], ['pid5sf', 'pid5bf'], ['pid5bf', 'pid5']].map(([a, b]) => ({
     name: `${a} beside ${b}`,

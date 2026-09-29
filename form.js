@@ -93,10 +93,10 @@ export function checkInstruments(
   }
   list.forEach((name, i) => {
     if (!Object.hasOwn(INSTRUMENTS, name)) {
-      throw bad(`its ${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
+      throw bad(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
     }
     const first = list.indexOf(name);
-    if (first !== i) throw bad(`it names ${label(name)} twice, as its ${entry(first)} and its ${entry(i)}.`);
+    if (first !== i) throw bad(`it names ${label(name)} twice, as ${entry(first)} and ${entry(i)}.`);
   });
   const pid = list.filter((name) => PID5_FORMS.includes(name));
   if (pid.length > 1) {
