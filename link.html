@@ -48,6 +48,7 @@
     background: var(--accent); color: var(--accent-fg); cursor: pointer;
   }
   button.secondary { background: var(--bg); color: var(--accent); margin-left: var(--s2); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   [role="alert"] {
     background: var(--error-bg); color: var(--error); border: 1px solid var(--error);
