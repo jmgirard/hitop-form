@@ -41,6 +41,14 @@
 //       the declined-text hint gives both fixed sentences; the decline
 //       address takes {participant}; the saved-file address leaves the
 //       completion URL in force when responses arrive
+//  S10: with "Another site" chosen and one question of each type, 50
+//       characters typed into each text input and box in the sections
+//       make no cloneNode() call, and each summary lists its filled
+//       fields; the body of labelText() holds no copying method
+//  S11: when a setup step after the prefill throws, the message says the
+//       link was not read, every summary reads "Not used", every section
+//       is closed, no site hint or destination block shows, and a build
+//       with the study name filled shows "Your study link"
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -766,4 +774,91 @@ test('a link setting no optional field leaves every section closed', async ({ pa
     expect(await isOpen(page, s.id), `${s.id} open`).toBe(false);
     await expect(state(page, s.id)).toHaveText('Not used');
   }
+});
+
+// S10: the summaries are drawn with no copy of a control. Every
+// cloneNode() call on the page is counted from before its script runs.
+// The fields typed into: 5 text inputs and 3 boxes in the sections, and
+// 4 text inputs and 1 box per question, stated here rather than read from
+// the page.
+const TYPED_FIELDS = 5 + 3 + 4 * 5;
+test('typing in the sections copies no control', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = Node.prototype.cloneNode;
+    window.clones = 0;
+    Node.prototype.cloneNode = function (...args) {
+      window.clones += 1;
+      return real.apply(this, args);
+    };
+  });
+  await page.goto(`${base()}link.html`);
+  for (const s of SECTIONS) await openSection(page, s.id);
+  await page.locator('select[name="site"]').selectOption('other');
+  for (const [k, type] of ['text', 'number', 'choice', 'multi'].entries()) {
+    await page.getByRole('button', { name: 'Add a question' }).click();
+    await page.locator('select[name="qType"]').nth(k).selectOption(type);
+  }
+
+  const fields = page.locator('details.optional input[type=text], details.optional textarea');
+  expect(await fields.count()).toBe(TYPED_FIELDS);
+  const typed = 'x'.repeat(50);
+  for (let k = 0; k < TYPED_FIELDS; k++) {
+    const field = fields.nth(k);
+    if (await field.isVisible()) {
+      await field.pressSequentially(typed);
+    } else {
+      // A field its question's type hides takes the characters one input
+      // event at a time, as typing would give them.
+      await field.evaluate((node, text) => {
+        for (const ch of text) {
+          node.value += ch;
+          node.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }, typed);
+    }
+    await expect(field).toHaveValue(typed);
+  }
+  expect(await page.evaluate(() => window.clones)).toBe(0);
+
+  await expect(state(page, 'secParticipants')).toHaveText('Participant, Recruiting site, Address parameter');
+  await expect(state(page, 'secOrder')).toHaveText('Module file');
+  await expect(state(page, 'secConsent')).toHaveText('Consent text, Declined text, Completion URL after a decline');
+  await expect(state(page, 'secFinish')).toHaveText('Completion URL, Completion URL after a saved file');
+  await expect(state(page, 'secQuestions')).toHaveText('Question 1, Question 2, Question 3, Question 4');
+});
+
+test('labelText() uses no copying method', async ({ page }) => {
+  const html = await (await page.request.get(`${base()}link.html`)).text();
+  const body = html.match(/\n {2}function labelText\([^)]*\) \{\n([\s\S]*?)\n {2}\}\n/);
+  expect(body, 'labelText() is in the page').not.toBeNull();
+  expect(body[1].trim()).not.toBe('');
+  for (const name of ['cloneNode', 'importNode', 'cloneContents', 'innerHTML', 'outerHTML']) {
+    expect(body[1], name).not.toContain(name);
+  }
+});
+
+// S11: a throw in the setup steps after the prefill leaves a clean page.
+// The opened link sets SONA, whose hint showSite() ties to the menu with
+// setAttribute(), and consent text. That one setAttribute() call throws.
+test('a throw after the prefill leaves a clean page that still builds', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (name === 'aria-describedby' && this.name === 'site') throw new Error('planted setup throw');
+      return real.call(this, name, value);
+    };
+  });
+  const config = { instrument: 'hitopbr', study: 'throw', participantParam: 'id', consent: { text: 'I agree.' } };
+  await page.goto(`${base()}link.html?z=${encodeCompressed(config)}`);
+  await expect(page.locator('#err')).toHaveText('The study link you opened could not be read. Fill in the form above to make a new link.');
+  for (const s of SECTIONS) {
+    await expect(state(page, s.id), s.id).toHaveText('Not used');
+    expect(await isOpen(page, s.id), `${s.id} open`).toBe(false);
+  }
+  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'webhookFields', 'supabaseFields']) {
+    await expect(page.locator(`#${id}`), id).toBeHidden();
+  }
+  await page.locator('input[name="study"]').fill('after the throw');
+  await make(page).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
 });

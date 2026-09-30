@@ -504,10 +504,16 @@
     a.target = '_blank';
     a.rel = 'noopener';
   }
+  // A field's label as the page shows it: the text of the label's own
+  // children, less its hint and its controls. It is read in place, since
+  // the summaries are drawn again on every keystroke.
   function labelText(control) {
-    const copy = control.closest('label').cloneNode(true);
-    copy.querySelectorAll('.hint, input, select, textarea').forEach((n) => n.remove());
-    return copy.textContent.replace(/\s+/g, ' ').trim();
+    let text = '';
+    for (const n of control.closest('label').childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) text += n.data;
+      else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) text += n.textContent;
+    }
+    return text.replace(/\s+/g, ' ').trim();
   }
   function heldLabels(section) {
     if (section.id === 'secQuestions') {
@@ -829,14 +835,15 @@
   // per entry. A field of a type its control does not take
   // is skipped and the rest are filled; the form page's own checks refuse
   // such a link when it is opened. Nothing is fetched. A throw past these
-  // checks (a module nested deep enough to stop JSON.stringify) is
-  // the first refusal with the form reset, so the script reaches its submit
-  // handler and no field keeps a part of the config. A `c` accepted here can
+  // checks (a module nested deep enough to stop JSON.stringify), or in the
+  // setup steps that follow the prefill, is the first refusal with the form
+  // reset, so the script reaches its submit handler and no field keeps a
+  // part of the config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
   // responses go, where the participant is sent or pointed at the end) is
   // listed in a notice above the form, as text, for the researcher to check.
-  // The notice is written only once prefill() has returned, so a throw
-  // leaves none.
+  // The notice is written only once prefill() and the setup steps have
+  // run, so a throw leaves none.
   const opened = new URLSearchParams(window.location.search);
   const linkParam = opened.has('z') ? 'z' : 'c';
   const refuse = (what) => {
@@ -952,8 +959,15 @@
     }
     return filled;
   }
+  // The setup steps that show the filled form run inside the same guard as
+  // the prefill, and the notice is written after them.
   try {
     const filled = await prefill();
+    showKind();
+    showSite();
+    // A section the opened link filled a field of opens; the rest stay closed.
+    showHeld();
+    for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
     for (const [label, value] of filled) {
       const li = document.createElement('li');
       li.textContent = `${label}: ${value}`;
@@ -964,6 +978,18 @@
     f.reset();
     questionList.replaceChildren();
     setInstruments([OFFERED[0][0]]);
+    // The setup steps may have run in part. What they show is set here for
+    // the emptied form by hand, since running them again could throw again:
+    // no site hint, other-site field or destination fields, every summary
+    // "Not used" and every section closed.
+    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'webhookFields', 'supabaseFields']) {
+      document.getElementById(id).hidden = true;
+    }
+    siteSelect.removeAttribute('aria-describedby');
+    for (const section of SECTIONS) {
+      section.querySelector('.sec-state').textContent = 'Not used';
+      section.open = false;
+    }
     refuse('could not be read.');
   }
   // "Make the link" is disabled in the markup until here, so a press before
@@ -973,11 +999,6 @@
   // state across a reload.
   const makeButton = f.querySelector('button[type="submit"]');
   makeButton.disabled = false;
-  showKind();
-  showSite();
-  // A section the opened link filled a field of opens; the rest stay closed.
-  showHeld();
-  for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
   // when it holds text, else to the notice when it shows.
@@ -1284,14 +1305,14 @@
   // or else test the link and hand it out.
   const SITE_NAMES = { prolific: 'Prolific', sona: 'SONA', connect: 'CloudResearch Connect', other: 'your recruiting site' };
   function nextStep(site, supabase) {
-    const sql = 'Run the SQL below once in your Supabase project\'s SQL editor';
+    const runSql = 'Run the SQL below once in your Supabase project\'s SQL editor';
     if (supabase && !(site in SITE_NAMES)) {
-      return `${sql}, then open the link once to test it and give it to each participant.`;
+      return `${runSql}, then open the link once to test it and give it to each participant.`;
     }
     const then = site in SITE_NAMES
       ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
       : 'open the link once to test it, and then give it to each participant.';
-    if (supabase) return `${sql} before you ${then}`;
+    if (supabase) return `${runSql} before you ${then}`;
     return then.charAt(0).toUpperCase() + then.slice(1);
   }
 

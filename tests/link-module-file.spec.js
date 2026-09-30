@@ -186,6 +186,9 @@ test('an edit typed during a file read wins, and a failed read says so', async (
   await expect(box).toHaveValue('typed');
   await expect(page.locator('#moduleFileStatus')).toHaveText('');
 
+  // The control is emptied as the first read ends, so choosing the same
+  // file again fires a change.
+  await expect(page.locator('#moduleFile')).toHaveValue('');
   await page.locator('#moduleFile').setInputFiles(FIXTURE);
   await expect(page.locator('#moduleFileErr')).toHaveText('The module file could not be read.');
   await expect(box).toHaveValue('typed');
