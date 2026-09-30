@@ -54,10 +54,15 @@
     border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4);
   }
   [role="alert"]:empty { display: none; }
-  #out { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
+  h2 { font-size: 1.25rem; margin: var(--s5) 0 var(--s3); }
+  /* The built link in a box that scrolls past 10rem, the copy button beside
+     it. */
+  .link-row { display: flex; gap: var(--s2); align-items: flex-start; margin: 0 0 var(--s4); }
+  .link-row button.secondary { margin-left: 0; flex: none; }
+  #out { flex: 1; min-width: 0; max-height: 10rem; overflow-y: auto;
+         background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
          padding: var(--s3) var(--s4); word-break: break-all; font-family: var(--mono);
          font-size: .875rem; }
-  #out:empty { display: none; }
   .upnav { margin: 0 0 var(--s4); font-size: .875rem; }
   .upnav a { color: var(--muted); }
   ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
@@ -233,13 +238,16 @@
     </div>
     </details>
     <p role="alert" id="err" tabindex="-1"></p>
-    <p>
-      <button type="submit">Make the link</button>
-      <button type="button" class="secondary" id="copy" hidden>Copy</button>
-    </p>
+    <p><button type="submit">Make the link</button></p>
   </form>
-  <p id="out"></p>
-  <p id="open" class="muted"></p>
+  <section id="result" aria-labelledby="resultHeading" hidden>
+    <h2 id="resultHeading" tabindex="-1">Your study link</h2>
+    <div class="link-row">
+      <div id="out" role="region" aria-label="The study link" tabindex="0"></div>
+      <button type="button" class="secondary" id="copy">Copy the link</button>
+    </div>
+    <p id="next"></p>
+    <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
       <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them (one group per instrument, in the list's order), and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
@@ -247,6 +255,7 @@
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
   </div>
+  </section>
 </main>
 <script type="module">
   import {
@@ -277,6 +286,9 @@
   const err = document.getElementById('err');
   const out = document.getElementById('out');
   const open = document.getElementById('open');
+  const result = document.getElementById('result');
+  const resultHeading = document.getElementById('resultHeading');
+  const next = document.getElementById('next');
   const copy = document.getElementById('copy');
   const sqlBlock = document.getElementById('sqlBlock');
   const sql = document.getElementById('sql');
@@ -910,9 +922,10 @@
     notice.hidden = true;
     noticeList.replaceChildren();
     err.textContent = '';
+    result.hidden = true;
     out.textContent = '';
     open.textContent = '';
-    copy.hidden = true;
+    next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
     const data = new FormData(f);
@@ -1159,8 +1172,23 @@
     a.target = '_blank';
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${href.length} characters)`);
+    next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;
+    result.hidden = false;
+    resultHeading.focus();
+  }
+
+  // The one next step for the choices made: paste the link into the
+  // recruiting site's study page, run the SQL first for a Supabase table,
+  // or else test the link and hand it out.
+  const SITE_NAMES = { prolific: 'Prolific', sona: 'SONA', connect: 'CloudResearch Connect', other: 'your recruiting site' };
+  function nextStep(site, supabase) {
+    const then = site in SITE_NAMES
+      ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
+      : 'open the link once to test it, and then give it to each participant.';
+    if (supabase) return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
+    return then.charAt(0).toUpperCase() + then.slice(1);
   }
 
   copySql.addEventListener('click', async () => {
@@ -1177,7 +1205,7 @@
     try {
       await navigator.clipboard.writeText(out.textContent);
       copy.textContent = 'Copied';
-      setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      setTimeout(() => { copy.textContent = 'Copy the link'; }, 1500);
     } catch {
       err.textContent = 'The link could not be copied. Select it and copy by hand.';
     }

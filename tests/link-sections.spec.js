@@ -22,6 +22,12 @@
 //       with its visible text. Checked for 1, 2 and 3 rows and groups as
 //       added, and again after a move, a removal, a prefill from a study
 //       link and a questions file load
+//   S7: after a build, a region headed "Your study link" (the heading
+//       focused) shows the link in a box that scrolls, "Copy the link"
+//       beside the box, and below it one next-step sentence for the site
+//       and the destination chosen: for each recruiting-site choice and
+//       each where-responses-go choice. A z link over 5,000 characters
+//       keeps the box under 16rem high
 
 import { test, expect } from '@playwright/test';
 import { useTarget, encodeConfig, encodeCompressed, readDescriptor } from './helpers.mjs';
@@ -360,6 +366,106 @@ test('question groups: button states as groups are added, moved, removed, prefil
     await expect(page.locator('#err')).toHaveText('');
     await expectButtons(page, 'question', n);
   }
+});
+
+// S7: the sentence each choice gets, stated here.
+const SITE_TEXT = {
+  '': null,
+  prolific: 'Prolific',
+  sona: 'SONA',
+  connect: 'CloudResearch Connect',
+  other: 'your recruiting site',
+};
+const TEST_THEN_GIVE = 'open the link once to test it, and then give it to each participant.';
+function expectedNext(site, kind) {
+  const then = SITE_TEXT[site] === null ? TEST_THEN_GIVE : `paste the link into your study's page on ${SITE_TEXT[site]}.`;
+  if (kind === 'supabase') return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
+  return then[0].toUpperCase() + then.slice(1);
+}
+
+// Fills the destination's fields for a kind.
+async function chooseDestination(page, kind) {
+  await page.locator('select[name="storeKind"]').selectOption(kind);
+  if (kind === 'webhook') await page.locator('input[name="store"]').fill('https://script.google.com/macros/s/abc/exec');
+  if (kind === 'supabase') {
+    await page.locator('input[name="supabaseUrl"]').fill('https://abcdefghijkl.supabase.co');
+    await page.locator('input[name="supabaseKey"]').fill('sb_publishable_test');
+    await page.locator('input[name="supabaseTable"]').fill('responses');
+  }
+}
+
+// The region's parts after a build: heading focused, the link in the box,
+// the copy button beside the box, the sentence below it.
+async function expectRegion(page) {
+  const region = page.locator('#result');
+  await expect(region).toBeVisible();
+  const heading = region.getByRole('heading', { level: 2 });
+  await expect(heading).toHaveText('Your study link');
+  await expect(heading).toBeFocused();
+  const box = page.locator('#out');
+  await expect(box).toHaveText(/^https?:\/\/.+\?[cz]=/);
+  expect(await box.evaluate((n) => getComputedStyle(n).overflowY)).toMatch(/^(auto|scroll)$/);
+  const copy = region.getByRole('button', { name: 'Copy the link' });
+  await expect(copy).toBeVisible();
+  const b = await box.boundingBox();
+  const c = await copy.boundingBox();
+  expect(c.x, 'the button starts right of the box').toBeGreaterThanOrEqual(b.x + b.width);
+  expect(c.y, 'the button starts within the box\'s height').toBeLessThan(b.y + b.height);
+  const n = await page.locator('#next').boundingBox();
+  expect(n.y, 'the sentence is below the box').toBeGreaterThanOrEqual(b.y + b.height);
+}
+
+for (const site of Object.keys(SITE_TEXT)) {
+  for (const kind of ['', 'webhook', 'supabase']) {
+    test(`the result region for site ${JSON.stringify(site)} and destination ${JSON.stringify(kind)}`, async ({ page }) => {
+      await page.goto(`${base()}link.html`);
+      await page.locator('select[name="instrument"]').selectOption('hitopbr');
+      await page.locator('input[name="study"]').fill('region');
+      await chooseDestination(page, kind);
+      if (site !== '') {
+        await openSection(page, 'secParticipants');
+        await page.locator('select[name="site"]').selectOption(site);
+        if (site === 'other') await page.locator('input[name="participantParam"]').fill('workerId');
+      }
+      await make(page).click();
+      await expect(page.locator('#err')).toHaveText('');
+      await expectRegion(page);
+      await expect(page.locator('#next')).toHaveText(expectedNext(site, kind));
+      await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
+    });
+  }
+}
+
+// A string of letters that deflate cannot shrink much, from a fixed seed.
+function noise(n) {
+  let x = 12345;
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    s += String.fromCharCode(97 + (x >> 16) % 26);
+  }
+  return s;
+}
+
+test('a z link over 5,000 characters stays in a box under 16rem high', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await page.locator('input[name="study"]').fill('long');
+  await openSection(page, 'secConsent');
+  await page.locator('textarea[name="consentText"]').fill(noise(8000));
+  await make(page).click();
+  await expect(page.locator('#err')).toHaveText('');
+  await expectRegion(page);
+  const href = await page.locator('#out').textContent();
+  expect(new URL(href).searchParams.has('z')).toBe(true);
+  expect(href.length).toBeGreaterThan(5000);
+  const { height, rem, scrolls } = await page.locator('#out').evaluate((n) => ({
+    height: n.getBoundingClientRect().height,
+    rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    scrolls: n.scrollHeight > n.clientHeight,
+  }));
+  expect(height).toBeLessThan(16 * rem);
+  expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
+  await expect(page.locator('#next')).toHaveText(expectedNext('', ''));
 });
 
 test('a link setting no optional field leaves every section closed', async ({ page }) => {
