@@ -45,7 +45,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT } from './helpers.mjs';
+import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -673,6 +673,40 @@ test('the result region hides when a field changes after a build', async ({ page
     await expect(page.locator('#result')).toBeHidden();
     if (after) await after();
   }
+});
+
+// A Supabase build waits on the export fetch. A field changed during that
+// wait makes the build end with nothing shown, so no link or SQL for the old
+// values appears. The next press builds from the new values.
+test('a field changed while a build waits leaves the result hidden', async ({ page }) => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  let reached;
+  const asked = new Promise((r) => { reached = r; });
+  await page.route(`${EXPORT_BASE}**`, async (route) => {
+    reached();
+    await held;
+    await route.continue();
+  });
+  await page.goto(`${base()}link.html`);
+  await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await page.locator('input[name="study"]').fill('race');
+  await chooseDestination(page, 'supabase');
+  await make(page).click();
+  await asked;
+  await expect(make(page)).toBeDisabled();
+  // A menu fires its change event as it is chosen, so no later blur hides
+  // the result for it.
+  await openSection(page, 'secParticipants');
+  await page.locator('select[name="site"]').selectOption('prolific');
+  release();
+  await expect(make(page)).toBeEnabled();
+  await expect(page.locator('#result')).toBeHidden();
+  await expect(page.locator('#err')).toHaveText('');
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  await expect(page.locator('#next')).toContainText('Prolific');
+  await expect(page.locator('#sql')).toHaveValue(/"prolific_study" text/);
 });
 
 // S9: each fact stated here, so a shortened hint that drops one fails.

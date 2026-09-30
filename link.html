@@ -281,6 +281,9 @@
   const out = document.getElementById('out');
   const open = document.getElementById('open');
   const result = document.getElementById('result');
+  // How many times hideResult() ran: a build reads it before and after
+  // each wait.
+  let changes = 0;
   const resultHeading = document.getElementById('resultHeading');
   const next = document.getElementById('next');
   const copy = document.getElementById('copy');
@@ -525,8 +528,11 @@
   // a menu choice or a box ticked after a build hides it. The questions
   // file input is in the form, so a file chosen there hides it too. Add,
   // Move up, Move down and Remove fire neither event, so the two renumber
-  // functions they end in call this as well.
+  // functions they end in call this as well. Each call also counts a change,
+  // so a build that waited through one shows nothing (see build()). The
+  // count is declared with `result`, because setup renumbers before here.
   function hideResult() {
+    changes += 1;
     result.hidden = true;
   }
   f.addEventListener('input', hideResult);
@@ -946,6 +952,10 @@
     next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
+    // The fields as read now. A change during a wait below makes them stale,
+    // and the build then ends with nothing shown.
+    const at = changes;
+    const stale = () => changes !== at;
     const data = new FormData(f);
     // One row makes an `instrument` link, as before the list. Two or three
     // make an `instruments` list, which takes the form page's own check with
@@ -1167,9 +1177,10 @@
       try {
         items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
       } catch (e) {
-        refuseAt(e.message);
+        if (!stale()) refuseAt(e.message);
         return;
       }
+      if (stale()) return;
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
       sqlBlock.hidden = false;
     }
@@ -1179,7 +1190,12 @@
     try {
       url.search = `?${await encodeLink(config)}`;
     } catch (e) {
-      refuseAt(e.message);
+      if (!stale()) refuseAt(e.message);
+      return;
+    }
+    if (stale()) {
+      sqlBlock.hidden = true;
+      sql.value = '';
       return;
     }
     // A Prolific link ends in the three placeholders and a SONA link in
