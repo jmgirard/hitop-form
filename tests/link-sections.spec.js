@@ -621,8 +621,8 @@ test('every README link on the page names a README heading', async ({ page }) =>
   expect(targets.filter((t) => t !== '_blank noopener')).toEqual([]);
 });
 
-// A built link goes once a field changes or a questions file loads, so the
-// region never shows a link or a next step the fields no longer match.
+// A built link goes once a field changes, a questions file loads, or a row
+// or a group is added, moved or removed. The title names the project.
 test('the result region hides when a field changes after a build', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   await expect(page).toHaveTitle('HiTOP Study Link Builder');
@@ -642,6 +642,33 @@ test('the result region hides when a field changes after a build', async ({ page
   await page.locator('#questionsFile').setInputFiles({ name: 'q.csv', mimeType: 'text/csv', buffer: Buffer.from(csvOf(1)) });
   await expect(page.locator('#questionsStatus')).toHaveText('Loaded 1 question from q.csv.');
   await expect(page.locator('#result')).toBeHidden();
+  // The buttons that add, move or remove a row or a group change the link
+  // without an input or change event, and hide it too.
+  await page.locator('select[name="site"]').selectOption('');
+  // Each press, then what makes the next build valid: a second instrument
+  // row starts as a copy of the first, and a new question has no name.
+  const instrument = (k) => page.locator('#instrumentList select').nth(k);
+  const qField = (name, k) => page.locator(`input[name="${name}"]`).nth(k);
+  for (const [press, after] of [
+    [() => page.getByRole('button', { name: 'Add an instrument' }).click(), async () => {
+      await instrument(1).selectOption((await instrument(0).inputValue()) === 'hitopbr' ? 'pid5bf' : 'hitopbr');
+    }],
+    [() => page.getByRole('button', { name: 'Move down instrument 1' }).click()],
+    [() => page.getByRole('button', { name: 'Remove instrument 2' }).click()],
+    [() => page.getByRole('button', { name: 'Add a question' }).click(), async () => {
+      await qField('qName', 1).fill('q2');
+      await qField('qText', 1).fill('Question text 2');
+    }],
+    [() => page.getByRole('button', { name: 'Move up question 2', exact: true }).click()],
+    [() => page.getByRole('button', { name: 'Remove question 2', exact: true }).click()],
+  ]) {
+    await make(page).click();
+    await expect(page.locator('#err')).toHaveText('');
+    await expect(page.locator('#result')).toBeVisible();
+    await press();
+    await expect(page.locator('#result')).toBeHidden();
+    if (after) await after();
+  }
 });
 
 // S9: each fact stated here, so a shortened hint that drops one fails.
@@ -656,7 +683,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(page.locator('#prolificHint')).toContainText('If Prolific\'s URL-parameters option adds them again, it reads the filled ones.');
   await site.selectOption('sona');
   const sona = page.locator('#sonaHint');
-  await expect(sona).toContainText('As the completion URL, give SONA\'s client-side one with {participant} for XXXX.');
+  await expect(sona).toContainText('For completion, give SONA\'s client-side URL with {participant} for XXXX.');
   await expect(sona).toContainText('XXXX. Its credit token is readable in the study link.');
   const hintOf = (name) => page.locator(`label:has([name="${name}"]) .hint`);
   await expect(hintOf('declinedText')).toContainText('Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL.');

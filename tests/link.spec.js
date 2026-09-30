@@ -911,7 +911,7 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   const sona = page.locator('#sonaHint');
   // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
   await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter");
-  await expect(sona).toContainText("Paste it as SONA's Study URL");
+  await expect(sona).toContainText("Paste the link as SONA's Study URL");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
   await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
 });
