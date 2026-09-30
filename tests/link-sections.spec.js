@@ -47,10 +47,12 @@
 //       question's type hides it) make no cloneNode() call, and each
 //       summary lists its filled fields; the body of labelText() holds no
 //       copying method
-//  S11: when a setup step after the prefill throws, the message says the
-//       link was not read, every summary reads "Not used", every section
-//       is closed, no site hint or destination block shows, and a build
-//       with the study name filled shows "Your study link"
+//  S11: when the last setup step after the prefill throws, after the
+//       earlier steps have shown a hint, a destination block, summaries
+//       and an open section, the message says the link was not read,
+//       every summary reads "Not used", every section is closed, no site
+//       hint or destination block is left unhidden, and a build with the
+//       study name filled shows "Your study link"
 //  S12: every refuseAt() call a grep of link.html lists is fired, with
 //       every section closed before the press: the message shows, and
 //       focus is on the control the call passes, its section open, or on
@@ -849,26 +851,50 @@ test('labelText() uses no copying method', async ({ page }) => {
 });
 
 // S11: a throw in the setup steps after the prefill leaves a clean page.
-// The opened link sets SONA, whose hint showSite() ties to the menu with
-// setAttribute(), and consent text. That one setAttribute() call throws.
+// The opened link sets SONA, a web address for the responses and consent
+// text. The throw is in the last setup step, the loop that opens filled
+// sections, when it opens the consent section. By then showKind() has shown
+// the web address block, showSite() the SONA hint, showHeld() the filled
+// summaries, and the loop has opened the participants section, so each
+// check below fails unless the catch undoes that step.
 test('a throw after the prefill leaves a clean page that still builds', async ({ page }) => {
   await page.addInitScript(() => {
-    const real = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function (name, value) {
-      if (name === 'aria-describedby' && this.name === 'site') throw new Error('planted setup throw');
-      return real.call(this, name, value);
-    };
+    const { get, set } = Object.getOwnPropertyDescriptor(HTMLDetailsElement.prototype, 'open');
+    let thrown = false;
+    Object.defineProperty(HTMLDetailsElement.prototype, 'open', {
+      configurable: true,
+      get() { return get.call(this); },
+      set(value) {
+        if (value === true && this.id === 'secConsent' && !thrown) {
+          thrown = true;
+          window.participantsOpenAtThrow = document.getElementById('secParticipants').open;
+          throw new Error('planted setup throw');
+        }
+        set.call(this, value);
+      },
+    });
   });
-  const config = { instrument: 'hitopbr', study: 'throw', participantParam: 'id', consent: { text: 'I agree.' } };
+  const config = {
+    instrument: 'hitopbr',
+    study: 'throw',
+    participantParam: 'id',
+    store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' },
+    consent: { text: 'I agree.' },
+  };
   await page.goto(`${base()}link.html?z=${encodeCompressed(config)}`);
   await expect(page.locator('#err')).toHaveText('The study link you opened could not be read. Fill in the form above to make a new link.');
+  // The throw came where the page was not clean.
+  expect(await page.evaluate(() => window.participantsOpenAtThrow)).toBe(true);
   for (const s of SECTIONS) {
     await expect(state(page, s.id), s.id).toHaveText('Not used');
     expect(await isOpen(page, s.id), `${s.id} open`).toBe(false);
   }
+  // The hints sit in a closed section, so each is checked by its own
+  // hidden flag rather than by whether it shows.
   for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'webhookFields', 'supabaseFields']) {
-    await expect(page.locator(`#${id}`), id).toBeHidden();
+    expect(await page.locator(`#${id}`).evaluate((node) => node.hidden), id).toBe(true);
   }
+  await expect(page.locator('select[name="site"]')).not.toHaveAttribute('aria-describedby');
   await page.locator('input[name="study"]').fill('after the throw');
   await make(page).click();
   await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
