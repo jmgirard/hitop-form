@@ -130,11 +130,12 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
+  useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig,
 } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 const store = useStore();
 
 // Stated here rather than read from form.js or the exports, so a change to
@@ -519,7 +520,7 @@ test('a link built with the address set opens a form whose Finish posts to it', 
 test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   // L3
-  const hint = page.locator('label', { hasText: 'Module descriptor' }).locator('.hint');
+  const hint = page.locator('label:has(textarea[name="module"]) .hint');
   await expect(hint).toContainText('Optional, HiTOP-SR only.');
 });
 
@@ -728,7 +729,7 @@ test('the three steps above the form, the builder link in the module hint, and t
   const listBox = await list.boundingBox();
   const formBox = await form.boundingBox();
   expect(listBox.y + listBox.height, 'the list sits above the form').toBeLessThanOrEqual(formBox.y);
-  const hint = page.locator('label', { hasText: 'Module descriptor' }).locator('.hint');
+  const hint = page.locator('label:has(textarea[name="module"]) .hint');
   await expect(hint.locator('a[href="https://jmgirard.github.io/hitop-builder/"]')).toHaveCount(1);
   await expect(page.locator('a[href="https://jmgirard.github.io/hitop/articles/online-collection.html"]')).toHaveCount(1);
 });
@@ -921,7 +922,7 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   await expect(sona).toContainText('with {participant} in place of its XXXX');
   await expect(sona).toContainText('a participant can read it in the study link');
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter of the address');
-  await expect(page.locator('label', { hasText: 'Completion URL' }).first().locator('.hint')).toContainText('write {participant} after its ? or #');
+  await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
 });
 
 // L25: the link each choice builds.

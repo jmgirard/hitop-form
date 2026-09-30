@@ -25,9 +25,10 @@
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
+import { useTarget, openBuilderSections, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 const TEXT = [
   'You are invited to take part in a study.',

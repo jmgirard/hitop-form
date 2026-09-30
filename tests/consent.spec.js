@@ -46,11 +46,12 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
+  useTarget, openBuilderSections, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
   leadColumns,
 } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 const store = useStore();
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));

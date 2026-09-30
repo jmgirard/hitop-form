@@ -39,9 +39,10 @@
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, decodeLinkParam, awaitDownload } from './helpers.mjs';
+import { useTarget, openBuilderSections, decodeLinkParam, awaitDownload } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 async function openBuilder(page) {
   await page.goto(`${base()}link.html`);

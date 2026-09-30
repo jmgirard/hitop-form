@@ -84,6 +84,13 @@
   /* Lined up with "Add a question" above, with a gap when they wrap. */
   .file-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); padding-left: var(--s2); }
   .file-buttons button.secondary { margin-left: 0; }
+  fieldset > .hint { display: block; color: var(--muted); font-size: .875rem; }
+  /* The optional sections: closed until opened, each summary naming the
+     section and, under it, what the section holds. */
+  details.optional { border: 1px solid var(--line); border-radius: var(--r1); padding: 0 var(--s4); margin: 0 0 var(--s4); }
+  details.optional > summary { cursor: pointer; padding: var(--s3) 0; font-weight: 600; }
+  details.optional[open] > summary { margin-bottom: var(--s2); }
+  details.optional .sec-state { display: block; font-weight: 400; color: var(--muted); font-size: .875rem; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -109,22 +116,44 @@
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
-    <label>Study
+    <label>Study name
       <span class="hint">Written into every saved file. Required.</span>
       <input name="study" type="text" autocomplete="off">
     </label>
+    <fieldset id="destBlock">
+      <legend id="destLegend">Where responses go</legend>
+      <span class="hint" id="destHint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
+      <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
+        <option value="">A file on the participant's device</option>
+        <option value="webhook">A web address</option>
+        <option value="supabase">A Supabase table</option>
+      </select>
+      <div id="webhookFields" hidden>
+        <label>Address
+          <span class="hint">The https:// address of the endpoint.</span>
+          <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+        </label>
+      </div>
+      <div id="supabaseFields" hidden>
+        <label>Project URL
+          <span class="hint">In the dashboard: Project Settings, then Data API.</span>
+          <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
+        </label>
+        <label>Publishable key
+          <span class="hint">The project's publishable key (or its legacy anon key). It goes into every study link, so use no other key.</span>
+          <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
+        </label>
+        <label>Table name
+          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that creates it is shown under the link.</span>
+          <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
+        </label>
+      </div>
+    </fieldset>
+    <details class="optional" id="secParticipants">
+      <summary><span class="sec-name">Participants and recruiting site</span> <span class="sec-state">Not used</span></summary>
     <label>Participant
       <span class="hint">Optional. Leave it empty for a link shared with many participants; the page then asks each one for an identifier.</span>
       <input name="participant" type="text" autocomplete="off">
-    </label>
-    <label>Module descriptor
-      <span class="hint">Optional, HiTOP-SR only. With several instruments it applies to the HiTOP-SR among them. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
-      <textarea name="module" spellcheck="false"></textarea>
-    </label>
-    <label class="check">
-      <input name="shuffle" type="checkbox" value="true">
-      Show the items in a random order
-      <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
     </label>
     <label>Recruiting site
       <span class="hint">Optional. A site that passes each participant's identifier in the study link's address. The page then takes the identifier from there, so leave the participant field empty.</span>
@@ -145,14 +174,21 @@
         <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
       </label>
     </div>
-    <label>Completion URL
-      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page. Where the address must carry the participant's identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>, and the page puts the identifier there.</span>
-      <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </details>
+    <details class="optional" id="secOrder">
+      <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
+    <label>Module file
+      <span class="hint">Optional, HiTOP-SR only. With several instruments it applies to the HiTOP-SR among them. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
+      <textarea name="module" spellcheck="false"></textarea>
     </label>
-    <label>Completion URL after a saved file
-      <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
-      <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    <label class="check">
+      <input name="shuffle" type="checkbox" value="true">
+      Show the items in a random order
+      <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
     </label>
+    </details>
+    <details class="optional" id="secConsent">
+      <summary><span class="sec-name">Consent</span> <span class="sec-state">Not used</span></summary>
     <label>Consent text
       <span class="hint">Optional. Your consent text, as your review board approved it. The page shows it on a screen of its own before the form, with an "I agree" and an "I do not agree" button. It is shown as plain text: a blank line starts a new paragraph, and a single line break stays a line break. Up to 20,000 characters. A link with consent text is written compressed, as <code>?z=</code> in place of <code>?c=</code>.</span>
       <textarea name="consentText" class="prose"></textarea>
@@ -165,8 +201,21 @@
       <span class="hint">Optional, and only beside consent text. An https:// address the page sends the participant to after "I do not agree", once the declined screen is drawn. For Prolific, the completion URL of the code your study gives a participant who does not consent. A <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier from the address or the link, or nothing when the page holds none yet.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
-    <fieldset id="questionsBlock">
-      <legend>Your own questions</legend>
+    </details>
+    <details class="optional" id="secFinish">
+      <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
+    <label>Completion URL
+      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page. Where the address must carry the participant's identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>, and the page puts the identifier there.</span>
+      <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    <label>Completion URL after a saved file
+      <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
+      <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    </details>
+    <details class="optional" id="secQuestions">
+      <summary><span class="sec-name">Your own questions</span> <span class="sec-state">Not used</span></summary>
+    <div id="questionsBlock">
       <p class="hint">Optional. Questions of your own, such as age or how the participant heard of the study. The page asks them on a screen before the form or on a screen after its last page, never beside the items. Each answer is written in a column named <code>q_</code> plus the question's name, after the item columns. A text answer is written as typed. A whole number is written in digits. A choice is written as the number of the chosen option, counted from 1, and several choices as those numbers in order, separated by spaces. An unanswered question is written empty. Up to 50 questions. A link with questions is written compressed, as <code>?z=</code>.</p>
       <div id="questionList"></div>
       <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
@@ -181,35 +230,8 @@
       </label>
       <p role="alert" id="questionsErr" tabindex="-1"></p>
       <p role="status" id="questionsStatus" class="muted"></p>
-    </fieldset>
-    <label>Send responses to
-      <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
-      <select name="storeKind">
-        <option value="">A file on the participant's device</option>
-        <option value="webhook">A web address</option>
-        <option value="supabase">A Supabase table</option>
-      </select>
-    </label>
-    <div id="webhookFields" hidden>
-      <label>Address
-        <span class="hint">The https:// address of the endpoint.</span>
-        <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
-      </label>
     </div>
-    <div id="supabaseFields" hidden>
-      <label>Project URL
-        <span class="hint">In the dashboard: Project Settings, then Data API.</span>
-        <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
-      </label>
-      <label>Publishable key
-        <span class="hint">The project's publishable key (or its legacy anon key). It goes into every study link, so use no other key.</span>
-        <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
-      </label>
-      <label>Table name
-        <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that creates it is shown under the link.</span>
-        <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
-      </label>
-    </div>
+    </details>
     <p role="alert" id="err" tabindex="-1"></p>
     <p>
       <button type="submit">Make the link</button>
@@ -426,6 +448,50 @@
       group.querySelector('.down').setAttribute('aria-label', `Move question ${n} down`);
       group.querySelector('.remove').setAttribute('aria-label', `Remove question ${n}`);
     });
+    showHeld();
+  }
+
+  // The five optional sections. Each is a closed <details> whose summary
+  // names the section and, under the name, "Not used" or the labels of its
+  // fields that hold a value, joined by ", ". A field holds a value when it
+  // is shown and is a checked box, a menu set away from its empty first
+  // option, or a box holding more than spaces. In the questions section each
+  // question holds a value by being there, and is listed by its legend.
+  const SECTIONS = [...f.querySelectorAll('details.optional')];
+  function labelText(control) {
+    const copy = control.closest('label').cloneNode(true);
+    copy.querySelectorAll('.hint, input, select, textarea').forEach((n) => n.remove());
+    return copy.textContent.replace(/\s+/g, ' ').trim();
+  }
+  function heldLabels(section) {
+    if (section.id === 'secQuestions') {
+      return [...questionList.children].map((group) => group.querySelector('legend').textContent);
+    }
+    const held = [];
+    for (const c of section.querySelectorAll('input, select, textarea')) {
+      if (c.closest('[hidden]') !== null) continue;
+      if (c.type === 'checkbox' ? c.checked : c.value.trim() !== '') held.push(labelText(c));
+    }
+    return held;
+  }
+  function showHeld() {
+    for (const section of SECTIONS) {
+      const held = heldLabels(section);
+      section.querySelector('.sec-state').textContent = held.length === 0 ? 'Not used' : held.join(', ');
+    }
+  }
+  f.addEventListener('input', showHeld);
+  f.addEventListener('change', showHeld);
+
+  // A refusal: the message in the alert and focus on the field it names,
+  // its section opened first, so the researcher lands on the field. A
+  // refusal that names no one field focuses the alert.
+  function refuseAt(message, control) {
+    err.textContent = message;
+    const target = control ?? err;
+    const section = target.closest('details');
+    if (section !== null) section.open = true;
+    target.focus();
   }
 
   // A new group at the end, filled from `q` (a question as a link holds it)
@@ -618,11 +684,32 @@
     });
     const questions = {};
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
-    return checkQuestions(questions, {
-      bad: (why) => new Error(`The questions could not be used: ${why}`),
-      where: (list, i) => `question ${numbers[list][i]}`,
-    });
+    // The check names each question as it reaches it, so the last group
+    // named and the field key are the refused ones. The refusal carries
+    // that group's control as `control`, its first control when the fault
+    // names no field.
+    let group;
+    let key;
+    try {
+      return checkQuestions(questions, {
+        bad: (why) => new Error(`The questions could not be used: ${why}`),
+        where: (list, i) => {
+          group = groups[numbers[list][i] - 1];
+          return `question ${numbers[list][i]}`;
+        },
+        field: (at, k) => {
+          key = k;
+          return at;
+        },
+      });
+    } catch (e) {
+      if (group !== undefined) e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key] ?? 'qList'}]`);
+      throw e;
+    }
   }
+  const QUESTION_CONTROLS = {
+    name: 'qName', text: 'qText', type: 'qType', options: 'qOptions', min: 'qMin', max: 'qMax', required: 'qRequired',
+  };
 
   // A study link's own `c` or `z` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
@@ -774,6 +861,9 @@
   }
   showKind();
   showSite();
+  // A section the opened link filled a field of opens; the rest stay closed.
+  showHeld();
+  for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
   // when it holds text, else to the notice when it shows.
@@ -822,13 +912,13 @@
           label: (name) => INSTRUMENTS[name] ?? JSON.stringify(name),
         });
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, instrumentList.querySelector('select'));
         return;
       }
     }
     config.study = data.get('study').trim();
     if (config.study === '') {
-      err.textContent = 'Give the study a name.';
+      refuseAt('Give the study a name.', f.elements.study);
       return;
     }
     // Read from the field, not the FormData: FormData would already hold an
@@ -837,7 +927,7 @@
     // Only a prefilled `c` can put one in.
     const participant = f.elements.participant.value.trim();
     if (!isWritableIdentifier(participant)) {
-      err.textContent = 'The participant field holds a character that cannot be written. Type the identifier again.';
+      refuseAt('The participant field holds a character that cannot be written. Type the identifier again.', f.elements.participant);
       return;
     }
     if (participant !== '') config.participant = participant;
@@ -850,7 +940,7 @@
     const site = data.get('site');
     const prolific = site === 'prolific';
     if (prolific && participant !== '') {
-      err.textContent = 'The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.';
+      refuseAt('The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.', f.elements.participant);
       return;
     }
     if (prolific) config.prolific = true;
@@ -879,11 +969,11 @@
           param = SITES[site].param;
         }
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.participantParam);
         return;
       }
       if (participant !== '') {
-        err.textContent = `The participant field must be empty when a recruiting site fills the identifier: the page takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`;
+        refuseAt(`The participant field must be empty when a recruiting site fills the identifier: the page takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`, f.elements.participant);
         return;
       }
       config.participantParam = param;
@@ -895,7 +985,7 @@
       try {
         config.complete = checkCompleteUrl(complete, (why) => new Error(`The completion URL could not be used: ${why}`));
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.complete);
         return;
       }
     }
@@ -905,13 +995,13 @@
     const completeSaved = data.get('completeSaved').trim();
     if (completeSaved !== '') {
       if (complete === '') {
-        err.textContent = 'The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.';
+        refuseAt('The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.', f.elements.completeSaved);
         return;
       }
       try {
         config.completeSaved = checkCompleteUrl(completeSaved, (why) => new Error(`The completion URL after a saved file could not be used: ${why}`));
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.completeSaved);
         return;
       }
     }
@@ -928,23 +1018,23 @@
     const completeDeclined = data.get('completeDeclined').trim();
     if (consentText === '') {
       if (declinedText !== '') {
-        err.textContent = 'The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.';
+        refuseAt('The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.', f.elements.declinedText);
         return;
       }
       if (completeDeclined !== '') {
-        err.textContent = 'The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.';
+        refuseAt('The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.', f.elements.completeDeclined);
         return;
       }
     } else {
       const textFault = consentTextFault(consentText, CONSENT_TEXT_MAX);
       if (textFault !== null) {
-        err.textContent = `The consent text could not be used: it ${textFault}.`;
+        refuseAt(`The consent text could not be used: it ${textFault}.`, f.elements.consentText);
         return;
       }
       if (declinedText !== '') {
         const declinedFault = consentTextFault(declinedText, CONSENT_DECLINED_MAX);
         if (declinedFault !== null) {
-          err.textContent = `The declined text could not be used: it ${declinedFault}.`;
+          refuseAt(`The declined text could not be used: it ${declinedFault}.`, f.elements.declinedText);
           return;
         }
       }
@@ -953,7 +1043,7 @@
         try {
           config.completeDeclined = checkCompleteUrl(completeDeclined, (why) => new Error(`The completion URL after a decline could not be used: ${why}`));
         } catch (e) {
-          err.textContent = e.message;
+          refuseAt(e.message, f.elements.completeDeclined);
           return;
         }
       }
@@ -964,7 +1054,7 @@
       const questions = readQuestions();
       if (questions !== undefined) config.questions = questions;
     } catch (e) {
-      err.textContent = e.message;
+      refuseAt(e.message, e.control);
       return;
     }
     const text = data.get('module').trim();
@@ -973,20 +1063,20 @@
       try {
         m = JSON.parse(text);
       } catch {
-        err.textContent = 'The module descriptor is not JSON.';
+        refuseAt('The module descriptor is not JSON.', f.elements.module);
         return;
       }
       // The same checks the form page runs on the link, so a bad descriptor
       // is refused here, at the researcher, and never at a participant.
       // Under a list the module applies to its HiTOP-SR row.
       if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
-        err.textContent = 'The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.';
+        refuseAt('The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.', f.elements.module);
         return;
       }
       try {
         checkModule(m, config.instruments !== undefined ? 'hitopsr' : config.instrument);
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.module);
         return;
       }
       config.module = m;
@@ -1003,10 +1093,15 @@
             key: data.get('supabaseKey').trim(),
             table: data.get('supabaseTable').trim(),
           };
+      // The refused field is read from the message: a key or a table
+      // fault names it, and any other Supabase fault is the project URL's.
       try {
         config.store = checkStore(store);
       } catch (e) {
-        err.textContent = e.message;
+        const name = kind === 'webhook' ? 'store'
+          : /\bkey\b/.test(e.message) ? 'supabaseKey'
+          : /\btable\b/.test(e.message) ? 'supabaseTable' : 'supabaseUrl';
+        refuseAt(e.message, f.elements[name]);
         return;
       }
     }
@@ -1018,7 +1113,7 @@
       try {
         items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message);
         return;
       }
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
@@ -1030,7 +1125,7 @@
     try {
       url.search = `?${await encodeLink(config)}`;
     } catch (e) {
-      err.textContent = e.message;
+      refuseAt(e.message);
       return;
     }
     // A Prolific link ends in the three placeholders and a SONA link in

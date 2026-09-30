@@ -29,9 +29,10 @@
 //        forms)
 
 import { test, expect } from '@playwright/test';
-import { useTarget, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';
+import { useTarget, openBuilderSections, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 const rows = (page) => page.locator('#instrumentList .instrument-row');
 const menus = (page) => page.locator('#instrumentList select[name="instrument"]');

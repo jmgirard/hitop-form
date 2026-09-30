@@ -133,6 +133,21 @@ export async function allowLocalStore(context) {
   }
 }
 
+// Registers a beforeEach hook that opens every optional section of the Study
+// Link Builder once each page loads, so a spec about the fields themselves
+// can fill them without opening their sections first. The sections' own
+// closed and opened states are tested in link-sections.spec.js, which does
+// not use this.
+export function openBuilderSections() {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        for (const d of document.querySelectorAll('details.optional')) d.open = true;
+      });
+    });
+  });
+}
+
 // The store a link names for a path on the recording endpoint.
 export function webhook(store, p = '/record') {
   return { kind: 'webhook', url: store.url(p) };

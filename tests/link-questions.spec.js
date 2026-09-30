@@ -35,9 +35,10 @@
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
+import { useTarget, openBuilderSections, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 async function openBuilder(page, query = '') {
   await page.goto(`${base()}link.html${query}`);
