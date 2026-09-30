@@ -287,7 +287,7 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);
-  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.");
+  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.");
   await expect(page.locator('#out')).toHaveText('');
 });
 

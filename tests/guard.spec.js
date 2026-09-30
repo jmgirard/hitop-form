@@ -256,7 +256,7 @@ for (const probe of REFUSED_STORES) {
   test(`a store that is ${probe.name} is refused, naming the fault`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g7', store: probe.store });
     const alert = page.locator('[role=alert]');
-    await expect(alert).toContainText("The study link's store could not be used: ");
+    await expect(alert).toContainText("Where responses go could not be used: ");
     await expect(alert).toContainText(probe.names);
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   });

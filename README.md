@@ -5,9 +5,9 @@ HiTOP-SR, the HiTOP-BR, or the PID-5 in its full (PID-5), short (PID-5-SF) or
 brief (PID-5-BF) form. A link can also give two or three of them, one after
 another, in one session.
 When a participant finishes, the page sends their answers as one JSON row to
-the store the study link names: a web address, such as a Google Apps Script
-web app that appends to a Google Sheet, or a table in a Supabase project.
-When the link names no store, the page saves the answers to the
+where the study link says responses go: a web address, such as a Google Apps
+Script web app that appends to a Google Sheet, or a table in a Supabase
+project. When the link names neither, the page saves the answers to the
 participant's own device as one CSV file, and no answer is sent anywhere. It is built for studies that collect responses
 without a survey platform, and it scores nothing: scoring is the job of the
 [hitop](https://jmgirard.github.io/hitop/) R package.
@@ -21,168 +21,215 @@ The page reads each instrument from the hitop package's JSON export
 package's, shown unchanged. The export's build date and package version are
 printed on the page, and the build date is written into every row and file.
 
-## Make a study link
+## The Study Link Builder
 
-Open [link.html](https://jmgirard.github.io/hitop-form/link.html) and fill in
-the form:
+Open the [Study Link Builder](https://jmgirard.github.io/hitop-form/link.html)
+to make a study link: a link that opens the online form with your choices
+built in. The page shows its three required parts first: the instruments,
+the study name and where responses go. Five optional sections follow, each
+closed until you open it. A section's summary reads "Not used", or it lists
+the labels of its fields that hold a value. Fill in what you need and press
+"Make the link". When the builder refuses a field, it opens the field's
+section and moves focus to the field.
 
-1. Choose the instrument: HiTOP-SR (405 items), HiTOP-BR (45 items),
-   PID-5 (220 items), PID-5-SF (100 items) or PID-5-BF (25 items). To give
-   two or three in one session, press "Add an instrument". The section
-   [Give more than one instrument](#give-more-than-one-instrument) tells how.
-2. Give the study a name. The name is written into every row and file.
-3. Optionally give a participant identifier. Leave it empty for one link
-   shared with many participants. The page then asks each participant for an
-   identifier before the form starts.
-4. Optionally paste a HiTOP-SR module descriptor: the JSON file that the hitop
-   package's `write_module()` wrote, or that the
-   [Module Builder](https://jmgirard.github.io/hitop-builder/) saved beside
-   your form. The page then shows only the module's items. When the
-   descriptor records a printed order, the items follow it, unless the next
-   box is checked. The descriptor's `items` must be in ascending order, as
-   both writers list them: the page and the link builder refuse a
-   descriptor whose items are not, naming the fault.
-5. Optionally check "Show the items in a random order". The page then draws
-   a new order each time it opens, so each participant sees the items in a
-   different order. The row and the file still list the items in the
-   instrument's order under their item names, and a sixth lead column,
-   `item_order`, records the order that participant saw. A module
-   descriptor's printed order is not followed. The next section describes
-   the file.
-6. Optionally choose a recruiting site: Prolific, SONA, CloudResearch
-   Connect or another site, and leave the participant field empty. The page
-   then takes each participant's identifier from the study link's address.
-   SONA, Connect and other sites are described in
-   [Recruit through SONA or CloudResearch Connect](#recruit-through-sona-or-cloudresearch-connect)
-   below. For Prolific: Prolific fills a participant's ID, the study's ID and the
-   submission's ID into a study URL through the placeholders
-   `{{%PROLIFIC_PID%}}`, `{{%STUDY_ID%}}` and `{{%SESSION_ID%}}`
-   ([Prolific's API reference, the study object](https://docs.prolific.com/api-reference/studies/the-study-object)),
-   and asks that all three be saved
-   ([What survey / experimental software is compatible with Prolific?](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)).
-   With Prolific chosen, the printed link ends in those three placeholders.
-   Paste it as the study URL on Prolific. The page then takes the Prolific
-   ID from its address as the participant identifier and asks for none, and
-   two more lead columns, `prolific_study` and `prolific_session`, hold the
-   other two. When the address carries no Prolific ID, a blank one, or
-   still the placeholder, the page asks for the identifier as for a link
-   without one.
-   A preview on Prolific passes a 24-character ID
-   ([Previewing your study](https://researcher-help.prolific.com/en/articles/445131-previewing-your-study)),
-   so it walks the form as a participant would.
-   Prolific's "I'll use URL parameters" option appends the three parameters
-   to the study URL itself
-   ([the compatibility article](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific),
-   under "Recording participants' Prolific IDs"), so a pasted link with the
-   builder's placeholders carries each parameter once unless that option
-   adds it again. Then the address holds the parameter twice, and the page
-   reads the first value that is neither blank nor a placeholder.
-7. Optionally give a completion URL: an `https://` address. After a
-   confirmed send the page shows the sent screen, with a link to the
-   address in place of "You can close this page.", and then sends the
-   participant there. After a saved file it shows the file name and then a
-   link to the address. For Prolific, use the completion URL on the study's
-   setup page, of the form
-   `https://app.prolific.com/submissions/complete?cc=…`, as
-   [the compatibility article](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)
-   shows under "Returning Participants to Prolific". Redirecting the
-   participant there is the return Prolific recommends
-   ([Data collection](https://researcher-help.prolific.com/en/articles/445127-data-collection)).
-   Optionally, and only beside a completion URL, give a second `https://`
-   address as the "Completion URL after a saved file". The saved-file
-   screens then link to it in place of the completion URL, and a confirmed
-   send still goes to the completion URL. For Prolific, this is the
-   study's completion code for a saved file: a study can hold one
-   completion code per outcome, each with its own `?cc=` address
-   ([Custom completion codes](https://researcher-help.prolific.com/en/articles/445170-custom-completion-codes);
-   the address shape is under `completion_codes` in
-   [the API reference](https://docs.prolific.com/api-reference/studies/the-study-object)).
-   Where a completion address must carry the participant's own identifier,
-   as SONA's does, write `{participant}` after its `?` or `#`. The page
-   replaces each `{participant}` with the identifier, encoded for an
-   address, before it sends the participant there or links to it. The
-   builder refuses `{participant}` in the host or the path. It also refuses
-   another spelling of the token that the page would not fill: another
-   letter case, doubled braces, a space inside the braces, or a brace
-   written as `%7B`, `%7D`, `%257B` or `%257D` (`{Participant}`,
-   `{{participant}}`, `%7Bparticipant%7D`).
-8. Optionally give consent text, a declined text and a completion URL after
-   a decline. The page then shows the consent text before the form, as
-   [Show consent text before the form](#show-consent-text-before-the-form)
-   describes.
-9. Optionally add questions of your own, asked before or after the form, as
-   [Ask your own questions](#ask-your-own-questions) describes.
-10. Choose where responses go. "A file on the participant's device" is the
-   default: the page saves a file and sends nothing. "A web address" is the
-   `https://` address of an endpoint that accepts one JSON row per
-   participant. The web app in
-   [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
-   below is one. "A Supabase table" takes the project URL, its publishable
-   key and a table name, as
-   [Send responses to Supabase](#send-responses-to-supabase) describes. The
-   builder refuses an address that is not `https://`, with one exception
-   for local testing: `http://` to `127.0.0.1` or `localhost`. A table
-   name must be lower-case letters, digits and underscores, up to 63 of
-   them, and its first character must not be a digit.
+### Required parts
 
-Press "Make the link". The link carries the instruments, the study, the
-participant, the module, the random-order choice, the recruiting site, the
-completion URLs, the consent text, the questions and the store folded into its address, so it needs
-no server and no account. Copy it and send it to the participant. A link with
-a module descriptor is a few hundred characters long. If a mail client or a
-course system truncates it, the page reports that the link cannot be read.
-The builder prints the link's length in characters beside "Open the link".
+1. Instruments. Choose HiTOP-SR (405 items), HiTOP-BR (45 items), PID-5
+   (220 items), PID-5-SF (100 items) or PID-5-BF (25 items). To give two or
+   three in one session, press "Add an instrument", as
+   [Give more than one instrument](#give-more-than-one-instrument) describes.
+2. Study name. The name is written into every row and file.
+3. Where responses go, as the next section describes.
+
+### Where responses go
+
+"A file on the participant's device" is the default. The page saves a file
+on the participant's device and sends nothing. "A web address" is the
+`https://` address of a server that takes one JSON row per participant. The
+web app in [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
+is one. "A Supabase table" takes the project URL, its publishable key and a
+table name, as [Send responses to Supabase](#send-responses-to-supabase)
+describes. The builder refuses an address that is not `https://`, with one
+exception for local testing: `http://` to `127.0.0.1` or `localhost`. A
+table name must be lower-case letters, digits and underscores, up to 63 of
+them, and its first character must not be a digit.
+
+### Participants and recruiting site
+
+The "Participant" field takes one participant's identifier. Leave it empty
+for one link shared with many participants. The page then asks each
+participant for an identifier before the form starts.
+
+A recruiting site passes each participant's identifier in the study link's
+address. Choose Prolific, SONA, CloudResearch Connect or another site in
+the "Recruiting site" menu, and leave the participant field empty. SONA,
+Connect and other sites are described in
+[Recruit through SONA or CloudResearch Connect](#recruit-through-sona-or-cloudresearch-connect).
+
+For Prolific: Prolific fills a participant's ID, the study's ID and the
+submission's ID into a study URL through the placeholders
+`{{%PROLIFIC_PID%}}`, `{{%STUDY_ID%}}` and `{{%SESSION_ID%}}`
+([Prolific's API reference, the study object](https://docs.prolific.com/api-reference/studies/the-study-object)),
+and asks that all three be saved
+([What survey / experimental software is compatible with Prolific?](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)).
+With Prolific chosen, the printed link ends in those three placeholders.
+Paste it as the study URL on Prolific. The page then takes the Prolific ID
+from its address as the participant identifier and asks for none. Two more
+lead columns, `prolific_study` and `prolific_session`, hold the other two,
+after `submitted` (and after `item_order` under the random order). When the
+address carries no Prolific ID, a blank one, or still the placeholder, the
+page asks for the identifier as for a link without one. A preview on
+Prolific passes a 24-character ID
+([Previewing your study](https://researcher-help.prolific.com/en/articles/445131-previewing-your-study)),
+so it walks the form as a participant would. Prolific's "I'll use URL
+parameters" option appends the three parameters to the study URL itself
+([the compatibility article](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific),
+under "Recording participants' Prolific IDs"). So a pasted link with the
+builder's placeholders carries each parameter once, unless that option adds
+it again. Then the address holds the parameter twice, and the page reads the
+first value that is neither blank nor a placeholder.
+
+### Item order and HiTOP-SR module
+
+The "Module file" field takes a HiTOP-SR module file: the JSON file that
+the [Module Builder](https://jmgirard.github.io/hitop-builder/) or the
+hitop package's `write_module()` saved. Paste its contents. With several
+instruments, the module applies to the HiTOP-SR among them. The page then
+shows only the module's items. When the module file records a printed
+order, the items follow it, unless the random-order box is checked. The
+module file's `items` must be in ascending order, as both writers list
+them. The online form and the Study Link Builder refuse a module file whose
+items are not, and name the fault.
+
+Check "Show the items in a random order", and the page draws a new order
+each time it opens, so each participant sees the items in a different
+order. The row and the file still list the items in the instrument's order
+under their item names, and a sixth lead column, `item_order`, records the
+order that participant saw. A module's printed order is not followed.
+[Where the file lands](#where-the-file-lands) describes the file.
+
+### Consent
+
+The "Consent text", "Declined text" and "Completion URL after a decline"
+fields show your consent text before the form, as
+[Show consent text before the form](#show-consent-text-before-the-form)
+describes.
+
+### When the participant finishes
+
+The "Completion URL" field takes an `https://` address. When the responses
+reach the web address or the Supabase table, the page shows the sent
+screen, with a link to the address in place of "You can close this page.",
+and then sends the participant there. After a saved file it shows the file
+name and then a link to the address. For Prolific, use the completion URL
+on the study's setup page, of the form
+`https://app.prolific.com/submissions/complete?cc=…`, as
+[the compatibility article](https://researcher-help.prolific.com/en/articles/445178-what-survey-experimental-software-is-compatible-with-prolific)
+shows under "Returning Participants to Prolific". Redirecting the
+participant there is the return Prolific recommends
+([Data collection](https://researcher-help.prolific.com/en/articles/445127-data-collection)).
+
+Only beside a completion URL, you can give a second `https://` address as
+the "Completion URL after a saved file". The saved-file screens then link
+to it in place of the completion URL, and a confirmed send still goes to
+the completion URL. For Prolific, this is the study's completion code for
+a saved file. A study can hold one completion code per outcome, each with
+its own `?cc=` address
+([Custom completion codes](https://researcher-help.prolific.com/en/articles/445170-custom-completion-codes);
+the address shape is under `completion_codes` in
+[the API reference](https://docs.prolific.com/api-reference/studies/the-study-object)).
+
+Where a completion address must carry the participant's own identifier, as
+SONA's does, write `{participant}` after its `?` or `#`. The page replaces
+each `{participant}` with the identifier, encoded for an address, before it
+sends the participant there or links to it. The builder refuses
+`{participant}` in the host or the path. It also refuses another spelling
+of the token that the page would not fill: another letter case, doubled
+braces, a space inside the braces, or a brace written as `%7B`, `%7D`,
+`%257B` or `%257D` (`{Participant}`, `{{participant}}`,
+`%7Bparticipant%7D`).
+
+### Your own questions
+
+Questions of your own are asked before or after the form, as
+[Ask your own questions](#ask-your-own-questions) describes. You can also
+write them in a spreadsheet, as
+[Write your questions in a spreadsheet](#write-your-questions-in-a-spreadsheet)
+describes.
+
+### Your study link
+
+Press "Make the link". A region headed "Your study link" then shows the
+link in a box that scrolls, with a "Copy the link" button beside it. Below
+the box, one sentence names the next step for your choices. With a
+recruiting site, it says to paste the link into your study's page on that
+site. With a Supabase table, it says to run the SQL shown under the link
+first. Otherwise it says to open the link once to test it, and then to give
+it to each participant. "Open the link" opens it in a new tab, and the
+number beside it is the link's length in characters.
+
+The link carries the instruments, the study, the participant, the module,
+the random-order choice, the recruiting site, the completion URLs, the
+consent text, the questions and where responses go, all in its address. So
+it needs no server and no account. A link with a module file is a few
+hundred characters long. If a mail client or a course system truncates it,
+the online form reports that the link cannot be read.
 
 A link without consent text or questions carries its fields in one
-parameter, `c`: the fields as JSON, written as base64url. A link with
-consent text or questions carries them in `z` in place of `c`. That is the
-same JSON compressed with deflate-raw, then written as base64url with no
-padding, so a long consent text or many questions make a shorter link. The page reads either parameter and refuses a link that
-carries both. It also refuses a `z` it cannot read, and names the fault.
-The faults are a character outside base64url, data that does not
-decompress, and more than 100,000 bytes once decompressed. Text that is not
-UTF-8 or not JSON is refused too. A browser without `DecompressionStream`
-cannot read a `z` link, and the page then names the browser as the cause.
+address parameter, `c`: the fields as JSON, written as base64url. A link
+with consent text or questions carries them in `z` in place of `c`. That is
+the same JSON packed with deflate-raw, then written as base64url with no
+padding, so a long consent text or many questions make a shorter link. The
+online form reads either one and refuses a link that carries both. It also
+refuses a `z` it cannot read, and names the fault. The faults are a
+character outside base64url, data that does not unpack, and more than
+100,000 bytes once unpacked. Text that is not UTF-8 or not JSON is refused
+too. A browser without `DecompressionStream` cannot read a `z` link, and
+the online form then names the browser as the cause.
 
-A study link's own `c` or `z` parameter, opened on `link.html`
-(`link.html?c=…` or `link.html?z=…`), fills the fields from the link, so a
-link can be edited and made again. The instruments, the study, the
-participant, the module descriptor, the random-order box, the recruiting
-site, the completion URLs, the consent and declined texts, the questions
-and the store are filled, and the store kind's fields are shown. The site
-is Prolific for a link with `prolific: true`, SONA for one whose
+### Edit a study link
+
+Open a study link on the Study Link Builder to edit it: put its `c=…` or
+`z=…` after `link.html?`, as in `link.html?c=…` or `link.html?z=…`. The
+builder fills its fields from the link, so the link can be edited and made
+again. The instruments, the study, the participant, the module file, the
+random-order box, the recruiting site, the completion URLs, the consent and
+declined texts, the questions and where responses go are filled. A section
+that holds a filled field opens, and the other sections stay closed. The
+site is Prolific for a link with `prolific: true`, SONA for one whose
 `participantParam` is `id`, CloudResearch Connect for `participantId`, and
 another site, with its name in the "Address parameter" field, for any other
-name. A page can
-hand a module over the same way: a `c` that carries only `instrument` and
-`module` fills those two fields and leaves the rest for you. A `c` the
-page cannot read, one that does not hold a form, or one naming an
-instrument the builder does not offer is refused in a message naming the
-`c` parameter, and no field is filled from it.
+name. Another page can hand a module over the same way: a `c` that carries
+only `instrument` and `module` fills those two fields and leaves the rest
+for you. The builder refuses a link it cannot read, one that does not hold
+a form, or one naming an instrument it does not offer, and fills no field
+from it.
 
-Anyone can send a link, so a `c` can fill in addresses you did not choose.
-When a `c` or a `z` puts a non-empty address in the web address, the
-Supabase project URL, the completion URL, the completion URL after a saved
-file or the completion URL after a decline, a notice between the three steps and the form lists each one after its
-field's name. Check them before you make a link. The notice goes when you
-press "Make the link". When the page opens, focus moves to the refusal or
-to the notice, whichever is shown.
+Anyone can send a link, so an opened link can fill in addresses you did not
+choose. When it puts a non-empty address in the web address, the Supabase
+project URL, the completion URL, the completion URL after a saved file or
+the completion URL after a decline, a notice above the form lists each one
+after its field's name. Check them before you make a link. The notice goes
+when you press "Make the link". When the page opens, focus moves to the
+refusal or to the notice, whichever is shown.
+
+### What the page's host sees
 
 The page's host, GitHub Pages, sees the address when the page is requested.
 So the study name, the participant identifier, the module composition, the
-consent text and the store, a Supabase key included, reach that host's
-request logs. The
-answers never do: with a store they go to that store and nowhere else, and
-without one they stay on the participant's device. If the identifier must not reach any
-server, leave it out of the link. The participant then types it on the start
+consent text and where responses go, a Supabase key included, reach that
+host's request logs. The answers never do. With a web address or a
+Supabase table they go there and nowhere else, and without one they stay on
+the participant's device. If the identifier must not reach any server,
+leave it out of the link. The participant then types it on the start
 screen, and it is written only into the row or the file. Under the Prolific
 route the three Prolific parameters, the participant's Prolific ID among
-them, reach the host with each page load as the rest of the address does,
-and under a recruiting site's parameter so does the identifier it carries.
-Opening a link on `link.html` to edit it (`link.html?c=…` or
-`link.html?z=…`) sends the same parameter to the host in that page's
-address. The config, a Supabase key
-included, then reaches the host's request logs from that request too.
+them, reach the host with each page load as the rest of the address does.
+Under a recruiting site's parameter, so does the identifier it carries.
+Opening a link on the Study Link Builder to edit it (`link.html?c=…` or
+`link.html?z=…`) sends the same setup to the host in that page's address.
+The setup, a Supabase key included, then reaches the host's request logs
+from that request too.
 
 ## Recruit through SONA or CloudResearch Connect
 
@@ -245,7 +292,7 @@ carry the link itself, and so are the three Prolific names, which the
 Prolific choice reads. The builder also refuses `id` and `participantId`, the names the
 SONA and Connect choices write, and names the choice to use instead. The
 builder reads a link with either name back as SONA or Connect, so every
-link it builds opens again under the choice that made it. The form page
+link it builds opens again under the choice that made it. The online form
 itself accepts both names. The builder adds nothing to the
 link, so put the site's own placeholder on the link's end by hand if the
 site needs one.
@@ -292,7 +339,7 @@ screen has not asked for one yet, so without either the token becomes
 nothing.
 
 A link with consent text is a `z` link, as
-[Make a study link](#make-a-study-link) describes. The consent text reaches
+[Your study link](#your-study-link) describes. The consent text reaches
 the page's host in the address, as the rest of the link does.
 
 ## Ask your own questions
@@ -364,7 +411,7 @@ name, make a new table from the builder's SQL. A change to a question's
 text, type, options or order keeps the same columns.
 
 A link with questions is a `z` link, as
-[Make a study link](#make-a-study-link) describes.
+[Your study link](#your-study-link) describes.
 
 To write the questions in a spreadsheet instead, see
 [Write your questions in a spreadsheet](#write-your-questions-in-a-spreadsheet).
@@ -439,7 +486,7 @@ two forms of the PID-5 (`pid5`, `pid5sf` and `pid5bf`). The page also
 refuses a link with both an `instrument` and an `instruments` field. It
 refuses an `instruments` field that is not a list or holds fewer than 2 or
 more than 3 names. It refuses an entry that is not the text of a name it
-knows. A module descriptor applies to the HiTOP-SR in the list. The
+knows. A module file applies to the HiTOP-SR in the list. The
 builder and the page refuse a module beside a list without `hitopsr`.
 
 The page fetches the export of each instrument before it shows the first
@@ -493,7 +540,7 @@ route the identifier is the Prolific ID in the page's address, and the
 start screen asks only when the address carries none.
 
 An identifier must be text that can be written into an address. The
-browser stores some characters, such as an emoji, as two halves, and the
+browser holds some characters, such as an emoji, as two halves, and the
 page needs both. When a link's participant holds
 a lone half, the page refuses the link and shows no form. When a typed
 identifier holds one, the start screen asks for it again. The link
@@ -514,7 +561,8 @@ The last page ends with "Finish". Until it is pressed the answers live only
 in the open page. If the participant reloads or closes the page, the browser
 asks first. A reload starts the form over.
 
-With a store, pressing Finish posts the answers to it and waits up to
+With a web address or a Supabase table, pressing Finish posts the answers
+to it and waits up to
 30 seconds for it to confirm. The button is disabled while it
 waits, so a second press sends nothing. On a confirmed send the page says
 that the responses were sent to the study team, and no file is saved. Every
@@ -566,7 +614,7 @@ order, the item columns follow the order the participant saw. With it, a
 sixth lead column, `item_order`, follows `submitted`. It holds the item
 numbers in the order that participant saw them, joined by single spaces
 (`hitopbr_01` is 1). The item columns then follow the instrument's order (a
-module's items in the order its descriptor lists them, which
+module's items in the order its module file lists them, which
 `write_module()` writes ascending and the page requires ascending). Under
 the Prolific route, two more lead
 columns, `prolific_study` and `prolific_session`, follow `submitted`, or
@@ -595,15 +643,15 @@ then one key per item, in one group per instrument under an `instruments`
 link. Its values
 are the same as the file's, with each answer as a JSON integer. The request
 is a POST with the body as `text/plain`, sent from the page's origin. The
-endpoint must answer with the JSON `{"ok":true}` and with an
+server must answer with the JSON `{"ok":true}` and with an
 `Access-Control-Allow-Origin` header that admits the page's origin, as an
 Apps Script web app does. Any other answer makes the page save the file
 instead. If the answer arrives after the page's 30-second limit, the page
-reports the send as unconfirmed, but the row still reaches the endpoint. The
-file saved in that case duplicates a stored row. The `submitted` value
+reports the send as unconfirmed, but the row still reaches the server. The
+file saved in that case duplicates a row the server kept. The `submitted` value
 identifies the pair.
 
-A Google Apps Script web app bound to a Google Sheet is one such endpoint,
+A Google Apps Script web app bound to a Google Sheet is one such server,
 and it needs only a Google account. Each row lands in the sheet as text. So
 an identifier such as `007` keeps its zeros, and a value that starts with
 `=` is never read as a formula.
@@ -664,9 +712,9 @@ an identifier such as `007` keeps its zeros, and a value that starts with
 3. Choose Deploy, then New deployment. Set the type to Web app, "Execute
    as" to Me, and "Who has access" to Anyone. Press Deploy and authorize the
    script when asked. Copy the web app URL, which ends in `/exec`.
-4. Paste that URL into the "Send responses to" field of
-   [link.html](https://jmgirard.github.io/hitop-form/link.html) and make the
-   link.
+4. In the [Study Link Builder](https://jmgirard.github.io/hitop-form/link.html),
+   set "Where responses go" to "A web address", paste that URL into the
+   "Web address" field, and make the link.
 5. When you change the code later, choose Deploy, then Manage deployments,
    edit the deployment and pick "New version". The `/exec` URL stays the same.
 
@@ -712,9 +760,9 @@ included, makes the page save the file instead.
 
 1. Create a project at <https://supabase.com/dashboard>. Pick a region
    where your study's data is allowed to be stored.
-2. In [link.html](https://jmgirard.github.io/hitop-form/link.html), choose
-   the instrument (and paste the module descriptor, if any), set "Send
-   responses to" to "A Supabase table", and fill in the three fields:
+2. In the [Study Link Builder](https://jmgirard.github.io/hitop-form/link.html),
+   choose the instrument (and paste the module file, if any), set "Where
+   responses go" to "A Supabase table", and fill in the three fields:
    - Project URL: in the dashboard, open Project Settings, then Data API.
      It looks like `https://abcdefghijkl.supabase.co`.
    - Publishable key: Project Settings, then API Keys. It starts with
@@ -768,7 +816,7 @@ Anyone with the link can insert rows: the key and the table name sit inside
 every study link. Screen the table before scoring, as with a sheet. The page
 never reads the table.
 
-The table stores every value as text or as an integer, so a participant
+The table keeps every value as text or as an integer, so a participant
 code such as `=1+1` is stored as those four characters. A spreadsheet
 program can still read such a cell as a formula when you open the exported
 CSV in it. Read the file in R as shown above, where every column stays
@@ -803,7 +851,7 @@ score_pid5(responses, grep("^pid5bf_", names(responses), value = TRUE), version 
 
 The package's
 [Building HiTOP-SR Modules](https://jmgirard.github.io/hitop/articles/modules-hitopsr.html)
-article describes the descriptor and scoring a module.
+article describes the module file and scoring a module.
 
 ## Development
 
@@ -821,27 +869,28 @@ npx playwright test
 
 | Spec | What it checks |
 |---|---|
-| `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A descriptor's items render in its order. Under `shuffle: true`, the HiTOP-BR and the module render a rearrangement numbered 1 to n, and two loads differ; `shuffle: false` renders as no shuffle. The start screen's wording with and without a send address |
-| `tests/link.spec.js` | The link builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase store the page would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures, with and without the random-order box. The box's label and hint, the link it builds, and the rearranged page that link opens. Prolific as the recruiting site: its hint, the placeholders on the link it prints, its refusal beside a filled participant field, the completion field and its refusal of an `http://` address, the saved-file completion field's hint, the `completeSaved` it puts in the link, its refusal of an `http://` address and of an empty completion field beside it, and the SQL under Prolific against the two Prolific fixtures. The "Recruiting site" menu's five choices in order, the one hint or field each shows, the link each builds (`participantParam` and the `&id=%SURVEY_CODE%` ending for SONA, `participantId` for Connect, the typed name for another site), the refusals of a bad address parameter, of `id` and `participantId` under another site, and of a site beside a participant, the refusal of a participant field a `c` filled with a lone surrogate half and the round trip of one holding a whole emoji, the site a `c` selects and its round trip with each site's ending, the SONA link opened unfilled asking for the identifier, the SQL under SONA equal to the SQL with no site, each completion field's refusal of the token in the host or the path and of another spelling of it, and the menu described by the chosen site's hint (none for None and another site). A pasted descriptor whose items are not in ascending order, reversed or with its last two swapped, is refused with the form page's message and no link is built. A study link's `c` parameter opened on `link.html` fills every field and round-trips through "Make the link" for each store kind, fills only what it carries against a load with no `c`, and is refused by name over eight bad loads, two that throw past the page's checks among them (one after a completion URL is filled), with every field left as the no-`c` load leaves it, no address notice, and "Make the link" still handled by the page; the three steps above the form, in order, and the links to the Module Builder and the online-collection tutorial. A `c` that fills any of the four address fields lists each filled one in a notice between the steps and the form, after its field's name and as the field holds it. The cases are each field alone, both completion URLs with one store address once per store kind, and a completion URL over two lines, listed as the field joins it. A load with no `c` shows no notice, and neither do seven shapes of `c` that fill no address, two of them an address that is only a line break. Markup and an entity in each address show as written, with no element added. "Make the link" empties and hides the notice, on a built link and on the refusal of an empty study. After load, focus is on the refusal for each bad load, on the notice in each of the seven cases listed above, and on no element for the load with no `c` and each of the seven shapes that fill no address |
+| `tests/render.spec.js` | For each of the five forms, the heading, item text, option labels and values, and order match the export. A module file's items render in its order. Under `shuffle: true`, the HiTOP-BR and the module render a rearrangement numbered 1 to n, and two loads differ; `shuffle: false` renders as no shuffle. The start screen's wording with and without a send address |
+| `tests/link.spec.js` | The Study Link Builder offers the five forms, a link it builds opens each one, its module hint says HiTOP-SR only, it refuses a send address or a Supabase table the online form would refuse, a link built with an address posts at Finish, and the SQL it shows for a Supabase table equals the hand-written fixtures, with and without the random-order box. The box's label and hint, the link it builds, and the rearranged page that link opens. Prolific as the recruiting site: its hint, the placeholders on the link it prints, its refusal beside a filled participant field, the completion field and its refusal of an `http://` address, the saved-file completion field's hint, the `completeSaved` it puts in the link, its refusal of an `http://` address and of an empty completion field beside it, and the SQL under Prolific against the two Prolific fixtures. The "Recruiting site" menu's five choices in order, the one hint or field each shows, the link each builds (`participantParam` and the `&id=%SURVEY_CODE%` ending for SONA, `participantId` for Connect, the typed name for another site), the refusals of a bad address parameter, of `id` and `participantId` under another site, and of a site beside a participant, the refusal of a participant field a `c` filled with a lone surrogate half and the round trip of one holding a whole emoji, the site a `c` selects and its round trip with each site's ending, the SONA link opened unfilled asking for the identifier, the SQL under SONA equal to the SQL with no site, each completion field's refusal of the token in the host or the path and of another spelling of it, and the menu described by the chosen site's hint (none for None and another site). A pasted module file whose items are not in ascending order, reversed or with its last two swapped, is refused with the online form's message and no link is built. A study link's `c` opened on `link.html` fills every field and round-trips through "Make the link" for each choice of where responses go, fills only what it carries against a load with no `c`, and is refused by name over eight bad loads, two that throw past the page's checks among them (one after a completion URL is filled), with every field left as the no-`c` load leaves it, no address notice, and "Make the link" still handled by the page; the intro above the form, and the links to the Module Builder and the online-collection tutorial. A `c` that fills any of the four address fields lists each filled one in a notice between the intro and the form, after its field's name and as the field holds it. The cases are each field alone, both completion URLs with one web address or project URL once per kind, and a completion URL over two lines, listed as the field joins it. A load with no `c` shows no notice, and neither do seven shapes of `c` that fill no address, two of them an address that is only a line break. Markup and an entity in each address show as written, with no element added. "Make the link" empties and hides the notice, on a built link and on the refusal of an empty study. After load, focus is on the refusal for each bad load, on the notice in each of the seven cases listed above, and on no element for the load with no `c` and each of the seven shapes that fill no address |
+| `tests/link-sections.spec.js` | The Study Link Builder's layout: the required parts, then the five optional sections closed with "Not used", then "Make the link". Each section's summary lists the labels of its fields that hold a value. One refusal per section opens it and focuses the field. At 375 px and 1280 px with every section open, nothing is wider than the page. A study link setting one optional field opens only that field's section, and a link setting none leaves all closed. Move up, Move down and Remove states and names for 1, 2 and 3 instrument rows and question groups, after moves, removals, a prefill and a file load. The "Your study link" region for each recruiting site and each choice of where responses go, and a `z` link over 5,000 characters in a box under 16rem high. Every hint at most 40 words, the intro at most 60, no retired term in the page's text, placeholders or accessible names, and every README link on the page naming a README heading |
 | `tests/walk.spec.js` | Pages of 15 and the refusal on a blank item, on the HiTOP-BR and a HiTOP-SR module |
-| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0`. Under `shuffle: true`, the HiTOP-BR and the module save `item_order` and the item columns in the instrument's order, each value checked at the position its item was shown at, and the committed shuffled capture agrees with its own `item_order`. Under `shuffle: false`, the HiTOP-BR saves the same file as with no shuffle field. Under `prolific: true` with the three parameters in the address, the identifier is the Prolific ID and the two Prolific columns follow `submitted` or `item_order`, against the by-rule fixture and the committed capture; a placeholder or absent parameter writes an empty cell; an absent, blank or placeholder ID shows the identifier field; the parameters without the field change nothing; a parameter carried twice reads as its filled value: in the walk, `PROLIFIC_PID` and `STUDY_ID` each filled and as a placeholder in either order, and in `readProlific()` itself for each of the three names, a blank before or after the filled value, two filled values giving the first, and a blank beside a placeholder giving empty. With a completion URL and no store, the saved screen links to it and does not navigate; with a saved-file completion URL beside it, the link is to that address and neither is requested. On the HiTOP-BR walk's saved screen and on the saved screen with a completion URL, the instructions end by naming the "Save the file" button, the status region under it starts empty with `role="status"`, a first press from the keyboard and a second by click each save the file again with the same suggested name and the same bytes and write "The file was saved again." into the region (the second as a fresh write, seen by a mutation observer), focus stays on the button after the keyboard press, and the screen's order is the heading, the lead, the file name, the instructions, the button, the status region, the completion link when there is one, the version line |
-| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Under `shuffle: true`, the row posted to a web address and to a Supabase table carries `item_order` and the instrument's order, and the Supabase row's keys equal the shuffle SQL fixture's columns. Under `prolific: true`, the row posted to a web address and to a Supabase table carries the two Prolific keys, with and without the random order, and the Supabase keys equal the Prolific SQL fixtures' columns. With a completion URL, a confirmed send draws the sent screen with its "Continue to" link and no nav button, read while the one navigation request is held, then navigates there; an unconfirmed send links to it and does not navigate. With a saved-file completion URL beside it, a confirmed send goes to the completion URL and requests nothing of the other, and an unconfirmed send links to the other. On the screen of each of the five unconfirmed outcomes with a send address, the instructions end by naming the "Save the file" button, the status region under it starts empty, and a first press from the keyboard and a second by click each save the file again with the same suggested name and the same bytes and write "The file was saved again." into the region, focus staying on the button after the keyboard press; with a completion URL the screen's order puts the button and the empty status region between the instructions and the link; the sent screen has no such button, read after it shows and at the held navigation request. Against a recording endpoint the tests start themselves |
-| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a descriptor of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, a Supabase store with a bad address, key or table name, a `shuffle` or `prolific` field that is not `true` or `false`, `prolific: true` beside a participant, a `complete` field that is not an `https://` address free of a user name and password, and a `completeSaved` field of the same faults or with no `complete` beside it. A `participantParam` that is not text, empty, over 64 characters, holding a character outside `A-Z a-z 0-9 _ . -`, `c`, or a Prolific name, or that stands beside a participant or `prolific: true`; a `{participant}` token in a completion address's host or path, typed or encoded, while the token after `?` or `#` is accepted; and another spelling of the token after `?` or `#` (another letter case, doubled braces, a space inside the braces, `%7B`, `%7D`, `%257B` or `%257D`), refused naming it. A descriptor whose items are not in ascending order, reversed or with its last two swapped, is refused naming the fault and no form starts. A participant holding a lone surrogate half (high or low, alone or at the start, middle or end, a low before a high, a high before a whole emoji) is refused and no form starts, with or without a completion URL, while a participant holding a whole emoji is accepted and fills the completion URL with its encoding |
-| `tests/recruit.spec.js` | Under `participantParam`, the identifier taken from the named address parameter, and the start screen's question when the value is blank, absent, `%…%` or `{{…}}`; the first filled value of a doubled parameter; a name holding `.` and `-`; no address parameter read without the field. The saved file's header and the posted row's keys the same with and without the field, with and without the random order. The `{participant}` token filled in a SONA-shaped completion address in each place the page uses it (the navigation after a confirmed send, the sent screen's link, the saved screens' link under `complete` and under `completeSaved`), with the identifier from the address, the start screen, the link's participant and `PROLIFIC_PID`. An address without the token used as the link check parses it: in the navigation and the sent screen's link after a confirmed send, and in the link on the saved screen after a walk with no store, under `complete` and `completeSaved`, two of the addresses given with an uppercase host the parse lowercases. The start screen's refusal of a typed identifier holding a lone surrogate half (high, low, or low before high), and an address value `%ED%A0%80` arriving as three U+FFFD characters and filled into the sent screen's link |
-| `tests/consent.spec.js` | The refusals of a `consent` field that is not an object, has a key other than `text` and `declined`, has no text, or has a text or declined text that is not a string, blank, over its limit or holding a lone surrogate half, and of `completeDeclined` without `consent` or as an `http://` address; a text and a declined text at their limits accepted. The consent screen of a hand-made link with CR LF and a lone CR: each paragraph's text, a single line break kept, no `b` element from `<b>x</b>`, the two buttons, focus on the heading, and "I agree" leading to the start screen the link without consent shows. "I do not agree" with no store, a webhook store and a Supabase store, each with `complete`: the declined text or the fixed sentence, no button and no link, and for 2 seconds no request, no download and the same address. With `completeDeclined`, a Prolific-shaped and a SONA-shaped address, the latter with and without an identifier: the declined screen and its link at the moment of the navigation, then the address reached, with no store request and no download. The saved file's header, the posted row's keys and the builder's Supabase SQL the same with and without consent, with and without the random order |
-| `tests/zlink.spec.js` | A `z` link without consent opens the form, and one that decompresses to exactly 100,000 bytes is read. The refusal, naming the fault, of a `z` with a character outside base64url, a length base64 does not have, bytes that are no stream, a truncated stream, bytes after the end of the stream, 100,001 bytes decompressed, bytes that are not UTF-8, text that is not JSON, and JSON that is not an object; of a link with both `c` and `z`, in either order; of a `z` link in a browser without `DecompressionStream`, where a `c` link still opens; and of `participantParam` `"z"` |
-| `tests/link-consent.spec.js` | A link built with consent text opens a consent screen with the text's paragraphs. Consent text with CR LF, blank lines, a tab and non-ASCII text makes a `?z=` link carrying the box's text, which the page writes back line for line. With the consent fields empty the builder writes `?c=`, and with consent text `?z=`. `link.html?z=…` fills the consent boxes and the decline address, lists the address in the notice, and round-trips. The builder's refusals: a Consent or Declined box of white space, a Declined box or decline address beside an empty Consent box, a box over its limit or holding a lone surrogate half, and an `http://` decline address, with boxes at their limits building a link. `"z"` refused under "Another site", and `link.html` opened with both `c` and `z` or with a `z` that does not decompress refused by name |
+| `tests/save.spec.js` | The saved CSV's header, values and file name, against the fixtures, for each of the five forms and a module. On a PID-5 form, a chosen 0 is written as `0`. Under `shuffle: true`, the HiTOP-BR and the module save `item_order` and the item columns in the instrument's order, each value checked at the position its item was shown at, and the committed shuffled capture agrees with its own `item_order`. Under `shuffle: false`, the HiTOP-BR saves the same file as with no shuffle field. Under `prolific: true` with the three parameters in the address, the identifier is the Prolific ID and the two Prolific columns follow `submitted` or `item_order`, against the by-rule fixture and the committed capture; a placeholder or absent parameter writes an empty cell; an absent, blank or placeholder ID shows the identifier field; the parameters without the field change nothing; a parameter carried twice reads as its filled value: in the walk, `PROLIFIC_PID` and `STUDY_ID` each filled and as a placeholder in either order, and in `readProlific()` itself for each of the three names, a blank before or after the filled value, two filled values giving the first, and a blank beside a placeholder giving empty. With a completion URL and no web address or table, the saved screen links to it and does not navigate; with a saved-file completion URL beside it, the link is to that address and neither is requested. On the HiTOP-BR walk's saved screen and on the saved screen with a completion URL, the instructions end by naming the "Save the file" button, the status region under it starts empty with `role="status"`, a first press from the keyboard and a second by click each save the file again with the same suggested name and the same bytes and write "The file was saved again." into the region (the second as a fresh write, seen by a mutation observer), focus stays on the button after the keyboard press, and the screen's order is the heading, the lead, the file name, the instructions, the button, the status region, the completion link when there is one, the version line |
+| `tests/send.spec.js` | With a send address: one POST at Finish, its body against the fixture, the simple-request headers, a 302 to another origin followed, one POST on a double press, and the five unconfirmed outcomes that save the file. With a Supabase table: the insert's address, headers and body for both key shapes and a project URL ending in a slash or in `/rest/v1/`, one preflight per walk, a 401 or a refused connection saving the file, and the committed Supabase export against the fixture. Under `shuffle: true`, the row posted to a web address and to a Supabase table carries `item_order` and the instrument's order, and the Supabase row's keys equal the shuffle SQL fixture's columns. Under `prolific: true`, the row posted to a web address and to a Supabase table carries the two Prolific keys, with and without the random order, and the Supabase keys equal the Prolific SQL fixtures' columns. With a completion URL, a confirmed send draws the sent screen with its "Continue to" link and no nav button, read while the one navigation request is held, then navigates there; an unconfirmed send links to it and does not navigate. With a saved-file completion URL beside it, a confirmed send goes to the completion URL and requests nothing of the other, and an unconfirmed send links to the other. On the screen of each of the five unconfirmed outcomes with a send address, the instructions end by naming the "Save the file" button, the status region under it starts empty, and a first press from the keyboard and a second by click each save the file again with the same suggested name and the same bytes and write "The file was saved again." into the region, focus staying on the button after the keyboard press; with a completion URL the screen's order puts the button and the empty status region between the instructions and the link; the sent screen has no such button, read after it shows and at the held navigation request. Against a recording server the tests start themselves |
+| `tests/guard.spec.js` | The version display and the refusals: an export whose `format` is not `"1.0"` or whose file fields are missing, a module file of another format, a blank participant identifier, a send address outside `https://` or the loopback exception the tests use, a Supabase table with a bad address, key or table name, a `shuffle` or `prolific` field that is not `true` or `false`, `prolific: true` beside a participant, a `complete` field that is not an `https://` address free of a user name and password, and a `completeSaved` field of the same faults or with no `complete` beside it. A `participantParam` that is not text, empty, over 64 characters, holding a character outside `A-Z a-z 0-9 _ . -`, `c`, or a Prolific name, or that stands beside a participant or `prolific: true`; a `{participant}` token in a completion address's host or path, typed or encoded, while the token after `?` or `#` is accepted; and another spelling of the token after `?` or `#` (another letter case, doubled braces, a space inside the braces, `%7B`, `%7D`, `%257B` or `%257D`), refused naming it. A module file whose items are not in ascending order, reversed or with its last two swapped, is refused naming the fault and no form starts. A participant holding a lone surrogate half (high or low, alone or at the start, middle or end, a low before a high, a high before a whole emoji) is refused and no form starts, with or without a completion URL, while a participant holding a whole emoji is accepted and fills the completion URL with its encoding |
+| `tests/recruit.spec.js` | Under `participantParam`, the identifier taken from the named address parameter, and the start screen's question when the value is blank, absent, `%…%` or `{{…}}`; the first filled value of a doubled parameter; a name holding `.` and `-`; no address parameter read without the field. The saved file's header and the posted row's keys the same with and without the field, with and without the random order. The `{participant}` token filled in a SONA-shaped completion address in each place the page uses it (the navigation after a confirmed send, the sent screen's link, the saved screens' link under `complete` and under `completeSaved`), with the identifier from the address, the start screen, the link's participant and `PROLIFIC_PID`. An address without the token used as the link check parses it: in the navigation and the sent screen's link after a confirmed send, and in the link on the saved screen after a walk with no web address or table, under `complete` and `completeSaved`, two of the addresses given with an uppercase host the parse lowercases. The start screen's refusal of a typed identifier holding a lone surrogate half (high, low, or low before high), and an address value `%ED%A0%80` arriving as three U+FFFD characters and filled into the sent screen's link |
+| `tests/consent.spec.js` | The refusals of a `consent` field that is not an object, has a key other than `text` and `declined`, has no text, or has a text or declined text that is not a string, blank, over its limit or holding a lone surrogate half, and of `completeDeclined` without `consent` or as an `http://` address; a text and a declined text at their limits accepted. The consent screen of a hand-made link with CR LF and a lone CR: each paragraph's text, a single line break kept, no `b` element from `<b>x</b>`, the two buttons, focus on the heading, and "I agree" leading to the start screen the link without consent shows. "I do not agree" with no web address or table, a web address and a Supabase table, each with `complete`: the declined text or the fixed sentence, no button and no link, and for 2 seconds no request, no download and the same address. With `completeDeclined`, a Prolific-shaped and a SONA-shaped address, the latter with and without an identifier: the declined screen and its link at the moment of the navigation, then the address reached, with no request to the web address or table and no download. The saved file's header, the posted row's keys and the builder's Supabase SQL the same with and without consent, with and without the random order |
+| `tests/zlink.spec.js` | A `z` link without consent opens the form, and one that unpacks to exactly 100,000 bytes is read. The refusal, naming the fault, of a `z` with a character outside base64url, a length base64 does not have, bytes that are no stream, a truncated stream, bytes after the end of the stream, 100,001 bytes unpacked, bytes that are not UTF-8, text that is not JSON, and JSON that is not an object; of a link with both `c` and `z`, in either order; of a `z` link in a browser without `DecompressionStream`, where a `c` link still opens; and of `participantParam` `"z"` |
+| `tests/link-consent.spec.js` | A link built with consent text opens a consent screen with the text's paragraphs. Consent text with CR LF, blank lines, a tab and non-ASCII text makes a `z` link carrying the box's text, which the page writes back line for line. With the consent fields empty the builder writes a `c` link, and with consent text a `z` link. `link.html?z=…` fills the consent boxes and the decline address, lists the address in the notice, and round-trips. The builder's refusals: a Consent or Declined box of white space, a Declined box or decline address beside an empty Consent box, a box over its limit or holding a lone surrogate half, and an `http://` decline address, with boxes at their limits building a link. `"z"` refused under "Another site", and `link.html` opened with both `c` and `z` or with a `z` that does not decompress refused by name |
 | `tests/questions.spec.js` | The refusal, naming the question's list and place, of each fault in a `questions` field: its shape, the 50-question limit, a question's keys, name, text, type and `required`, its options and their labels, and its `min` and `max`. The limits themselves are accepted |
 | `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, the unload guard counting a question's answer, and the numeric keypad asked for only when a number question's `min` is 0 or more |
-| `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a webhook and a Supabase store against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
+| `tests/question-columns.spec.js` | The `q_` columns after the items in the saved file and the posted row, with shuffle off and on and under Prolific: each type's value answered and unanswered, `007` and `-0` as `7` and `0`, a multi clicked 3 then 1 as `1 3`, and every value a JSON string. An unanswered walk's keys to a web address and a Supabase table against `supabase-hitopbr-questions.sql`. The capture of `responses-hitopbr-questions.csv` |
 | `tests/link-questions.spec.js` | A link built with one question of each type keeps each list in the editor's order, and the page asks the questions. `link.html?z=…` fills the editor and round-trips. The Supabase SQL equals `supabase-hitopbr-questions.sql`. Each fault the editor can produce in one question is refused, naming the question by its number. The editor also refuses 51 questions, naming the count. Blank option lines are skipped, and hidden fields stay out of the link. A browser without `CompressionStream` refuses a link with questions, consent text, or both, and names what the link holds. A bound outside the range is quoted as typed, with any zeros in front. A setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens. The min and max boxes ask for no numeric keypad, and negative bounds are built. Move up, Move down and Remove reorder and renumber the questions |
 | `tests/link-questions-file.spec.js` | "Load questions from a file" fills the editor from a file with a byte-order mark, CR LF, its columns in another order and each quoting form. It also fills it from a file with LF and only the required columns. A load takes the place of the editor's questions. Each fault in a file is refused with its message, naming the row and column where there is one, and the editor keeps its questions. A load makes no network request. "Download these questions" saves a file that loads back as the same questions, and "Download a template" one that loads as one question of each type. Both files have a byte-order mark and CR LF. An empty or faulty editor saves nothing and names the fault |
 | `tests/instruments.spec.js` | The refusal, naming the field and the fault, of each fault in an `instruments` field: the field beside `instrument`, a value that is not a list, a list of 0, 1 or 4 names, an unknown name, an entry that is not text (a number, a list, null, an object), a repeated name, two PID-5 forms and all three. A module beside a list without `hitopsr` is refused. Beside a list with it, a module of another instrument, of another format or with items not in ascending order is refused by the module check |
 | `tests/instruments-walk.spec.js` | Every export of a list fetched before the first screen, and a refused export named by its instrument. Walks of two and of three instruments: each start screen's name, version line, "Part n of N", instructions and counts, the identifier question and the notice of where the answers go on the first start screen only, positions and page labels counted within each instrument, and no "Back" on each first page. No radio checked on the PID-5-BF's first page after the HiTOP-BR. The screens in the order consent, before, each instrument, after, and "Back" from the after screen. The leave-page warning with an item answered, with none, and on the second instrument's first page with answers in the first only. No part line on a single-instrument link |
 | `tests/instruments-row.spec.js` | The saved file and the webhook row of the HiTOP-BR then the PID-5-BF, each answered by its own pattern, with shuffle off and on, under Prolific and with questions: the space-joined `instrument` and `form_build` cells, one group of item columns per instrument in link order, each instrument's pages showing only its own items, one `item_order` group per instrument under shuffle, and the `q_` columns last. The same for three instruments under shuffle. The capture of `responses-multi-page-shuffled.csv` |
-| `tests/instruments-store.spec.js` | The builder's Supabase SQL for two instruments, byte for byte, against `supabase-hitopbr-pid5bf.sql` and `supabase-pid5bf-hitopbr-prolific-shuffle-questions.sql`. The keys of the rows posted to a webhook and to a Supabase store under those two links, against the fixtures' columns |
-| `tests/link-instruments.spec.js` | The builder's instrument rows: one row at load, "Add an instrument" up to three rows, and Move up, Move down and Remove. One row writes `instrument`, and two or three write `instruments` in row order. The refusal of a repeated instrument, of two and of three PID-5 forms, and of a module against the list. Links of two and of three instruments built, opened at "Part 1 of N", and reloaded on the builder through `c` and `z` with the same rows. An opened link refused by name for each list fault the form page refuses, with the rows back at one HiTOP-SR row |
-| `tests/network.spec.js` | Without a store, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
+| `tests/instruments-store.spec.js` | The builder's Supabase SQL for two instruments, byte for byte, against `supabase-hitopbr-pid5bf.sql` and `supabase-pid5bf-hitopbr-prolific-shuffle-questions.sql`. The keys of the rows posted to a web address and to a Supabase table under those two links, against the fixtures' columns |
+| `tests/link-instruments.spec.js` | The builder's instrument rows: one row at load, "Add an instrument" up to three rows, and Move up, Move down and Remove. One row writes `instrument`, and two or three write `instruments` in row order. The refusal of a repeated instrument, of two and of three PID-5 forms, and of a module against the list. Links of two and of three instruments built, opened at "Part 1 of N", and reloaded on the builder through `c` and `z` with the same rows. An opened link refused by name for each list fault the online form refuses, with the rows back at one HiTOP-SR row. Move up, Move down and Remove named from their visible text, and disabled where they do nothing |
+| `tests/network.spec.js` | Without a web address or table, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
@@ -849,7 +898,7 @@ workflow runs the suite on every pull request and every push to `main`,
 against the checkout.
 It runs every Monday against the deployed page, so a new package export that
 breaks the page is noticed. On that run the send tests ask the browser for
-permission to reach the local recording endpoint from the public page. If
+permission to reach the local recording server from the public page. If
 the browser refuses, they skip with the reason printed.
 
 ## License

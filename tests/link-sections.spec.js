@@ -28,9 +28,17 @@
 //       and the destination chosen: for each recruiting-site choice and
 //       each where-responses-go choice. A z link over 5,000 characters
 //       keeps the box under 16rem high
+//   S8: with every section open and one question of each type, under each
+//       recruiting-site choice, each where-responses-go choice and after a
+//       Supabase build: every .hint and .site-hint, shown or not, holds at
+//       most 40 words; the intro (all text between the h1 and the first
+//       form part) holds at most 60; the page's text, placeholders and
+//       aria-labels hold none of the retired terms, the built link exempt
 
 import { test, expect } from '@playwright/test';
-import { useTarget, encodeConfig, encodeCompressed, readDescriptor } from './helpers.mjs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -466,6 +474,110 @@ test('a z link over 5,000 characters stays in a box under 16rem high', async ({ 
   expect(height).toBeLessThan(16 * rem);
   expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
   await expect(page.locator('#next')).toHaveText(expectedNext('', ''));
+});
+
+// S8: the retired terms, stated here as the naming decision lists them:
+// six case-insensitive patterns, four more, and two fixed strings.
+const RETIRED = [
+  /\bdescriptor\b/i, /\bscoring file\b/i, /\bbundle\b/i, /\bendpoint\b/i, /\bstores?\b/i, /\bcompressed\b/i,
+  /\b(hitop-form )?form page\b/i, /(?<!study )\blink builder\b/i, /\b[cz] parameter\b/i, /\$\{[^}]*\} parameter/i,
+  '?c=', '?z=',
+];
+
+// Reads the page as it stands: the word count of each hint, of the intro,
+// and every retired term found in the page's text (the built link's box
+// left out), its placeholders and its aria-labels.
+async function readText(page) {
+  const found = await page.evaluate(() => {
+    const words = (s) => s.split(/\s+/).filter((w) => w !== '').length;
+    const hints = [...document.querySelectorAll('.hint, .site-hint')].map((n) => ({
+      where: n.id || n.closest('[id]')?.id || n.parentElement.textContent.trim().slice(0, 30),
+      words: words(n.textContent),
+    }));
+    const range = document.createRange();
+    range.setStartAfter(document.querySelector('h1'));
+    range.setEndBefore(document.getElementById('f').firstElementChild);
+    const out = document.getElementById('out');
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+      if (out.contains(n) || n.parentElement.closest('script, style') !== null) continue;
+      texts.push(n.data);
+    }
+    return {
+      hints,
+      hintCount: hints.length,
+      intro: words(range.toString()),
+      text: texts.join(' '),
+      placeholders: [...document.querySelectorAll('[placeholder]')].map((n) => n.getAttribute('placeholder')),
+      labels: [...document.querySelectorAll('[aria-label]')].map((n) => n.getAttribute('aria-label')),
+    };
+  });
+  const hits = [];
+  for (const [kind, strings] of [['text', [found.text]], ['placeholder', found.placeholders], ['aria-label', found.labels]]) {
+    for (const s of strings) {
+      for (const term of RETIRED) {
+        const hit = typeof term === 'string' ? s.includes(term) : term.test(s);
+        if (hit) hits.push(`${kind}: ${term} in ${JSON.stringify(s.slice(0, 80))}`);
+      }
+    }
+  }
+  return { ...found, hits };
+}
+
+async function expectText(page, state) {
+  const r = await readText(page);
+  expect(r.hintCount, `${state}: hints found`).toBeGreaterThan(20);
+  expect(r.hints.filter((h) => h.words > 40), `${state}: hints over 40 words`).toEqual([]);
+  expect(r.intro, `${state}: intro words`).toBeLessThanOrEqual(60);
+  expect(r.hits, `${state}: retired terms`).toEqual([]);
+}
+
+test('hints stay under 40 words, the intro under 60, and no retired term shows', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  for (const s of SECTIONS) await openSection(page, s.id);
+  for (const type of ['text', 'number', 'choice', 'multi']) {
+    await page.getByRole('button', { name: 'Add a question' }).click();
+    await page.locator('select[name="qType"]').last().selectOption(type);
+  }
+  await expectText(page, 'sections open');
+  for (const site of Object.keys(SITE_TEXT)) {
+    await page.locator('select[name="site"]').selectOption(site);
+    await expectText(page, `site ${JSON.stringify(site)}`);
+  }
+  await page.locator('select[name="site"]').selectOption('');
+  for (const kind of ['', 'webhook', 'supabase']) {
+    await chooseDestination(page, kind);
+    await expectText(page, `destination ${JSON.stringify(kind)}`);
+  }
+  // A Supabase build: the four questions need names and texts, and the
+  // choice questions options.
+  for (let k = 0; k < 4; k++) {
+    await page.locator('input[name="qName"]').nth(k).fill(`q${k + 1}`);
+    await page.locator('input[name="qText"]').nth(k).fill(`Question ${k + 1}`);
+  }
+  for (const k of [2, 3]) await page.locator('textarea[name="qOptions"]').nth(k).fill('Yes\nNo');
+  await page.locator('input[name="study"]').fill('text');
+  await make(page).click();
+  await expect(page.locator('#err')).toHaveText('');
+  await expect(page.locator('#sqlBlock')).toBeVisible();
+  const href = await page.locator('#out').textContent();
+  expect(href, 'the built link, exempt, holds a fixed retired string').toContain('?z=');
+  await expectText(page, 'after a Supabase build');
+});
+
+// S8: each hint's link to the README lands on one of its headings, slugged
+// as GitHub slugs them: lower case, spaces to "-", other punctuation but
+// "-" and "_" dropped.
+test('every README link on the page names a README heading', async ({ page }) => {
+  const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
+  const slugs = new Set(readme.split('\n').filter((l) => /^#{1,6} /.test(l)).map((l) =>
+    l.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-')));
+  await page.goto(`${base()}link.html`);
+  for (const s of SECTIONS) await openSection(page, s.id);
+  const anchors = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => a.hash.slice(1)));
+  expect(anchors.length).toBeGreaterThan(8);
+  expect(anchors.filter((a) => !slugs.has(a))).toEqual([]);
 });
 
 test('a link setting no optional field leaves every section closed', async ({ page }) => {

@@ -38,7 +38,7 @@ async function expectRefused(page, message) {
   await expect(page.locator('fieldset.item')).toHaveCount(0);
 }
 
-const zFault = (why) => `The study link could not be read: its z parameter ${why}. Ask the study team for a new link.`;
+const zFault = (why) => `The study link could not be read: it ${why}. Ask the study team for a new link.`;
 
 // Z1
 test('a z link without consent opens the form as its c link does', async ({ page }) => {
@@ -86,7 +86,7 @@ for (const order of ['c first', 'z first']) {
     const c = `c=${encodeConfig(CONFIG)}`;
     const zp = `z=${encodeCompressed(CONFIG)}`;
     await page.goto(`${base()}?${order === 'c first' ? `${c}&${zp}` : `${zp}&${c}`}`);
-    await expectRefused(page, 'The study link carries both a c and a z parameter, and a study link carries one. Ask the study team for a new link.');
+    await expectRefused(page, 'The study link holds its setup twice, in two forms, and a study link holds it once. Ask the study team for a new link.');
   });
 }
 
@@ -94,7 +94,7 @@ for (const order of ['c first', 'z first']) {
 test('without DecompressionStream, a z link is refused naming the browser', async ({ page }) => {
   await page.addInitScript(() => { delete window.DecompressionStream; });
   await openForm(page, base(), CONFIG, { param: 'z' });
-  await expectRefused(page, "This browser cannot read the study link, because it cannot decompress the link's z parameter. Open the link in a current version of Chrome, Edge, Firefox or Safari.");
+  await expectRefused(page, "This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.");
   expect(await page.evaluate(() => typeof DecompressionStream)).toBe('undefined');
 });
 
@@ -107,5 +107,5 @@ test('without DecompressionStream, a c link still opens', async ({ page }) => {
 // Z5
 test('participantParam "z" is refused, naming the parameter', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'zlink', participantParam: 'z' });
-  await expectRefused(page, 'The study link\'s participantParam field could not be used: it is "z", the parameter that carries a compressed study link.');
+  await expectRefused(page, 'The study link\'s participantParam field could not be used: it is "z", which also carries the study link itself.');
 });

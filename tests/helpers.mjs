@@ -56,7 +56,7 @@ export const NOT_ASCENDING = [
     },
   },
 ];
-export const NOT_ASCENDING_MESSAGE = 'The module descriptor could not be used: its items are not in ascending order.';
+export const NOT_ASCENDING_MESSAGE = 'The module file could not be used: its items are not in ascending order.';
 
 // module-plain.json with its items altered by one NOT_ASCENDING entry.
 export async function notAscendingDescriptor(entry) {

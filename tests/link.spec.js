@@ -21,15 +21,15 @@
 //       equals the two shuffle fixtures, whose item_order column follows
 //       submitted and whose item columns are in the instrument's order
 //   L9: the builder has a checkbox "Show the items in a random order" whose
-//       hint says each participant sees a new order, that the file and the
-//       table list the items in the instrument's order under their item
-//       names, that item_order records the order seen, and that a module's
-//       printed order is not followed; checked, the link carries
+//       hint says each participant sees a new order in place of a module's
+//       printed order, that the file still lists the items in the
+//       instrument's order, and that item_order records the order seen;
+//       checked, the link carries
 //       shuffle: true and opens a page that renders a rearrangement;
 //       unchecked, the link carries no shuffle field
 //  L10: the "Recruiting site" menu starts at None; the Prolific choice's
 //       hint (L24 checks when it shows) says the Prolific ID in the address is the identifier,
-//       that the participant field stays empty, that the link is pasted as
+//       the menu's hint that the participant field stays empty, that the link is pasted as
 //       the study URL with its placeholders, and names the two columns; the
 //       link carries prolific: true and the printed link ends in the three
 //       placeholders, and opened as printed it asks for the identifier
@@ -44,13 +44,11 @@
 //       equals supabase-hitopbr-prolific.sql, and with the random-order box
 //       too supabase-hitopbr-prolific-shuffle.sql, byte for byte
 //  L14: the "Completion URL after a saved file" field, whose hint says it
-//       takes the study's completion code for a saved file and that a study
-//       holds one code per outcome, puts completeSaved in the link beside
-//       complete; an http:// address is refused naming the field, and the
-//       field filled beside an empty completion field is refused, and no
-//       link is built either way; the Prolific hint says Prolific's
-//       URL-parameters option appends the parameters and the page reads the
-//       filled value
+//       goes only beside a completion URL and takes the URL of the study's
+//       completion code for a saved file, puts completeSaved in the link
+//       beside complete; an http:// address is refused naming the field,
+//       and the field filled beside an empty completion field is refused,
+//       and no link is built either way
 //  L15: a pasted descriptor whose items are not in ascending order,
 //       reversed or with its last two swapped, is refused with the form
 //       page's message, and no link is built
@@ -72,14 +70,13 @@
 //       past the three checks among them (one after a completion URL is
 //       filled), and the submit handler still runs; a load with no c leaves
 //       #err empty
-//  L19: above the form, an ordered list of three steps names, in order,
-//       choosing the instrument, where the responses go, and making the
-//       link; the module hint links the Module Builder and the page links
-//       the online-collection tutorial
-//  L20: a c filling any of the four address fields (Address, Project URL,
-//       Completion URL, Completion URL after a saved file) with a string
+//  L19: above the form, the intro names the three required parts and
+//       "Make the link" and links the online-collection tutorial; the module
+//       hint links the Module Builder
+//  L20: a c filling any of the four address fields (Web address, Project
+//       URL, Completion URL, Completion URL after a saved file) with a string
 //       that leaves the field non-empty lists each filled one, after its
-//       label name, in a notice between the steps and the form, as the
+//       label name, in a notice between the intro and the form, as the
 //       field holds it: each field alone, the most one c can carry once per
 //       store kind, and an address over two lines, listed joined; a load
 //       with no c, a c filling no address (seven shapes, two an address
@@ -96,8 +93,8 @@
 //       Connect and Another site, in that order; each choice shows its own
 //       hint (for another site, the "Address parameter" field) and hides
 //       the others'; the SONA hint names the id parameter, the
-//       id=%SURVEY_CODE% ending, {participant} in place of XXXX and the
-//       readable credit token; the Connect hint names participantId; the
+//       id=%SURVEY_CODE% ending and the readable credit token; the Connect
+//       hint names participantId; the
 //       completion hint says where {participant} goes
 //  L25: each choice builds its link: no field and no ending for None;
 //       prolific: true and the three placeholders for Prolific;
@@ -234,7 +231,7 @@ const BUILDER_FAULTS = [
 for (const fault of BUILDER_FAULTS) {
   test(`the builder refuses the address ${fault.url}`, async ({ page }) => {
     const { err, href } = await build(page, fault.url);
-    expect(err).toContain("The study link's store could not be used: ");
+    expect(err).toContain("Where responses go could not be used: ");
     expect(err).toContain(fault.names);
     expect(href, 'no link is built').toBe('');
   });
@@ -271,7 +268,7 @@ const SUPABASE_FAULTS = [
 for (const fault of SUPABASE_FAULTS) {
   test(`the builder refuses a Supabase store with ${fault.name}`, async ({ page }) => {
     const { err, href, sqlShown } = await buildSupabase(page, fault);
-    expect(err).toContain("The study link's store could not be used: ");
+    expect(err).toContain("Where responses go could not be used: ");
     expect(err).toContain(fault.names);
     expect(href, 'no link is built').toBe('');
     expect(sqlShown, 'no SQL is shown').toBe(false);
@@ -321,10 +318,9 @@ test('the random-order box: its label and hint, and the link it builds', async (
   await expect(box).toBeVisible();
   await expect(box).not.toBeChecked();
   const hint = page.locator('label.check', { hasText: 'Show the items in a random order' }).locator('.hint');
-  await expect(hint).toContainText('Each participant sees a new order');
-  await expect(hint).toContainText("list the items in the instrument's order under their item names");
+  await expect(hint).toContainText("Each participant sees a new order, in place of a module's printed order");
+  await expect(hint).toContainText("The file still lists the items in the instrument's order");
   await expect(hint).toContainText('item_order column records the order that participant saw');
-  await expect(hint).toContainText("A module's printed order is not followed");
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
@@ -359,9 +355,9 @@ test('Prolific as the recruiting site: its hint, and the link it builds', async 
   await expect(box).toBeVisible();
   await expect(box).toHaveValue('');
   const hint = page.locator('#prolificHint');
-  await expect(hint).toContainText("takes each participant's Prolific ID from the address as their identifier");
-  await expect(hint).toContainText('leave the participant field empty');
-  await expect(hint).toContainText('Paste the link below, with its three placeholders, as the study URL on Prolific');
+  await expect(hint).toContainText("reads each participant's Prolific ID from the address as their identifier");
+  await expect(page.locator('label:has(select[name="site"]) .hint')).toContainText('Leave the participant field empty');
+  await expect(hint).toContainText('Paste the link, with its three placeholders, as the study URL on Prolific');
   await expect(hint).toContainText('prolific_study');
   await expect(hint).toContainText('prolific_session');
 
@@ -425,12 +421,11 @@ test('the Completion URL field puts complete in the link, and an http:// address
 // L14: the saved-file completion field.
 test('the Completion URL after a saved file field puts completeSaved in the link, and refuses http:// and an empty completion field', async ({ page }) => {
   await page.goto(`${base()}link.html`);
-  const hint = page.locator('label', { hasText: 'Completion URL after a saved file' }).locator('.hint');
-  await expect(hint).toContainText("the study's completion code for a saved file");
-  await expect(hint).toContainText('one code per outcome, each with its own ?cc= address');
-  const prolificHint = page.locator('#prolificHint');
-  await expect(prolificHint).toContainText('"I\'ll use URL parameters" option appends the three parameters to the study URL itself');
-  await expect(prolificHint).toContainText('the page then reads the filled value');
+  // The fuller account of completion codes and Prolific's URL-parameters
+  // option is in the README section the completion hint links to.
+  const hint = page.locator('label:has(input[name="completeSaved"]) .hint');
+  await expect(hint).toContainText('Only beside a completion URL');
+  await expect(hint).toContainText("your study's completion code for a saved file");
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
@@ -521,7 +516,7 @@ test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   // L3
   const hint = page.locator('label:has(textarea[name="module"]) .hint');
-  await expect(hint).toContainText('Optional, HiTOP-SR only.');
+  await expect(hint).toContainText(/^HiTOP-SR only\./);
 });
 
 // L15: a pasted descriptor whose items are not in ascending order is refused
@@ -693,7 +688,7 @@ for (const bad of BAD_C) {
     const plain = await controls(page);
     if (bad.init) await page.addInitScript(bad.init);
     await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
-    await expect(page.locator('#err')).toHaveText(`The link's c parameter ${bad.message} Fill in the form above to make a new link.`);
+    await expect(page.locator('#err')).toHaveText(`The study link you opened ${bad.message} Fill in the form above to make a new link.`);
     expect(await controls(page)).toEqual(plain);
     // L20: a refused c lists no address, even one filled before a throw.
     await expect(page.locator('#prefilled')).toBeHidden();
@@ -715,30 +710,26 @@ test('a load with no c leaves #err empty', async ({ page }) => {
   await expect(page.locator('#err')).toBeHidden();
 });
 
-// L19: the three steps above the form and the two links.
-test('the three steps above the form, the builder link in the module hint, and the tutorial link', async ({ page }) => {
+// L19: the intro above the form names the three required parts and links
+// the tutorial; the module hint links the Module Builder.
+test('the intro above the form, the builder link in the module hint, and the tutorial link', async ({ page }) => {
   await openBuilder(page);
-  const items = page.locator('main ol li');
-  await expect(items).toHaveCount(3);
-  const texts = await items.allTextContents();
-  expect(texts[0]).toContain('Choose the instrument');
-  expect(texts[1]).toContain('where the responses go');
-  expect(texts[2]).toContain('Make the link');
-  const list = page.locator('main ol');
-  const form = page.locator('#f');
-  const listBox = await list.boundingBox();
-  const formBox = await form.boundingBox();
-  expect(listBox.y + listBox.height, 'the list sits above the form').toBeLessThanOrEqual(formBox.y);
+  const intro = page.locator('#intro');
+  await expect(intro).toContainText('Fill in the three required parts');
+  await expect(intro).toContainText('press "Make the link"');
+  const introBox = await intro.boundingBox();
+  const formBox = await page.locator('#f').boundingBox();
+  expect(introBox.y + introBox.height, 'the intro sits above the form').toBeLessThanOrEqual(formBox.y);
   const hint = page.locator('label:has(textarea[name="module"]) .hint');
   await expect(hint.locator('a[href="https://jmgirard.github.io/hitop-builder/"]')).toHaveCount(1);
-  await expect(page.locator('a[href="https://jmgirard.github.io/hitop/articles/online-collection.html"]')).toHaveCount(1);
+  await expect(intro.locator('a[href="https://jmgirard.github.io/hitop/articles/online-collection.html"]')).toHaveCount(1);
 });
 
 // ---- The notice of the addresses a c filled --------------------------------
 
 // Stated here rather than read from link.html, so a change to the notice's
 // wording or to a field's label name shows up as a failure.
-const NOTICE_TEXT = 'The link you opened filled in these addresses. Check each one before you make a link.';
+const NOTICE_TEXT = 'The link you opened filled in these addresses. Check each one.';
 const WEB_URL = 'https://script.google.com/macros/s/abc/exec';
 const SUPABASE_URL = 'https://abc.supabase.co';
 
@@ -758,12 +749,12 @@ const NOTICE_SHOWN = [
     fields: { completeSaved: COMPLETE_SAVED_URL },
     lines: [`Completion URL after a saved file: ${COMPLETE_SAVED_URL}`],
   },
-  { name: 'a web address alone', fields: { store: { kind: 'webhook', url: WEB_URL } }, lines: [`Address: ${WEB_URL}`] },
+  { name: 'a web address alone', fields: { store: { kind: 'webhook', url: WEB_URL } }, lines: [`Web address: ${WEB_URL}`] },
   { name: 'a Supabase project URL alone', fields: { store: { kind: 'supabase', url: SUPABASE_URL } }, lines: [`Project URL: ${SUPABASE_URL}`] },
   {
     name: 'both completion URLs and a web address',
     fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: WEB_URL } },
-    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Address: ${WEB_URL}`],
+    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Web address: ${WEB_URL}`],
   },
   {
     name: 'both completion URLs and a Supabase project URL',
@@ -785,7 +776,7 @@ const NOTICE_SHOWN = [
 ];
 
 for (const w of NOTICE_SHOWN) {
-  test(`a c filling ${w.name} lists it in a notice between the steps and the form`, async ({ page }) => {
+  test(`a c filling ${w.name} lists it in a notice between the intro and the form`, async ({ page }) => {
     await openBuilder(page, { config: { instrument: 'hitopbr', study: 'notice', ...w.fields } });
     await expect(page.locator('#err')).toHaveText('');
     await expect(page.locator('#prefilled')).toBeVisible();
@@ -796,10 +787,10 @@ for (const w of NOTICE_SHOWN) {
     }
     // L23: focus is on the notice.
     expect(await focused(page)).toBe('prefilled');
-    const list = await page.locator('main ol.steps').boundingBox();
+    const intro = await page.locator('#intro').boundingBox();
     const notice = await page.locator('#prefilled').boundingBox();
     const form = await page.locator('#f').boundingBox();
-    expect(list.y + list.height, 'the steps sit above the notice').toBeLessThanOrEqual(notice.y);
+    expect(intro.y + intro.height, 'the intro sits above the notice').toBeLessThanOrEqual(notice.y);
     expect(notice.y + notice.height, 'the notice sits above the form').toBeLessThanOrEqual(form.y);
   });
 }
@@ -847,7 +838,7 @@ for (const kind of ['webhook', 'supabase']) {
     await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields('plain') } });
     const plainTags = await page.$$eval('#prefilled *', (nodes) => nodes.map((n) => n.tagName));
     await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields(MARKUP) } });
-    const label = kind === 'webhook' ? 'Address' : 'Project URL';
+    const label = kind === 'webhook' ? 'Web address' : 'Project URL';
     expect(await noticeLines(page)).toEqual([
       `Completion URL: https://c.test/${MARKUP}`,
       `Completion URL after a saved file: https://s.test/${MARKUP}`,
@@ -917,11 +908,12 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
     for (const sel of SITE_ELEMENTS) await expect(page.locator(sel), `${sel} under ${c.value || 'none'}`).toBeVisible({ visible: sel === c.shows });
   }
   const sona = page.locator('#sonaHint');
-  await expect(sona).toContainText("takes each participant's SONA survey code from the id parameter of the address as their identifier");
-  await expect(sona).toContainText('The link below ends in id=%SURVEY_CODE%');
-  await expect(sona).toContainText('with {participant} in place of its XXXX');
-  await expect(sona).toContainText('a participant can read it in the study link');
-  await expect(page.locator('#connectHint')).toContainText('from the participantId parameter of the address');
+  // The completion URL's XXXX and the credit token's detail are in the
+  // README section the recruiting-site hint links to.
+  await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter as their identifier");
+  await expect(sona).toContainText('which ends in id=%SURVEY_CODE%');
+  await expect(sona).toContainText("Participants can read the credit token in SONA's completion URL");
+  await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
   await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
 });
 
@@ -1102,5 +1094,5 @@ test('the recruiting-site menu is described by the chosen site\'s hint', async (
     else await expect(menu, `under ${site}`).toHaveAttribute('aria-describedby', hint);
   }
   await menu.selectOption('sona');
-  await expect(menu).toHaveAccessibleDescription(/takes each participant's SONA survey code from the id parameter/);
+  await expect(menu).toHaveAccessibleDescription(/reads each participant's SONA survey code from the id parameter/);
 });

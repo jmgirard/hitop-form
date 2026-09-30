@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HiTOP form: make a study link</title>
+<title>Study Link Builder</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -65,8 +65,6 @@
          font-size: .875rem; }
   .upnav { margin: 0 0 var(--s4); font-size: .875rem; }
   .upnav a { color: var(--muted); }
-  ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
-  ol.steps li { margin: 0 0 var(--s2); }
   #prefilled { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r1);
                padding: var(--s3) var(--s4); margin: 0 0 var(--s5); word-break: break-all; }
   #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
@@ -103,39 +101,34 @@
   <nav class="upnav">
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
-  <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument or instruments, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text or questions) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads each instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
-  <ol class="steps">
-    <li>Choose the instrument, or up to three in order, and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
-    <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
-    <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
-  </ol>
+  <h1>Study Link Builder</h1>
+  <p class="muted" id="intro">A study link opens the online form with your choices built in. Fill in the three required parts, open any optional section you need, and press "Make the link". This page keeps nothing and sends nothing you type. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
-    <p>The link you opened filled in these addresses. Check each one before you make a link.</p>
+    <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
   </div>
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add a second and a third. The page gives them one after another in one session, in this order, each with its own start screen and pages. A list holds at most one form of the PID-5. The saved file and the table hold one group of item columns per instrument, in this order.</p>
+      <p class="hint">Choose one instrument, or add up to two more. The page gives them one after another, in this order. A list holds one form of the PID-5 at most. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
     <label>Study name
-      <span class="hint">Written into every saved file. Required.</span>
+      <span class="hint">Written into every saved file and every row. Required.</span>
       <input name="study" type="text" autocomplete="off">
     </label>
     <fieldset id="destBlock">
       <legend id="destLegend">Where responses go</legend>
-      <span class="hint" id="destHint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
+      <span class="hint" id="destHint">A file lands in the participant's downloads folder. A web address, such as a Google Sheet's web app, or a Supabase table gets one row per participant. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
       <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
         <option value="">A file on the participant's device</option>
         <option value="webhook">A web address</option>
         <option value="supabase">A Supabase table</option>
       </select>
       <div id="webhookFields" hidden>
-        <label>Address
-          <span class="hint">The https:// address of the endpoint.</span>
+        <label>Web address
+          <span class="hint">The https:// address that receives each participant's row.</span>
           <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
         </label>
       </div>
@@ -145,11 +138,11 @@
           <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
         </label>
         <label>Publishable key
-          <span class="hint">The project's publishable key (or its legacy anon key). It goes into every study link, so use no other key.</span>
+          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key.</span>
           <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
         </label>
         <label>Table name
-          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that creates it is shown under the link.</span>
+          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that makes the table comes with the link.</span>
           <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
         </label>
       </div>
@@ -157,11 +150,11 @@
     <details class="optional" id="secParticipants">
       <summary><span class="sec-name">Participants and recruiting site</span> <span class="sec-state">Not used</span></summary>
     <label>Participant
-      <span class="hint">Optional. Leave it empty for a link shared with many participants; the page then asks each one for an identifier.</span>
+      <span class="hint">Leave it empty for a link shared with many participants. The page then asks each one for an identifier.</span>
       <input name="participant" type="text" autocomplete="off">
     </label>
     <label>Recruiting site
-      <span class="hint">Optional. A site that passes each participant's identifier in the study link's address. The page then takes the identifier from there, so leave the participant field empty.</span>
+      <span class="hint">A site that passes each participant's identifier in the study link's address. Leave the participant field empty. <a href="https://github.com/jmgirard/hitop-form#participants-and-recruiting-site">How each site works</a>.</span>
       <select name="site">
         <option value="">None</option>
         <option value="prolific">Prolific</option>
@@ -170,12 +163,12 @@
         <option value="other">Another site</option>
       </select>
     </label>
-    <p class="site-hint" id="prolificHint" hidden>The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. Prolific's "I'll use URL parameters" option appends the three parameters to the study URL itself, so a pasted link carries each parameter once unless that option adds it again, and the page then reads the filled value. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</p>
-    <p class="site-hint" id="sonaHint" hidden>The page takes each participant's SONA survey code from the <code>id</code> parameter of the address as their identifier, so leave the participant field empty. The link below ends in <code>id=%SURVEY_CODE%</code>. Paste it as the Study URL in SONA, which puts each participant's survey code in place of <code>%SURVEY_CODE%</code>. For the completion URL, give SONA's client-side completion URL with <code>{participant}</code> in place of its <code>XXXX</code>. That URL carries the study's credit token, and a participant can read it in the study link.</p>
-    <p class="site-hint" id="connectHint" hidden>The page takes each participant's Connect ID from the <code>participantId</code> parameter of the address as their identifier, so leave the participant field empty. Give the link below as the project URL in Connect. For the completion URL, give the completion redirect URL Connect shows for the study.</p>
+    <p class="site-hint" id="prolificHint" hidden>The page reads each participant's Prolific ID from the address as their identifier. Paste the link, with its three placeholders, as the study URL on Prolific. The file gains two columns, <code>prolific_study</code> and <code>prolific_session</code>.</p>
+    <p class="site-hint" id="sonaHint" hidden>The page reads each participant's SONA survey code from the <code>id</code> parameter as their identifier. Paste the link, which ends in <code>id=%SURVEY_CODE%</code>, as the Study URL in SONA. Participants can read the credit token in SONA's completion URL.</p>
+    <p class="site-hint" id="connectHint" hidden>The page reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
-        <span class="hint">The name of the parameter the site adds to the study link's address with the participant's identifier. Letters A-Z and a-z, digits, "_", "." and "-", up to 64, and not <code>c</code>, <code>z</code> or a Prolific parameter.</span>
+        <span class="hint">The name of the parameter the site adds to the address with the identifier. Letters, digits, "_", "." and "-", up to 64. Not <code>c</code>, <code>z</code> or a Prolific name.</span>
         <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
       </label>
     </div>
@@ -183,54 +176,54 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">Optional, HiTOP-SR only. With several instruments it applies to the HiTOP-SR among them. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
+      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The page then shows only the module's items, in its printed order. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
       <input name="shuffle" type="checkbox" value="true">
       Show the items in a random order
-      <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
+      <span class="hint">Each participant sees a new order, in place of a module's printed order. The file still lists the items in the instrument's order, and an <code>item_order</code> column records the order that participant saw.</span>
     </label>
     </details>
     <details class="optional" id="secConsent">
       <summary><span class="sec-name">Consent</span> <span class="sec-state">Not used</span></summary>
     <label>Consent text
-      <span class="hint">Optional. Your consent text, as your review board approved it. The page shows it on a screen of its own before the form, with an "I agree" and an "I do not agree" button. It is shown as plain text: a blank line starts a new paragraph, and a single line break stays a line break. Up to 20,000 characters. A link with consent text is written compressed, as <code>?z=</code> in place of <code>?c=</code>.</span>
+      <span class="hint">Your consent text, as your review board approved it. The page shows it as plain text on its own screen before the form, with "I agree" and "I do not agree". Up to 20,000 characters. <a href="https://github.com/jmgirard/hitop-form#show-consent-text-before-the-form">How it is shown</a>.</span>
       <textarea name="consentText" class="prose"></textarea>
     </label>
     <label>Declined text
-      <span class="hint">Optional, and only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, the page shows "You chose not to take part. You can close this page.", or only its first sentence when the completion URL after a decline is given. After "I do not agree" the page sends no answer and saves no file.</span>
+      <span class="hint">Only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, it says "You chose not to take part." After a decline, the page sends no answer and saves no file.</span>
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Optional, and only beside consent text. An https:// address the page sends the participant to after "I do not agree", once the declined screen is drawn. For Prolific, the completion URL of the code your study gives a participant who does not consent. A <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier from the address or the link, or nothing when the page holds none yet.</span>
+      <span class="hint">Only beside consent text. An https:// address the page sends the participant to after "I do not agree". For Prolific, the completion URL of your code for a participant who does not consent.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
     <details class="optional" id="secFinish">
       <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
     <label>Completion URL
-      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page. Where the address must carry the participant's identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>, and the page puts the identifier there.</span>
+      <span class="hint">An https:// address the page sends the participant to once their responses arrive, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
-      <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
+      <span class="hint">Only beside a completion URL. The saved-file screen links here in place of the completion URL. For Prolific, the URL of your study's completion code for a saved file.</span>
       <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
     <details class="optional" id="secQuestions">
       <summary><span class="sec-name">Your own questions</span> <span class="sec-state">Not used</span></summary>
     <div id="questionsBlock">
-      <p class="hint">Optional. Questions of your own, such as age or how the participant heard of the study. The page asks them on a screen before the form or on a screen after its last page, never beside the items. Each answer is written in a column named <code>q_</code> plus the question's name, after the item columns. A text answer is written as typed. A whole number is written in digits. A choice is written as the number of the chosen option, counted from 1, and several choices as those numbers in order, separated by spaces. An unanswered question is written empty. Up to 50 questions. A link with questions is written compressed, as <code>?z=</code>.</p>
+      <p class="hint">Questions of your own, asked on a screen before or after the form. Each answer goes in a column named <code>q_</code> plus the question's name, after the item columns. Up to 50 questions. <a href="https://github.com/jmgirard/hitop-form#ask-your-own-questions">How answers are written</a>.</p>
       <div id="questionList"></div>
       <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
-      <p class="hint">You can also write the questions in a spreadsheet. "Download a template" saves a CSV file with the columns and one example question of each type. "Download these questions" saves the questions above in the same form, to edit in a spreadsheet or keep for another link.</p>
+      <p class="hint">You can also write the questions in a spreadsheet. "Download a template" saves a CSV file with one example of each type. "Download these questions" saves the questions above.</p>
       <p class="file-buttons">
         <button type="button" class="secondary" id="downloadTemplate">Download a template</button>
         <button type="button" class="secondary" id="downloadQuestions">Download these questions</button>
       </p>
       <label>Load questions from a file
-        <span class="hint">A CSV file, saved from a spreadsheet as "CSV UTF-8". Its first row names the columns in lower case: list, name, text and type, and as you need them options, required, min and max. Each further row is one question. A list is before or after, and a type is text, number, choice or multi, in lower case. Write the options in one cell, separated by <code>|</code>. The README describes each column. The questions in the file take the place of the questions above. The file is read in this browser and sent nowhere.</span>
+        <span class="hint">A CSV file saved as "CSV UTF-8", one question per row. Its questions replace the questions above. This browser reads the file and sends it nowhere. <a href="https://github.com/jmgirard/hitop-form#write-your-questions-in-a-spreadsheet">The file's columns</a>.</span>
         <input type="file" id="questionsFile" accept=".csv,text/csv">
       </label>
       <p role="alert" id="questionsErr" tabindex="-1"></p>
@@ -250,7 +243,7 @@
     <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them (one group per instrument, in the list's order), and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this once in the project's SQL editor. It makes the table with one column per item and per question, and lets the key add rows and nothing else. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -591,7 +584,7 @@
       field('Name', 'A lower-case letter, then lower-case letters, digits and "_", up to 30 in all. The answer\'s column is q_ plus this name.', name),
       field('Question', 'One line, up to 1,000 characters.', text),
       field('Type', null, typeSelect),
-      field('Options', 'One per line, 2 to 20, each up to 200 characters and without "|". Blank lines are skipped. The answer is the number of the chosen option, counted from 1, so keep the order the same in every link of a study.', options, 'options-field'),
+      field('Options', 'One per line, 2 to 20, each up to 200 characters, without "|". The answer is the chosen option\'s number, counted from 1, so keep this order in every link of a study.', options, 'options-field'),
       bounds,
       requiredLabel,
       moves,
@@ -764,14 +757,14 @@
   const opened = new URLSearchParams(window.location.search);
   const linkParam = opened.has('z') ? 'z' : 'c';
   const refuse = (what) => {
-    err.textContent = `The link's ${linkParam} parameter ${what} Fill in the form above to make a new link.`;
+    err.textContent = `The study link you opened ${what} Fill in the form above to make a new link.`;
   };
   // Returns the addresses filled, each as [label, the field's value] in the
   // form's order, the label named as the form shows it.
   async function prefill() {
     const filled = [];
     if (opened.has('c') && opened.has('z')) {
-      err.textContent = 'The link carries both a c and a z parameter. Fill in the form above to make a new link.';
+      err.textContent = 'The study link you opened holds its setup twice, in two forms, and a study link holds it once. Fill in the form above to make a new link.';
       return filled;
     }
     const param = opened.get(linkParam);
@@ -779,7 +772,7 @@
     let config;
     if (linkParam === 'z') {
       if (!canInflate()) {
-        refuse('could not be read, because this browser cannot decompress it.');
+        refuse('could not be read, because this browser cannot unpack it.');
         return filled;
       }
       try {
@@ -867,7 +860,7 @@
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
       kindSelect.value = store.kind;
       if (store.kind === 'webhook') {
-        address('store', 'Address', store.url);
+        address('store', 'Web address', store.url);
       } else {
         address('supabaseUrl', 'Project URL', store.url);
         text('supabaseKey', store.key);
@@ -1095,14 +1088,14 @@
       try {
         m = JSON.parse(text);
       } catch {
-        refuseAt('The module descriptor is not JSON.', f.elements.module);
+        refuseAt('The module file could not be used: it is not JSON.', f.elements.module);
         return;
       }
       // The same checks the form page runs on the link, so a bad descriptor
       // is refused here, at the researcher, and never at a participant.
       // Under a list the module applies to its HiTOP-SR row.
       if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
-        refuseAt('The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.', f.elements.module);
+        refuseAt('The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.', f.elements.module);
         return;
       }
       try {

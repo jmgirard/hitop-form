@@ -144,7 +144,7 @@ for (const probe of REFUSED) {
 test('a module beside rows without the HiTOP-SR is refused', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   const { err, href } = await build(page, ['hitopbr', 'pid5bf'], { module: await readDescriptor('module-plain.json') });
-  expect(err).toBe('The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.');
+  expect(err).toBe('The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.');
   expect(href).toBe('');
 });
 
@@ -152,7 +152,7 @@ test('a module of another instrument beside rows with the HiTOP-SR is refused na
   await page.goto(`${base()}link.html`);
   const module = { ...(await readDescriptor('module-plain.json')), instrument: 'hitopbr' };
   const { err } = await build(page, ['hitopbr', 'hitopsr'], { module });
-  expect(err).toBe('The module descriptor could not be used: its instrument is "hitopbr" and the link\'s is "hitopsr".');
+  expect(err).toBe('The module file could not be used: its instrument is "hitopbr" and the link\'s is "hitopsr".');
 });
 
 test('a module beside rows with the HiTOP-SR is accepted', async ({ page }) => {
@@ -200,53 +200,53 @@ const OPENED_REFUSED = [
   {
     name: 'both fields',
     config: { instrument: 'hitopbr', instruments: ['hitopbr', 'pid5bf'] },
-    why: "The link's c parameter carries both an instrument field and an instruments field. Fill in the form above to make a new link.",
+    why: "The study link you opened carries both an instrument field and an instruments field. Fill in the form above to make a new link.",
   },
   {
     name: 'four names',
     config: { instruments: ['hitopbr', 'hitopsr', 'pid5bf', 'pid5'] },
-    why: "The link's c parameter holds an instruments field that could not be used: it names 4 instruments, and a list names 2 or 3. Fill in the form above to make a new link.",
+    why: "The study link you opened holds an instruments field that could not be used: it names 4 instruments, and a list names 2 or 3. Fill in the form above to make a new link.",
   },
   {
     name: 'two PID-5 forms',
     config: { instruments: ['pid5', 'pid5bf'] },
-    why: 'The link\'s c parameter holds an instruments field that could not be used: it names "pid5" and "pid5bf", two forms of the PID-5, and a list holds one. Fill in the form above to make a new link.',
+    why: 'The study link you opened holds an instruments field that could not be used: it names "pid5" and "pid5bf", two forms of the PID-5, and a list holds one. Fill in the form above to make a new link.',
   },
   {
     name: 'a list of one',
     config: { instruments: ['hitopbr'] },
-    why: "The link's c parameter holds an instruments field that could not be used: it names 1 instrument, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
+    why: "The study link you opened holds an instruments field that could not be used: it names 1 instrument, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
   },
   ...['hitopbr pid5bf', 5, null, { 0: 'hitopbr', 1: 'pid5bf' }].map((instruments) => ({
     name: `the value ${JSON.stringify(instruments)}`,
     config: { instruments },
-    why: `The link's c parameter holds an instruments field that could not be used: it is not a list, and it is ${JSON.stringify(instruments)}. Fill in the form above to make a new link.`,
+    why: `The study link you opened holds an instruments field that could not be used: it is not a list, and it is ${JSON.stringify(instruments)}. Fill in the form above to make a new link.`,
   })),
   {
     name: 'an empty list',
     config: { instruments: [] },
-    why: "The link's c parameter holds an instruments field that could not be used: it names 0 instruments, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
+    why: "The study link you opened holds an instruments field that could not be used: it names 0 instruments, and a list names 2 or 3. For one instrument, use the instrument field. Fill in the form above to make a new link.",
   },
   {
     name: 'an unknown name',
     config: { instruments: ['hitopbr', 'pid5x'] },
-    why: 'The link\'s c parameter holds an instruments field that could not be used: entry 2 is "pid5x", an instrument this page does not know. Fill in the form above to make a new link.',
+    why: 'The study link you opened holds an instruments field that could not be used: entry 2 is "pid5x", an instrument this page does not know. Fill in the form above to make a new link.',
   },
   // A list as an entry is not a name, even where it holds one.
   ...[['hitopbr', ['hitopbr']], ['pid5', ['pid5bf']]].map((instruments) => ({
     name: `the entry ${JSON.stringify(instruments[1])}`,
     config: { instruments },
-    why: `The link's c parameter holds an instruments field that could not be used: entry 2 is ${JSON.stringify(instruments[1])}, an instrument this page does not know. Fill in the form above to make a new link.`,
+    why: `The study link you opened holds an instruments field that could not be used: entry 2 is ${JSON.stringify(instruments[1])}, an instrument this page does not know. Fill in the form above to make a new link.`,
   })),
   {
     name: 'a repeated name',
     config: { instruments: ['pid5bf', 'hitopbr', 'pid5bf'] },
-    why: 'The link\'s c parameter holds an instruments field that could not be used: it names "pid5bf" twice, as entry 1 and entry 3. Fill in the form above to make a new link.',
+    why: 'The study link you opened holds an instruments field that could not be used: it names "pid5bf" twice, as entry 1 and entry 3. Fill in the form above to make a new link.',
   },
   {
     name: 'three PID-5 forms',
     config: { instruments: ['pid5', 'pid5sf', 'pid5bf'] },
-    why: 'The link\'s c parameter holds an instruments field that could not be used: it names "pid5", "pid5sf" and "pid5bf", three forms of the PID-5, and a list holds one. Fill in the form above to make a new link.',
+    why: 'The study link you opened holds an instruments field that could not be used: it names "pid5", "pid5sf" and "pid5bf", three forms of the PID-5, and a list holds one. Fill in the form above to make a new link.',
   },
 ];
 
@@ -261,6 +261,6 @@ for (const probe of OPENED_REFUSED) {
 
 test('an opened z link with a list the form page refuses is refused by name', async ({ page }) => {
   await page.goto(`${base()}link.html?z=${encodeCompressed({ instruments: ['pid5sf', 'pid5'], study: 'filled' })}`);
-  await expect(page.locator('#err')).toHaveText('The link\'s z parameter holds an instruments field that could not be used: it names "pid5sf" and "pid5", two forms of the PID-5, and a list holds one. Fill in the form above to make a new link.');
+  await expect(page.locator('#err')).toHaveText('The study link you opened holds an instruments field that could not be used: it names "pid5sf" and "pid5", two forms of the PID-5, and a list holds one. Fill in the form above to make a new link.');
   expect(await menuValues(page)).toEqual(['hitopsr']);
 });
