@@ -177,9 +177,13 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The online form then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <span class="hint">HiTOP-SR only. Choose or paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The online form then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
+    <label>Choose the module file
+      <input type="file" id="moduleFile" accept=".json,application/json">
+    </label>
+    <p role="alert" id="moduleFileErr" tabindex="-1"></p>
     <label class="check">
       <input name="shuffle" type="checkbox" value="true">
       Show the items in a random order
@@ -508,7 +512,9 @@
       return [...questionList.children].map((group) => group.querySelector('legend').textContent);
     }
     const held = [];
-    for (const c of section.querySelectorAll('input, select, textarea')) {
+    // A file input holds no setting of its own: the module file it reads
+    // lands in the "Module file" box, which is listed.
+    for (const c of section.querySelectorAll('input:not([type=file]), select, textarea')) {
       if (c.closest('[hidden]') !== null) continue;
       const value = c.classList.contains('prose') ? c.value : c.value.trim();
       if (c.type === 'checkbox' ? c.checked : value !== '') held.push(labelText(c));
@@ -628,6 +634,29 @@
   }
 
   addQuestion.addEventListener('click', () => addGroup().querySelector('select').focus());
+
+  // "Choose the module file" reads the chosen file in this browser and puts
+  // its text in the "Module file" box, as a paste would. "Make the link"
+  // checks the text there, so a file and a paste are refused alike. The
+  // control's change event hides a built link, as any change in the form
+  // does, and the control is emptied after each read, so choosing the same
+  // file again reads it again. The box is filled by script, which fires no
+  // event, so the section's summary is written again here.
+  const moduleFile = document.getElementById('moduleFile');
+  const moduleFileErr = document.getElementById('moduleFileErr');
+  moduleFile.addEventListener('change', async () => {
+    const file = moduleFile.files[0];
+    if (file === undefined) return;
+    moduleFileErr.textContent = '';
+    try {
+      f.elements.module.value = await file.text();
+      showHeld();
+    } catch {
+      moduleFileErr.textContent = 'The module file could not be read.';
+    } finally {
+      moduleFile.value = '';
+    }
+  });
 
   // "Load questions from a file" reads the chosen file in this browser with
   // readQuestionsCsv() and puts its questions in place of the editor's, the
