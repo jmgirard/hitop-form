@@ -241,7 +241,7 @@ for (const r of REFUSALS) {
 for (const probe of [
   { name: 'a project URL holding "table"', url: 'https://supabase.com/dashboard/project/x/editor/table', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
   { name: 'a project URL holding "key"', url: 'http://example.org/key', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
-  { name: 'an empty key', url: 'https://abcdefghijkl.supabase.co', key: ' ', table: 'responses', field: 'supabaseKey', message: /^Where responses go could not be used: it names no key|its key/ },
+  { name: 'an empty key', url: 'https://abcdefghijkl.supabase.co', key: ' ', table: 'responses', field: 'supabaseKey', message: /^Where responses go could not be used: (it names no key|its key is empty)\.$/ },
   { name: 'a bad table name', url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_x', table: 'Responses', field: 'supabaseTable', message: /^Where responses go could not be used: its table/ },
   { name: 'a project URL quoting ": its table"', url: 'abc: its table', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
   { name: 'a project URL quoting ": it names no key"', url: 'abc: it names no key', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
@@ -623,6 +623,10 @@ test('every README link on the page names a README heading', async ({ page }) =>
   // Each opens in a new tab, so what the researcher typed stays put.
   const targets = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => `${a.target} ${a.rel}`));
   expect(targets.filter((t) => t !== '_blank noopener')).toEqual([]);
+  // So does the link back to the package documentation above the heading.
+  const up = page.locator('.upnav a');
+  await expect(up).toHaveAttribute('target', '_blank');
+  await expect(up).toHaveAttribute('rel', 'noopener');
 });
 
 // A built link goes once a field changes, a questions file loads, or a row

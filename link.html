@@ -492,9 +492,9 @@
   // its legend.
   const SECTIONS = [...f.querySelectorAll('details.optional')];
 
-  // The links in the intro, the hints and the SQL block open a new tab, so
-  // what the researcher typed stays on this one.
-  for (const a of document.querySelectorAll('#intro a, #f a, #sqlBlock a')) {
+  // The links in the top bar, the intro, the hints and the SQL block open a
+  // new tab, so what the researcher typed stays on this one.
+  for (const a of document.querySelectorAll('.upnav a, #intro a, #f a, #sqlBlock a')) {
     a.target = '_blank';
     a.rel = 'noopener';
   }
