@@ -238,7 +238,7 @@
     </div>
     </details>
     <p role="alert" id="err" tabindex="-1"></p>
-    <p><button type="submit">Make the link</button></p>
+    <p><button type="submit" disabled autocomplete="off">Make the link</button></p>
   </form>
   <section id="result" aria-labelledby="resultHeading" hidden>
     <h2 id="resultHeading" tabindex="-1">Your study link</h2>
@@ -963,6 +963,13 @@
     setInstruments([OFFERED[0][0]]);
     refuse('could not be read.');
   }
+  // "Make the link" is disabled in the markup until here, so a press before
+  // the submit handler below exists submits nothing. A disabled default
+  // button also stops Enter in a field from submitting the form. The
+  // markup's autocomplete="off" stops Firefox from keeping the enabled
+  // state across a reload.
+  const makeButton = f.querySelector('button[type="submit"]');
+  makeButton.disabled = false;
   showKind();
   showSite();
   // A section the opened link filled a field of opens; the rest stay closed.
@@ -973,8 +980,6 @@
   // when it holds text, else to the notice when it shows.
   if (err.textContent !== '') err.focus();
   else if (!notice.hidden) notice.focus();
-
-  const makeButton = f.querySelector('button[type="submit"]');
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
