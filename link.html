@@ -322,18 +322,36 @@
   const addInstrument = document.getElementById('addInstrument');
 
   // Each row's label and the names of its three buttons carry its number,
-  // counted from 1 in the list's order.
+  // counted from 1 in the list's order, each name starting with the
+  // button's own text. Move up is disabled on the first row, Move down on
+  // the last, and Remove while one row is left.
   function renumberInstruments() {
     const rows = [...instrumentList.children];
     rows.forEach((row, k) => {
       const n = k + 1;
       row.querySelector('.label').textContent = `Instrument ${n}`;
-      row.querySelector('.up').setAttribute('aria-label', `Move instrument ${n} up`);
-      row.querySelector('.down').setAttribute('aria-label', `Move instrument ${n} down`);
-      row.querySelector('.remove').setAttribute('aria-label', `Remove instrument ${n}`);
+      setMoves(row, `instrument ${n}`, k === 0, k === rows.length - 1);
       row.querySelector('.remove').disabled = rows.length === 1;
     });
     addInstrument.disabled = rows.length >= INSTRUMENTS_MAX;
+  }
+
+  // The names and the disabled state of a row's or a group's Move up and
+  // Move down, and the name of its Remove.
+  function setMoves(node, what, first, last) {
+    const up = node.querySelector('.up');
+    const down = node.querySelector('.down');
+    up.setAttribute('aria-label', `Move up ${what}`);
+    down.setAttribute('aria-label', `Move down ${what}`);
+    node.querySelector('.remove').setAttribute('aria-label', `Remove ${what}`);
+    up.disabled = first;
+    down.disabled = last;
+  }
+
+  // After a move, focus stays on the pressed button, or goes to the other
+  // move button when the pressed one is now disabled.
+  function focusMove(pressed, other) {
+    (pressed.disabled ? other : pressed).focus();
   }
 
   // A new row at the end, its menu set to `stem`, or to the first of the
@@ -354,12 +372,12 @@
     const up = button('Move up', () => {
       if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
       renumberInstruments();
-      up.focus();
+      focusMove(up, down);
     });
     const down = button('Move down', () => {
       if (row.nextElementSibling) instrumentList.insertBefore(row.nextElementSibling, row);
       renumberInstruments();
-      down.focus();
+      focusMove(down, up);
     });
     const remove = button('Remove', () => {
       const next = row.nextElementSibling ?? row.previousElementSibling;
@@ -438,15 +456,16 @@
     group.querySelector('.bounds').hidden = type !== 'number';
   }
 
-  // Each group's legend and the names of its three move buttons carry its
-  // number, counted from 1 in the editor's order.
+  // Each group's legend and the names of its three buttons carry its number,
+  // counted from 1 in the editor's order. Move up is disabled on the first
+  // group and Move down on the last. Remove stays enabled, since the editor
+  // may be emptied.
   function renumber() {
-    [...questionList.children].forEach((group, k) => {
+    const groups = [...questionList.children];
+    groups.forEach((group, k) => {
       const n = k + 1;
       group.querySelector('legend').textContent = `Question ${n}`;
-      group.querySelector('.up').setAttribute('aria-label', `Move question ${n} up`);
-      group.querySelector('.down').setAttribute('aria-label', `Move question ${n} down`);
-      group.querySelector('.remove').setAttribute('aria-label', `Remove question ${n}`);
+      setMoves(group, `question ${n}`, k === 0, k === groups.length - 1);
     });
     showHeld();
   }
@@ -538,12 +557,12 @@
     const up = button('Move up', () => {
       if (group.previousElementSibling) questionList.insertBefore(group, group.previousElementSibling);
       renumber();
-      up.focus();
+      focusMove(up, down);
     });
     const down = button('Move down', () => {
       if (group.nextElementSibling) questionList.insertBefore(group.nextElementSibling, group);
       renumber();
-      down.focus();
+      focusMove(down, up);
     });
     const remove = button('Remove', () => {
       const next = group.nextElementSibling ?? group.previousElementSibling;

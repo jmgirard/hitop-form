@@ -85,10 +85,10 @@ test('the list opens with one row and grows to three', async ({ page }) => {
 test('Move up, Move down and Remove reorder and drop rows', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   await chooseInstruments(page, ['hitopbr', 'pid5bf', 'hitopsr']);
-  await page.getByRole('button', { name: 'Move instrument 3 up' }).click();
+  await page.getByRole('button', { name: 'Move up instrument 3' }).click();
   expect(await menuValues(page)).toEqual(['hitopbr', 'hitopsr', 'pid5bf']);
-  await expect(page.getByRole('button', { name: 'Move instrument 2 up' })).toBeFocused();
-  await page.getByRole('button', { name: 'Move instrument 1 down' }).click();
+  await expect(page.getByRole('button', { name: 'Move up instrument 2' })).toBeFocused();
+  await page.getByRole('button', { name: 'Move down instrument 1' }).click();
   expect(await menuValues(page)).toEqual(['hitopsr', 'hitopbr', 'pid5bf']);
   await page.getByRole('button', { name: 'Remove instrument 2' }).click();
   expect(await menuValues(page)).toEqual(['hitopsr', 'pid5bf']);

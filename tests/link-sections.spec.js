@@ -16,6 +16,12 @@
 //       holds it, whose summary lists the field's label; the other sections
 //       stay closed. A link that sets no optional field leaves every
 //       section closed
+//   S6: on the instrument rows and the question groups, Move up is disabled
+//       on the first and Move down on the last; a single instrument row has
+//       all three buttons disabled; each button's accessible name begins
+//       with its visible text. Checked for 1, 2 and 3 rows and groups as
+//       added, and again after a move, a removal, a prefill from a study
+//       link and a questions file load
 
 import { test, expect } from '@playwright/test';
 import { useTarget, encodeConfig, encodeCompressed, readDescriptor } from './helpers.mjs';
@@ -265,6 +271,96 @@ for (const one of ONE_FIELD) {
     }
   });
 }
+
+// S6: the expected state of every button in a list of n rows or groups,
+// stated from the rule, not read from the page.
+const LISTS = {
+  instrument: { rows: '#instrumentList .instrument-row', singleRemove: true },
+  question: { rows: '#questionList fieldset.question-edit', singleRemove: false },
+};
+
+async function expectButtons(page, kind, n) {
+  const rows = page.locator(LISTS[kind].rows);
+  await expect(rows).toHaveCount(n);
+  for (let k = 0; k < n; k++) {
+    const row = rows.nth(k);
+    const expected = {
+      up: k === 0,
+      down: k === n - 1,
+      remove: n === 1 && LISTS[kind].singleRemove,
+    };
+    for (const [cls, text] of [['up', 'Move up'], ['down', 'Move down'], ['remove', 'Remove']]) {
+      const b = row.locator(`.moves button.${cls}`);
+      await expect(b).toHaveText(text);
+      if (expected[cls]) await expect(b, `${kind} ${k + 1} ${text} disabled`).toBeDisabled();
+      else await expect(b, `${kind} ${k + 1} ${text} enabled`).toBeEnabled();
+      await expect(b).toHaveAccessibleName(`${text} ${kind} ${k + 1}`);
+    }
+  }
+}
+
+test('instrument rows: button states as rows are added, moved, removed and prefilled', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await expectButtons(page, 'instrument', 1);
+  const add = page.getByRole('button', { name: 'Add an instrument' });
+  await add.click();
+  await expectButtons(page, 'instrument', 2);
+  await add.click();
+  await expectButtons(page, 'instrument', 3);
+  // A move that makes the pressed button do nothing moves focus to the
+  // other move button of the same row.
+  await page.getByRole('button', { name: 'Move up instrument 2' }).click();
+  await expectButtons(page, 'instrument', 3);
+  await expect(page.getByRole('button', { name: 'Move down instrument 1' })).toBeFocused();
+  await page.getByRole('button', { name: 'Move down instrument 2' }).click();
+  await expectButtons(page, 'instrument', 3);
+  await expect(page.getByRole('button', { name: 'Move up instrument 3' })).toBeFocused();
+  await page.getByRole('button', { name: 'Remove instrument 3' }).click();
+  await expectButtons(page, 'instrument', 2);
+  await page.getByRole('button', { name: 'Remove instrument 1' }).click();
+  await expectButtons(page, 'instrument', 1);
+  for (const instruments of [['hitopbr', 'pid5bf'], ['hitopbr', 'pid5bf', 'hitopsr']]) {
+    await page.goto(`${base()}link.html?c=${encodeConfig({ instruments, study: 'x' })}`);
+    await expect(page.locator('#err')).toHaveText('');
+    await expectButtons(page, 'instrument', instruments.length);
+  }
+  await page.goto(`${base()}link.html?c=${encodeConfig({ instrument: 'pid5', study: 'x' })}`);
+  await expectButtons(page, 'instrument', 1);
+});
+
+const question = (k) => ({ name: `q${k}`, text: `Question text ${k}`, type: 'text' });
+const csvOf = (n) => ['list,name,text,type', ...Array.from({ length: n }, (_, k) => `before,q${k + 1},Question text ${k + 1},text`)].join('\n');
+
+test('question groups: button states as groups are added, moved, removed, prefilled and loaded', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await openSection(page, 'secQuestions');
+  const add = page.getByRole('button', { name: 'Add a question' });
+  for (const n of [1, 2, 3]) {
+    await add.click();
+    await expectButtons(page, 'question', n);
+  }
+  await page.getByRole('button', { name: 'Move up question 2', exact: true }).click();
+  await expectButtons(page, 'question', 3);
+  await expect(page.getByRole('button', { name: 'Move down question 1', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Move down question 2', exact: true }).click();
+  await expectButtons(page, 'question', 3);
+  await expect(page.getByRole('button', { name: 'Move up question 3', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Remove question 2', exact: true }).click();
+  await expectButtons(page, 'question', 2);
+  await page.getByRole('button', { name: 'Remove question 1', exact: true }).click();
+  await expectButtons(page, 'question', 1);
+  for (const n of [1, 2, 3]) {
+    await page.locator('#questionsFile').setInputFiles({ name: `q${n}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csvOf(n)) });
+    await expect(page.locator('#questionsStatus')).toHaveText(`Loaded ${n} ${n === 1 ? 'question' : 'questions'} from q${n}.csv.`);
+    await expectButtons(page, 'question', n);
+  }
+  for (const n of [1, 2, 3]) {
+    const before = Array.from({ length: n }, (_, k) => question(k + 1));
+    await page.goto(`${base()}link.html?z=${encodeCompressed({ instrument: 'hitopbr', study: 'x', questions: { before } })}`);
+    await expect(page.locator('#err')).toHaveText('');
+    await expectButtons(page, 'question', n);
+  }
+});
 
 test('a link setting no optional field leaves every section closed', async ({ page }) => {
   const config = {

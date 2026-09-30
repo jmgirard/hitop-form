@@ -308,15 +308,15 @@ test('Move up, Move down and Remove reorder and renumber the questions', async (
   for (const name of ['a', 'b', 'c']) await addQ(page, { name, text: name.toUpperCase() });
   const names = () => page.$$eval('fieldset.question-edit', (gs) => gs.map((g) => `${g.querySelector('legend').textContent}:${g.querySelector('[name=qName]').value}`));
   // Each button's accessible name carries its question's number.
-  await page.getByRole('button', { name: 'Move question 3 up', exact: true }).click();
+  await page.getByRole('button', { name: 'Move up question 3', exact: true }).click();
   expect(await names()).toEqual(['Question 1:a', 'Question 2:c', 'Question 3:b']);
-  await expect(page.getByRole('button', { name: 'Move question 2 up', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Move up question 2', exact: true })).toBeFocused();
   await expect(group(page, 2).locator('.up')).toHaveText('Move up');
-  await page.getByRole('button', { name: 'Move question 1 down', exact: true }).click();
+  await page.getByRole('button', { name: 'Move down question 1', exact: true }).click();
   expect(await names()).toEqual(['Question 1:c', 'Question 2:a', 'Question 3:b']);
-  await expect(page.getByRole('button', { name: 'Move question 2 down', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: 'Move question 1 up', exact: true }).click();
-  expect(await names()).toEqual(['Question 1:c', 'Question 2:a', 'Question 3:b']);
+  await expect(page.getByRole('button', { name: 'Move down question 2', exact: true })).toBeFocused();
+  // The first group's Move up does nothing, so it is disabled.
+  await expect(page.getByRole('button', { name: 'Move up question 1', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Remove question 2', exact: true }).click();
   expect(await names()).toEqual(['Question 1:c', 'Question 2:b']);
   await expect(group(page, 2).locator('[name=qList]')).toBeFocused();
