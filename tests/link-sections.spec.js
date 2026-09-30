@@ -224,6 +224,27 @@ for (const r of REFUSALS) {
   });
 }
 
+// S3: a Supabase refusal focuses the field it names, even when the project
+// URL it quotes holds the word "table" or "key".
+for (const probe of [
+  { name: 'a project URL holding "table"', url: 'https://supabase.com/dashboard/project/x/editor/table', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
+  { name: 'a project URL holding "key"', url: 'http://example.org/key', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
+  { name: 'an empty key', url: 'https://abcdefghijkl.supabase.co', key: ' ', table: 'responses', field: 'supabaseKey', message: /^Where responses go could not be used: it names no key|its key/ },
+  { name: 'a bad table name', url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_x', table: 'Responses', field: 'supabaseTable', message: /^Where responses go could not be used: its table/ },
+]) {
+  test(`a Supabase refusal for ${probe.name} focuses ${probe.field}`, async ({ page }) => {
+    await page.goto(`${base()}link.html`);
+    await page.locator('input[name="study"]').fill('sections');
+    await page.locator('select[name="storeKind"]').selectOption('supabase');
+    await page.locator('input[name="supabaseUrl"]').fill(probe.url);
+    await page.locator('input[name="supabaseKey"]').fill(probe.key);
+    await page.locator('input[name="supabaseTable"]').fill(probe.table);
+    await make(page).click();
+    await expect(page.locator('#err')).toHaveText(probe.message);
+    await expect(page.locator(`input[name="${probe.field}"]`)).toBeFocused();
+  });
+}
+
 // S4
 for (const width of [375, 1280]) {
   test(`at ${width}px wide with every section open, nothing is wider than the page`, async ({ page }) => {

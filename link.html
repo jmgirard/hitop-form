@@ -177,7 +177,7 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The page then shows only the module's items, in its printed order. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The page then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
@@ -1119,14 +1119,17 @@
             key: data.get('supabaseKey').trim(),
             table: data.get('supabaseTable').trim(),
           };
-      // The refused field is read from the message: a key or a table
-      // fault names it, and any other Supabase fault is the project URL's.
+      // The refused field is read from the message: a key or a table fault
+      // opens its reason with "its key", "it names no key", "its table" or
+      // "it names no table", and any other Supabase fault is the project
+      // URL's. Only that opening is read, since a URL the message quotes can
+      // hold either word.
       try {
         config.store = checkStore(store);
       } catch (e) {
         const name = kind === 'webhook' ? 'store'
-          : /\bkey\b/.test(e.message) ? 'supabaseKey'
-          : /\btable\b/.test(e.message) ? 'supabaseTable' : 'supabaseUrl';
+          : /: (its|it names no) key\b/.test(e.message) ? 'supabaseKey'
+          : /: (its|it names no) table\b/.test(e.message) ? 'supabaseTable' : 'supabaseUrl';
         refuseAt(e.message, f.elements[name]);
         return;
       }
