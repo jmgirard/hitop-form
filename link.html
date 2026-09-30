@@ -649,12 +649,15 @@
   // ends with its stale message. The status line under the control names
   // the file read, and an edit to the box clears it. Each read is numbered,
   // and only the latest one fills the box, so an earlier file whose read
-  // ends last does not overwrite a later choice.
+  // ends last does not overwrite a later choice. An edit to the box counts
+  // as a later choice too: a read still running when the researcher types
+  // drops its text.
   const moduleFile = document.getElementById('moduleFile');
   const moduleFileErr = document.getElementById('moduleFileErr');
   const moduleFileStatus = document.getElementById('moduleFileStatus');
   let moduleReads = 0;
   f.elements.module.addEventListener('input', () => {
+    moduleReads += 1;
     moduleFileErr.textContent = '';
     moduleFileStatus.textContent = '';
   });

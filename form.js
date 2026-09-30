@@ -1042,9 +1042,10 @@ export function checkModule(m, instrument) {
   if (m === null || typeof m !== 'object' || Array.isArray(m)) throw bad('it is not an object.');
   // The instrument export has the same top-level shape (a `format`, an
   // `items` list) but names its instrument as `stem` and its items as
-  // objects; a pasted export is named as such rather than as a bad descriptor.
+  // objects; an export, pasted or chosen as a file, is named as such rather
+  // than as a bad descriptor.
   if (m.instrument === undefined && typeof m.stem === 'string' && Array.isArray(m.items)) {
-    throw bad('it is the instrument export, not a module file. Paste the file that the Module Builder or write_module() saved.');
+    throw bad('it is the instrument export, not a module file. Use the file that the Module Builder or write_module() saved.');
   }
   if (m.format !== MODULE_FORMAT) {
     throw bad(`this page reads format "${MODULE_FORMAT}" and found ${m.format === undefined ? 'no format field' : `format ${JSON.stringify(m.format)}`}.`);
