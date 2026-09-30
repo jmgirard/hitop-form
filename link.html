@@ -238,7 +238,7 @@
     </div>
     </details>
     <p role="alert" id="err" tabindex="-1"></p>
-    <p><button type="submit">Make the link</button></p>
+    <p><button type="submit" disabled autocomplete="off">Make the link</button></p>
   </form>
   <section id="result" aria-labelledby="resultHeading" hidden>
     <h2 id="resultHeading" tabindex="-1">Your study link</h2>
@@ -504,10 +504,16 @@
     a.target = '_blank';
     a.rel = 'noopener';
   }
+  // A field's label as the page shows it: the text of the label's own
+  // children, less its hint and its controls. It is read in place, since
+  // the summaries are drawn again on every keystroke.
   function labelText(control) {
-    const copy = control.closest('label').cloneNode(true);
-    copy.querySelectorAll('.hint, input, select, textarea').forEach((n) => n.remove());
-    return copy.textContent.replace(/\s+/g, ' ').trim();
+    let text = '';
+    for (const n of control.closest('label').childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) text += n.data;
+      else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) text += n.textContent;
+    }
+    return text.replace(/\s+/g, ' ').trim();
   }
   function heldLabels(section) {
     if (section.id === 'secQuestions') {
@@ -649,12 +655,15 @@
   // ends with its stale message. The status line under the control names
   // the file read, and an edit to the box clears it. Each read is numbered,
   // and only the latest one fills the box, so an earlier file whose read
-  // ends last does not overwrite a later choice.
+  // ends last does not overwrite a later choice. An edit to the box counts
+  // as a later choice too: a read still running when the researcher types
+  // drops its text.
   const moduleFile = document.getElementById('moduleFile');
   const moduleFileErr = document.getElementById('moduleFileErr');
   const moduleFileStatus = document.getElementById('moduleFileStatus');
   let moduleReads = 0;
   f.elements.module.addEventListener('input', () => {
+    moduleReads += 1;
     moduleFileErr.textContent = '';
     moduleFileStatus.textContent = '';
   });
@@ -790,8 +799,9 @@
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
     // The check names each question as it reaches it, so the last group
     // named and the field key are the refused ones. The refusal carries
-    // that group's control as `control`, its first control when the fault
-    // names no field.
+    // that group's control for the field as `control`. A fault that names
+    // no question, or a field outside QUESTION_CONTROLS, carries none, and
+    // focus goes to the message.
     let group;
     let key;
     try {
@@ -807,12 +817,17 @@
         },
       });
     } catch (e) {
-      if (group !== undefined) e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key] ?? 'qList'}]`);
+      if (group !== undefined && Object.hasOwn(QUESTION_CONTROLS, key)) {
+        e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key]}]`);
+      }
       throw e;
     }
   }
+  // The fields the editor can hand the check a fault in. Its menus offer
+  // only the list and the types the check takes, and its box only sets
+  // required to true, so those three fields never fault from here.
   const QUESTION_CONTROLS = {
-    name: 'qName', text: 'qText', type: 'qType', options: 'qOptions', min: 'qMin', max: 'qMax', required: 'qRequired',
+    name: 'qName', text: 'qText', options: 'qOptions', min: 'qMin', max: 'qMax',
   };
 
   // A study link's own `c` or `z` parameter, opened on this page, fills the
@@ -826,14 +841,15 @@
   // per entry. A field of a type its control does not take
   // is skipped and the rest are filled; the form page's own checks refuse
   // such a link when it is opened. Nothing is fetched. A throw past these
-  // checks (a module nested deep enough to stop JSON.stringify) is
-  // the first refusal with the form reset, so the script reaches its submit
-  // handler and no field keeps a part of the config. A `c` accepted here can
+  // checks (a module nested deep enough to stop JSON.stringify), or in the
+  // setup steps that follow the prefill, is the first refusal with the form
+  // reset, so the script reaches its submit handler and no field keeps a
+  // part of the config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
   // responses go, where the participant is sent or pointed at the end) is
   // listed in a notice above the form, as text, for the researcher to check.
-  // The notice is written only once prefill() has returned, so a throw
-  // leaves none.
+  // The notice is written only once prefill() and the setup steps have
+  // run, so a throw leaves none.
   const opened = new URLSearchParams(window.location.search);
   const linkParam = opened.has('z') ? 'z' : 'c';
   const refuse = (what) => {
@@ -949,8 +965,15 @@
     }
     return filled;
   }
+  // The setup steps that show the filled form run inside the same guard as
+  // the prefill, and the notice is written after them.
   try {
     const filled = await prefill();
+    showKind();
+    showSite();
+    // A section the opened link filled a field of opens; the rest stay closed.
+    showHeld();
+    for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
     for (const [label, value] of filled) {
       const li = document.createElement('li');
       li.textContent = `${label}: ${value}`;
@@ -961,20 +984,33 @@
     f.reset();
     questionList.replaceChildren();
     setInstruments([OFFERED[0][0]]);
+    // The setup steps may have run in part. What they show is set here for
+    // the emptied form by hand, since running them again could throw again:
+    // no site hint, other-site field or destination fields, every summary
+    // "Not used" and every section closed.
+    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'webhookFields', 'supabaseFields']) {
+      document.getElementById(id).hidden = true;
+    }
+    siteSelect.removeAttribute('aria-describedby');
+    for (const section of SECTIONS) {
+      section.querySelector('.sec-state').textContent = 'Not used';
+      section.open = false;
+    }
     refuse('could not be read.');
   }
-  showKind();
-  showSite();
-  // A section the opened link filled a field of opens; the rest stay closed.
-  showHeld();
-  for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
+  // "Make the link" is disabled in the markup until here, so a press before
+  // the submit handler below exists submits nothing. A disabled default
+  // button also stops Enter in a field from submitting the form. The
+  // markup's autocomplete="off" is there because MDN's <button> page says
+  // Firefox keeps a button's changed disabled state across page loads
+  // without it. The tests run Chromium only, so they do not check this.
+  const makeButton = f.querySelector('button[type="submit"]');
+  makeButton.disabled = false;
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
   // when it holds text, else to the notice when it shows.
   if (err.textContent !== '') err.focus();
   else if (!notice.hidden) notice.focus();
-
-  const makeButton = f.querySelector('button[type="submit"]');
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -1022,7 +1058,10 @@
           label: (name) => INSTRUMENTS[name] ?? JSON.stringify(name),
         });
       } catch (e) {
-        refuseAt(e.message, instrumentList.querySelector('select'));
+        // The row at fault: the later of a repeated instrument, or the
+        // second PID-5 form. A fault with no row focuses the first.
+        const rows = instrumentList.querySelectorAll('select');
+        refuseAt(e.message, rows[e.index] ?? rows[0]);
         return;
       }
     }
@@ -1276,14 +1315,14 @@
   // or else test the link and hand it out.
   const SITE_NAMES = { prolific: 'Prolific', sona: 'SONA', connect: 'CloudResearch Connect', other: 'your recruiting site' };
   function nextStep(site, supabase) {
-    const sql = 'Run the SQL below once in your Supabase project\'s SQL editor';
+    const runSql = 'Run the SQL below once in your Supabase project\'s SQL editor';
     if (supabase && !(site in SITE_NAMES)) {
-      return `${sql}, then open the link once to test it and give it to each participant.`;
+      return `${runSql}, then open the link once to test it and give it to each participant.`;
     }
     const then = site in SITE_NAMES
       ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
       : 'open the link once to test it, and then give it to each participant.';
-    if (supabase) return `${sql} before you ${then}`;
+    if (supabase) return `${runSql} before you ${then}`;
     return then.charAt(0).toUpperCase() + then.slice(1);
   }
 

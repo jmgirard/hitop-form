@@ -124,11 +124,17 @@
 //  L33: a participant field prefilled from a c with an unpaired surrogate is
 //       refused and no link is built; a participant holding U+1F600
 //       round-trips
+//  L34: "Make the link" carries disabled and autocomplete="off" in the
+//       markup. While a z link's unpacking waits, and while the request
+//       for form.js waits, a forced click on the button and Enter in the
+//       study name box change no address and start no navigation; once the
+//       wait ends, a press shows "Your study link". The button is enabled
+//       after a load with no link, a refused link and a filled one
 
 import { test, expect } from '@playwright/test';
 import {
   useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1095,3 +1101,101 @@ test('the recruiting-site menu is described by the chosen site\'s hint', async (
   await menu.selectOption('sona');
   await expect(menu).toHaveAccessibleDescription(/The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code/);
 });
+
+// L34: "Make the link" does nothing until the prefill ends. Before the
+// script's submit handler is added, a press would submit the form as HTML
+// does, a GET to this page that loses what was typed.
+test('"Make the link" carries disabled and autocomplete="off" in the markup', async ({ page }) => {
+  const html = await (await page.request.get(`${base()}link.html`)).text();
+  const tag = html.match(/<button type="submit"[^>]*>Make the link<\/button>/);
+  expect(tag, 'the button is in the markup').not.toBeNull();
+  expect(tag[0]).toMatch(/\sdisabled[\s>]/);
+  expect(tag[0]).toMatch(/\sautocomplete="off"[\s>]/);
+});
+
+// Presses the button with a forced click, since a disabled button is not
+// clickable, and Enter in the study name box, then checks that the address
+// is still `at` and that no navigation request started. The wait gives a
+// submit time to reach the network.
+async function pressEarly(page, at, navigations) {
+  await page.getByRole('button', { name: 'Make the link' }).click({ force: true });
+  await page.locator('input[name="study"]').press('Enter');
+  await page.waitForTimeout(500);
+  expect(page.url()).toBe(at);
+  expect(navigations).toEqual([]);
+}
+
+function recordNavigations(page) {
+  const navigations = [];
+  page.on('request', (r) => {
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navigations.push(r.url());
+  });
+  return navigations;
+}
+
+test('a press while a z link unpacks does nothing, and a press after it builds', async ({ page }) => {
+  // The unpacked bytes are held until releaseUnpack() runs.
+  await page.addInitScript(() => {
+    const Real = DecompressionStream;
+    let release;
+    const released = new Promise((r) => { release = r; });
+    window.releaseUnpack = release;
+    window.DecompressionStream = class {
+      constructor(format) {
+        const real = new Real(format);
+        this.writable = real.writable;
+        this.readable = real.readable.pipeThrough(new TransformStream({
+          async transform(chunk, c) {
+            await released;
+            c.enqueue(chunk);
+          },
+        }));
+        window.unpackHeld = true;
+      }
+    };
+  });
+  const z = encodeCompressed({ instrument: 'hitopbr', study: 'early press' });
+  const at = `${base()}link.html?z=${z}`;
+  await page.goto(at, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.unpackHeld === true);
+  const navigations = recordNavigations(page);
+  await pressEarly(page, at, navigations);
+
+  await page.evaluate(() => window.releaseUnpack());
+  await expect(page.locator('input[name="study"]')).toHaveValue('early press');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
+});
+
+test('a press while form.js loads does nothing, and a press after it builds', async ({ page }) => {
+  let release;
+  const released = new Promise((r) => { release = r; });
+  let requested;
+  const seen = new Promise((r) => { requested = r; });
+  await page.route('**/form.js', async (route) => {
+    requested();
+    await released;
+    await route.continue();
+  });
+  const at = `${base()}link.html`;
+  await page.goto(at, { waitUntil: 'commit' });
+  await seen;
+  await page.locator('input[name="study"]').fill('early press');
+  const navigations = recordNavigations(page);
+  await pressEarly(page, at, navigations);
+
+  release();
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
+});
+
+for (const [name, search] of [
+  ['no link', ''],
+  ['a refused link', '?c=not-a-link'],
+  ['a filled link', `?c=${encodeConfig({ instrument: 'hitopbr', study: 'filled' })}`],
+]) {
+  test(`"Make the link" is enabled after a load with ${name}`, async ({ page }) => {
+    await page.goto(`${base()}link.html${search}`);
+    await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  });
+}

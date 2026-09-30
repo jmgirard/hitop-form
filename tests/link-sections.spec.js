@@ -41,6 +41,27 @@
 //       the declined-text hint gives both fixed sentences; the decline
 //       address takes {participant}; the saved-file address leaves the
 //       completion URL in force when responses arrive
+//  S10: with "Another site" chosen and one question of each type, 50
+//       characters put into each text input and box in the sections
+//       (typed where the field shows, sent as input events where the
+//       question's type hides it) make no cloneNode() call, and each
+//       summary lists its filled fields; the body of labelText() holds no
+//       copying method
+//  S11: when the last setup step after the prefill throws, after the
+//       earlier steps have shown a hint, a destination block, summaries
+//       and an open section, the message says the link was not read,
+//       every summary reads "Not used", every section is closed, no site
+//       hint or destination block is left unhidden, and a build with the
+//       study name filled shows "Your study link"
+//  S12: every refuseAt() call a grep of link.html lists is fired, with
+//       every section closed before the press: the message shows, and
+//       focus is on the control the call passes, its section open, or on
+//       the message when it passes none. A call whose control is chosen
+//       at run time is fired once per control: the instrument row at fault
+//       (a repeat and a second PID-5 form, each at rows 2 and 3), each
+//       question field in the page's control map and a fault with no
+//       question, and the four store fields. The fetch failure, the encode
+//       failure and the four stale-build refusals are among them
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -767,3 +788,579 @@ test('a link setting no optional field leaves every section closed', async ({ pa
     await expect(state(page, s.id)).toHaveText('Not used');
   }
 });
+
+// S10: the summaries are drawn with no copy of a control. Every
+// cloneNode() call on the page is counted from before its script runs.
+// The fields typed into: 5 text inputs and 3 boxes in the sections, and
+// 4 text inputs and 1 box per question, stated here rather than read from
+// the page.
+const TYPED_FIELDS = 5 + 3 + 4 * 5;
+test('typing in the sections copies no control', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = Node.prototype.cloneNode;
+    window.clones = 0;
+    Node.prototype.cloneNode = function (...args) {
+      window.clones += 1;
+      return real.apply(this, args);
+    };
+  });
+  await page.goto(`${base()}link.html`);
+  for (const s of SECTIONS) await openSection(page, s.id);
+  await page.locator('select[name="site"]').selectOption('other');
+  for (const [k, type] of ['text', 'number', 'choice', 'multi'].entries()) {
+    await page.getByRole('button', { name: 'Add a question' }).click();
+    await page.locator('select[name="qType"]').nth(k).selectOption(type);
+  }
+
+  const fields = page.locator('details.optional input[type=text], details.optional textarea');
+  expect(await fields.count()).toBe(TYPED_FIELDS);
+  const typed = 'x'.repeat(50);
+  for (let k = 0; k < TYPED_FIELDS; k++) {
+    const field = fields.nth(k);
+    if (await field.isVisible()) {
+      await field.pressSequentially(typed);
+    } else {
+      // A field its question's type hides takes the characters one input
+      // event at a time, as typing would give them.
+      await field.evaluate((node, text) => {
+        for (const ch of text) {
+          node.value += ch;
+          node.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }, typed);
+    }
+    await expect(field).toHaveValue(typed);
+  }
+  expect(await page.evaluate(() => window.clones)).toBe(0);
+
+  await expect(state(page, 'secParticipants')).toHaveText('Participant, Recruiting site, Address parameter');
+  await expect(state(page, 'secOrder')).toHaveText('Module file');
+  await expect(state(page, 'secConsent')).toHaveText('Consent text, Declined text, Completion URL after a decline');
+  await expect(state(page, 'secFinish')).toHaveText('Completion URL, Completion URL after a saved file');
+  await expect(state(page, 'secQuestions')).toHaveText('Question 1, Question 2, Question 3, Question 4');
+});
+
+test('labelText() uses no copying method', async ({ page }) => {
+  const html = await (await page.request.get(`${base()}link.html`)).text();
+  const body = html.match(/\n {2}function labelText\([^)]*\) \{\n([\s\S]*?)\n {2}\}\n/);
+  expect(body, 'labelText() is in the page').not.toBeNull();
+  expect(body[1].trim()).not.toBe('');
+  for (const name of ['cloneNode', 'importNode', 'cloneContents', 'innerHTML', 'outerHTML']) {
+    expect(body[1], name).not.toContain(name);
+  }
+});
+
+// S11: a throw in the setup steps after the prefill leaves a clean page.
+// The opened link sets SONA, a web address for the responses and consent
+// text. The throw is in the last setup step, the loop that opens filled
+// sections, when it opens the consent section. By then showKind() has shown
+// the web address block, showSite() the SONA hint, showHeld() the filled
+// summaries, and the loop has opened the participants section, so each
+// check below fails unless the catch undoes that step.
+test('a throw after the prefill leaves a clean page that still builds', async ({ page }) => {
+  await page.addInitScript(() => {
+    const { get, set } = Object.getOwnPropertyDescriptor(HTMLDetailsElement.prototype, 'open');
+    let thrown = false;
+    Object.defineProperty(HTMLDetailsElement.prototype, 'open', {
+      configurable: true,
+      get() { return get.call(this); },
+      set(value) {
+        if (value === true && this.id === 'secConsent' && !thrown) {
+          thrown = true;
+          window.participantsOpenAtThrow = document.getElementById('secParticipants').open;
+          throw new Error('planted setup throw');
+        }
+        set.call(this, value);
+      },
+    });
+  });
+  const config = {
+    instrument: 'hitopbr',
+    study: 'throw',
+    participantParam: 'id',
+    store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' },
+    consent: { text: 'I agree.' },
+  };
+  await page.goto(`${base()}link.html?z=${encodeCompressed(config)}`);
+  await expect(page.locator('#err')).toHaveText('The study link you opened could not be read. Fill in the form above to make a new link.');
+  // The throw came where the page was not clean.
+  expect(await page.evaluate(() => window.participantsOpenAtThrow)).toBe(true);
+  for (const s of SECTIONS) {
+    await expect(state(page, s.id), s.id).toHaveText('Not used');
+    expect(await isOpen(page, s.id), `${s.id} open`).toBe(false);
+  }
+  // The hints sit in a closed section, so each is checked by its own
+  // hidden flag rather than by whether it shows.
+  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'webhookFields', 'supabaseFields']) {
+    expect(await page.locator(`#${id}`).evaluate((node) => node.hidden), id).toBe(true);
+  }
+  await expect(page.locator('select[name="site"]')).not.toHaveAttribute('aria-describedby');
+  await page.locator('input[name="study"]').fill('after the throw');
+  await make(page).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
+});
+
+// S12: one entry per refusal. `call` names the refuseAt() line the entry
+// fires, by a piece of its text and, where two lines read the same, which
+// of them in page order. `query` is the page's address parameters, `init`
+// runs before the page loads, `fill` sets the fault with the sections
+// opened as it needs, and `press` replaces a plain press for a build that
+// waits, taking what `fill` returned. `focus` is the control focused, `section` the section it is in,
+// and a `focus` of null means the message.
+const field = (name) => `[name="${name}"]`;
+const row = (n) => `#instrumentList .instrument-row:nth-child(${n}) select`;
+const inQuestion = (name) => `#questionList fieldset:nth-child(1) ${field(name)}`;
+const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
+const SUPABASE = { url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_test', table: 'responses' };
+
+async function setRows(page, stems) {
+  for (let k = 1; k < stems.length; k++) await page.getByRole('button', { name: 'Add an instrument' }).click();
+  for (const [k, stem] of stems.entries()) await page.locator('#instrumentList select').nth(k).selectOption(stem);
+}
+
+async function inSection(page, id, fill) {
+  await openSection(page, id);
+  await fill();
+}
+
+async function oneQuestion(page, q) {
+  await inSection(page, 'secQuestions', async () => {
+    await page.getByRole('button', { name: 'Add a question' }).click();
+    if (q.type) await page.locator(field('qType')).selectOption(q.type);
+    for (const [name, value] of Object.entries(q.fields)) await page.locator(inQuestion(name)).fill(value);
+  });
+}
+
+async function supabase(page, patch = {}) {
+  const s = { ...SUPABASE, ...patch };
+  // The HiTOP-BR, so a build that fetches fetches its short export.
+  await page.locator('#instrumentList select').selectOption('hitopbr');
+  await page.locator(field('storeKind')).selectOption('supabase');
+  await page.locator(field('supabaseUrl')).fill(s.url);
+  await page.locator(field('supabaseKey')).fill(s.key);
+  await page.locator(field('supabaseTable')).fill(s.table);
+}
+
+// Holds the export requests until release(`how`): 'continue' or 'abort'.
+function holdExports(page) {
+  let reached;
+  const asked = new Promise((r) => { reached = r; });
+  let release;
+  const released = new Promise((r) => { release = r; });
+  const ready = page.route(`${EXPORT_BASE}**`, async (route) => {
+    reached();
+    const how = await released;
+    if (how === 'abort') await route.abort();
+    else await route.continue();
+  });
+  return { ready, asked, release };
+}
+
+// Holds the link's compression, which link.html reads with
+// Response.prototype.arrayBuffer(); the export fetch reads with json().
+// window.releaseEncode(fail) lets it go, failing when `fail` is true.
+function holdEncode() {
+  const real = Response.prototype.arrayBuffer;
+  Response.prototype.arrayBuffer = async function () {
+    const fail = await new Promise((r) => {
+      window.releaseEncode = r;
+      window.encodeHeld = true;
+    });
+    if (fail) throw new Error('planted encode failure');
+    return real.call(this);
+  };
+}
+
+// Presses, waits for the hold, changes the study name, then lets go.
+async function changeDuringWait(page, reached, release) {
+  await make(page).click();
+  await reached();
+  await page.locator(field('study')).fill('changed');
+  await release();
+}
+
+const REFUSE_AT = [
+  // The instruments call: the row at fault.
+  ...[
+    { what: 'a repeat at row 2', stems: ['hitopbr', 'hitopbr'], at: 2, why: 'it names HiTOP-BR twice, as instrument 1 and instrument 2.' },
+    { what: 'a repeat at row 3', stems: ['hitopbr', 'pid5bf', 'hitopbr'], at: 3, why: 'it names HiTOP-BR twice, as instrument 1 and instrument 3.' },
+    { what: 'a second PID-5 form at row 2', stems: ['pid5', 'pid5bf'], at: 2, why: 'it names PID-5 and PID-5-BF, two forms of the PID-5, and a list holds one.' },
+    { what: 'a second PID-5 form at row 3', stems: ['hitopbr', 'pid5', 'pid5sf'], at: 3, why: 'it names PID-5 and PID-5-SF, two forms of the PID-5, and a list holds one.' },
+  ].map((c) => ({
+    name: `instruments: ${c.what}`,
+    call: ['rows[e.index]'],
+    fill: (page) => setRows(page, c.stems),
+    message: `The instruments could not be used: ${c.why}`,
+    focus: row(c.at),
+  })),
+  {
+    name: 'no study name',
+    call: ["'Give the study a name.'"],
+    study: '',
+    message: 'Give the study a name.',
+    focus: field('study'),
+  },
+  {
+    name: 'a participant holding a lone surrogate',
+    call: ['holds a character that cannot be written'],
+    query: () => `?c=${encodeConfig({ instrument: 'hitopbr', study: 'refusals', participant: 'a\ud800b' })}`,
+    message: 'The participant field holds a character that cannot be written. Type the identifier again.',
+    focus: field('participant'),
+    section: 'secParticipants',
+  },
+  {
+    name: 'Prolific beside a participant',
+    call: ['recruiting through Prolific'],
+    fill: (page) => inSection(page, 'secParticipants', async () => {
+      await page.locator(field('participant')).fill('p1');
+      await page.locator(field('site')).selectOption('prolific');
+    }),
+    message: /^The participant field must be empty when recruiting through Prolific/,
+    focus: field('participant'),
+    section: 'secParticipants',
+  },
+  {
+    name: 'an empty address parameter',
+    call: ['e.message, f.elements.participantParam'],
+    fill: (page) => inSection(page, 'secParticipants', () => page.locator(field('site')).selectOption('other')),
+    message: /^The address parameter could not be used: /,
+    focus: field('participantParam'),
+    section: 'secParticipants',
+  },
+  {
+    name: 'SONA beside a participant',
+    call: ['when a recruiting site fills the identifier'],
+    fill: (page) => inSection(page, 'secParticipants', async () => {
+      await page.locator(field('participant')).fill('p1');
+      await page.locator(field('site')).selectOption('sona');
+    }),
+    message: 'The participant field must be empty when a recruiting site fills the identifier: the online form takes each participant\'s identifier from the address parameter "id".',
+    focus: field('participant'),
+    section: 'secParticipants',
+  },
+  {
+    name: 'an http:// completion URL',
+    call: ['e.message, f.elements.complete)'],
+    fill: (page) => inSection(page, 'secFinish', () => page.locator(field('complete')).fill('http://example.org/done')),
+    message: /^The completion URL could not be used: it must start with https:\/\//,
+    focus: field('complete'),
+    section: 'secFinish',
+  },
+  {
+    name: 'a saved-file URL with no completion URL',
+    call: ['needs a completion URL beside it'],
+    fill: (page) => inSection(page, 'secFinish', () => page.locator(field('completeSaved')).fill(COMPLETE)),
+    message: 'The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.',
+    focus: field('completeSaved'),
+    section: 'secFinish',
+  },
+  {
+    name: 'an http:// saved-file URL',
+    call: ['e.message, f.elements.completeSaved'],
+    fill: (page) => inSection(page, 'secFinish', async () => {
+      await page.locator(field('complete')).fill(COMPLETE);
+      await page.locator(field('completeSaved')).fill('http://example.org/saved');
+    }),
+    message: /^The completion URL after a saved file could not be used: it must start with https:\/\//,
+    focus: field('completeSaved'),
+    section: 'secFinish',
+  },
+  {
+    name: 'declined text with no consent text',
+    call: ['The declined text needs consent text'],
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('declinedText')).fill('Bye.')),
+    message: 'The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.',
+    focus: field('declinedText'),
+    section: 'secConsent',
+  },
+  {
+    name: 'a decline URL with no consent text',
+    call: ['The completion URL after a decline needs consent text'],
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('completeDeclined')).fill(COMPLETE)),
+    message: 'The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.',
+    focus: field('completeDeclined'),
+    section: 'secConsent',
+  },
+  {
+    name: 'consent text of white space',
+    call: ['The consent text could not be used'],
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('   ')),
+    message: 'The consent text could not be used: it is empty or holds only white space.',
+    focus: field('consentText'),
+    section: 'secConsent',
+  },
+  {
+    name: 'declined text of white space',
+    call: ['The declined text could not be used'],
+    fill: (page) => inSection(page, 'secConsent', async () => {
+      await page.locator(field('consentText')).fill('I agree.');
+      await page.locator(field('declinedText')).fill('   ');
+    }),
+    message: 'The declined text could not be used: it is empty or holds only white space.',
+    focus: field('declinedText'),
+    section: 'secConsent',
+  },
+  {
+    name: 'an http:// decline URL',
+    call: ['e.message, f.elements.completeDeclined'],
+    fill: (page) => inSection(page, 'secConsent', async () => {
+      await page.locator(field('consentText')).fill('I agree.');
+      await page.locator(field('completeDeclined')).fill('http://example.org/declined');
+    }),
+    message: /^The completion URL after a decline could not be used: it must start with https:\/\//,
+    focus: field('completeDeclined'),
+    section: 'secConsent',
+  },
+  // The question call: each control in the page's map, and a fault that
+  // names no question.
+  {
+    name: 'question: a bad name',
+    call: ['e.message, e.control'],
+    control: 'qName',
+    fill: (page) => oneQuestion(page, { fields: { qName: 'Bad', qText: 'Text' } }),
+    message: /^The questions could not be used: question 1: its name is "Bad"/,
+    focus: inQuestion('qName'),
+    section: 'secQuestions',
+  },
+  {
+    name: 'question: no text',
+    call: ['e.message, e.control'],
+    control: 'qText',
+    fill: (page) => oneQuestion(page, { fields: { qName: 'age' } }),
+    message: 'The questions could not be used: question 1: it has no text.',
+    focus: inQuestion('qText'),
+    section: 'secQuestions',
+  },
+  {
+    name: 'question: one option',
+    call: ['e.message, e.control'],
+    control: 'qOptions',
+    fill: (page) => oneQuestion(page, { type: 'choice', fields: { qName: 'pick', qText: 'Pick one', qOptions: 'Only' } }),
+    message: 'The questions could not be used: question 1: it has 1 option, and a question holds 2 to 20.',
+    focus: inQuestion('qOptions'),
+    section: 'secQuestions',
+  },
+  {
+    name: 'question: a minimum above the maximum',
+    call: ['e.message, e.control'],
+    control: 'qMin',
+    fill: (page) => oneQuestion(page, { type: 'number', fields: { qName: 'age', qText: 'Age', qMin: '5', qMax: '1' } }),
+    message: 'The questions could not be used: question 1: its min 5 is above its max 1.',
+    focus: inQuestion('qMin'),
+    section: 'secQuestions',
+  },
+  {
+    name: 'question: a maximum out of range',
+    call: ['e.message, e.control'],
+    control: 'qMax',
+    fill: (page) => oneQuestion(page, { type: 'number', fields: { qName: 'age', qText: 'Age', qMax: '99999999999' } }),
+    message: /^The questions could not be used: question 1: its max is not a whole number/,
+    focus: inQuestion('qMax'),
+    section: 'secQuestions',
+  },
+  {
+    name: 'question: 51 questions, a fault in no one question',
+    call: ['e.message, e.control'],
+    query: () => `?z=${encodeCompressed({
+      instrument: 'hitopbr',
+      study: 'refusals',
+      questions: { before: Array.from({ length: 51 }, (_, k) => ({ name: `q${k + 1}`, text: `Question ${k + 1}`, type: 'text' })) },
+    })}`,
+    message: 'The questions could not be used: it has 51 questions, more than the 50 it may hold.',
+    focus: null,
+  },
+  {
+    name: 'a module that is not JSON',
+    call: ['it is not JSON'],
+    fill: (page) => inSection(page, 'secOrder', () => page.locator(field('module')).fill('not json')),
+    message: 'The module file could not be used: it is not JSON.',
+    focus: field('module'),
+    section: 'secOrder',
+  },
+  {
+    name: 'a module beside a list without the HiTOP-SR',
+    call: ['needs the HiTOP-SR among the instruments'],
+    fill: async (page) => {
+      await setRows(page, ['hitopbr', 'pid5bf']);
+      await inSection(page, 'secOrder', () => page.locator(field('module')).fill('{}'));
+    },
+    message: 'The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.',
+    focus: field('module'),
+    section: 'secOrder',
+  },
+  {
+    name: 'a module with no format',
+    call: ['e.message, f.elements.module'],
+    fill: (page) => inSection(page, 'secOrder', () => page.locator(field('module')).fill('{}')),
+    message: 'The module file could not be used: this page reads format "1.0" and found no format field.',
+    focus: field('module'),
+    section: 'secOrder',
+  },
+  // The store call: each of the four store fields.
+  {
+    name: 'store: an http:// web address',
+    call: ['e.message, f.elements[name]'],
+    fill: async (page) => {
+      await page.locator(field('storeKind')).selectOption('webhook');
+      await page.locator(field('store')).fill('http://example.org/hook');
+    },
+    message: /^Where responses go could not be used: /,
+    focus: field('store'),
+  },
+  {
+    name: 'store: a bad project URL',
+    call: ['e.message, f.elements[name]'],
+    fill: (page) => supabase(page, { url: 'http://example.org/key' }),
+    message: /^Where responses go could not be used: its url/,
+    focus: field('supabaseUrl'),
+  },
+  {
+    name: 'store: an empty key',
+    call: ['e.message, f.elements[name]'],
+    fill: (page) => supabase(page, { key: ' ' }),
+    message: /^Where responses go could not be used: (it names no key|its key is empty)\.$/,
+    focus: field('supabaseKey'),
+  },
+  {
+    name: 'store: a bad table name',
+    call: ['e.message, f.elements[name]'],
+    fill: (page) => supabase(page, { table: 'Responses' }),
+    message: /^Where responses go could not be used: its table/,
+    focus: field('supabaseTable'),
+  },
+  // The waits: the export fetch for a Supabase table, and the compression
+  // of a link with consent text.
+  {
+    name: 'the export fetch fails',
+    call: ['refuseAt(stale() ? STALE : e.message)', 0],
+    fill: async (page) => {
+      await page.route(`${EXPORT_BASE}**`, (route) => route.abort());
+      await supabase(page);
+    },
+    message: /^The instrument could not be fetched from https:\/\/jmgirard\.github\.io\/hitop\/downloads\/hitopbr\.json\. Check the connection and reload\.$/,
+    focus: null,
+  },
+  {
+    name: 'stale: a field changes while the export fetch fails',
+    call: ['refuseAt(stale() ? STALE : e.message)', 0],
+    fill: async (page) => {
+      const hold = holdExports(page);
+      await hold.ready;
+      await supabase(page);
+      return hold;
+    },
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('abort')),
+    message: STALE,
+    focus: null,
+  },
+  {
+    name: 'stale: a field changes while the export fetch succeeds',
+    call: ['refuseAt(STALE)', 0],
+    fill: async (page) => {
+      const hold = holdExports(page);
+      await hold.ready;
+      await supabase(page);
+      return hold;
+    },
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('continue')),
+    message: STALE,
+    focus: null,
+  },
+  {
+    name: 'the encode fails',
+    call: ['refuseAt(stale() ? STALE : e.message)', 1],
+    init: () => { delete window.CompressionStream; },
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('I agree.')),
+    message: 'This browser cannot make a link with consent text, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.',
+    focus: null,
+  },
+  {
+    name: 'stale: a field changes while the encode fails',
+    call: ['refuseAt(stale() ? STALE : e.message)', 1],
+    init: holdEncode,
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('I agree.')),
+    press: (page) => changeDuringWait(
+      page,
+      () => page.waitForFunction(() => window.encodeHeld === true),
+      () => page.evaluate(() => window.releaseEncode(true)),
+    ),
+    message: STALE,
+    focus: null,
+  },
+  {
+    name: 'stale: a field changes while the encode succeeds',
+    call: ['refuseAt(STALE)', 1],
+    init: holdEncode,
+    fill: (page) => inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('I agree.')),
+    press: (page) => changeDuringWait(
+      page,
+      () => page.waitForFunction(() => window.encodeHeld === true),
+      () => page.evaluate(() => window.releaseEncode(false)),
+    ),
+    message: STALE,
+    focus: null,
+  },
+];
+
+// The refuseAt() lines of link.html, the definition left out, as the grep
+// lists them.
+async function refuseAtLines(page) {
+  const html = await (await page.request.get(`${base()}link.html`)).text();
+  return html.split('\n').filter((line) => line.includes('refuseAt(') && !line.includes('function refuseAt('));
+}
+
+// The lines an entry's `call` picks: every line holding its text, or the
+// one at its position among them.
+function linesOf(lines, [text, nth]) {
+  const hits = lines.map((line, k) => (line.includes(text) ? k : -1)).filter((k) => k >= 0);
+  return nth === undefined ? hits : [hits[nth]];
+}
+
+test('S12 fires every refuseAt() call the grep lists, and every control the question map holds', async ({ page }) => {
+  const lines = await refuseAtLines(page);
+  expect(lines.length).toBeGreaterThan(0);
+  const covered = new Set();
+  for (const c of REFUSE_AT) {
+    const picked = linesOf(lines, c.call);
+    expect(picked, `${c.name} picks one line`).toHaveLength(1);
+    expect(picked[0], `${c.name} picks a line`).not.toBeUndefined();
+    covered.add(picked[0]);
+  }
+  const missed = lines.filter((_, k) => !covered.has(k)).map((line) => line.trim());
+  expect(missed).toEqual([]);
+
+  // The question call's controls, as the page's map lists them.
+  const html = await (await page.request.get(`${base()}link.html`)).text();
+  const map = html.match(/const QUESTION_CONTROLS = \{([^}]*)\}/);
+  expect(map, 'the map is in the page').not.toBeNull();
+  const mapped = [...map[1].matchAll(/'(q\w+)'/g)].map((m) => m[1]).sort();
+  expect(mapped.length).toBeGreaterThan(0);
+  // The line that sets e.control names no control of its own, such as a
+  // fallback, so the map is every control it can set.
+  const setting = html.split('\n').filter((line) => line.includes('e.control ='));
+  expect(setting).toHaveLength(1);
+  expect(setting[0]).toContain('QUESTION_CONTROLS[key]');
+  expect(setting[0]).not.toMatch(/['"`]q\w+['"`]/);
+  const fired = REFUSE_AT.filter((c) => c.control !== undefined).map((c) => c.control).sort();
+  expect(fired).toEqual(mapped);
+});
+
+for (const c of REFUSE_AT) {
+  test(`S12: ${c.name}`, async ({ page }) => {
+    if (c.init) await page.addInitScript(c.init);
+    await page.goto(`${base()}link.html${c.query ? c.query() : ''}`);
+    await expect(make(page)).toBeEnabled();
+    if (!c.query) await page.locator(field('study')).fill(c.study ?? 'refusals');
+    const held = c.fill ? await c.fill(page) : undefined;
+    for (const s of SECTIONS) await closeSection(page, s.id);
+    if (c.press) await c.press(page, held);
+    else await make(page).click();
+
+    await expect(page.locator('#err')).toHaveText(c.message);
+    await expect(page.locator(c.focus ?? '#err')).toBeFocused();
+    for (const s of SECTIONS) {
+      expect(await isOpen(page, s.id), `${s.id} open`).toBe(s.id === c.section);
+    }
+    await expect(page.locator('#result')).toBeHidden();
+  });
+}

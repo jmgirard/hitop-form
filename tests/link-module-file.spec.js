@@ -14,11 +14,17 @@
 //        status line that named the file
 //   MF5: of two files chosen in turn, the later one fills the box and names
 //        itself in the status, even when the earlier read ends last
+//   MF6: an edit typed into the box while a file is read wins: when the
+//        read ends, the box keeps the typed text and no status names the
+//        file. A read that fails shows "The module file could not be
+//        read." under the control
+//   MF7: a chosen instrument export is refused with a message that holds
+//        no "Paste" and names the Module Builder and write_module()
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, openBuilderSections, decodeLinkParam, FIXTURES } from './helpers.mjs';
+import { useTarget, openBuilderSections, decodeLinkParam, fetchExport, FIXTURES } from './helpers.mjs';
 
 const base = useTarget();
 openBuilderSections();
@@ -144,4 +150,66 @@ test('the later of two chosen files wins when the earlier read ends last', async
   });
   await expect(page.locator('textarea[name="module"]')).toHaveValue(laterText);
   await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file module-shuffled.json.');
+});
+
+// MF6
+test('an edit typed during a file read wins, and a failed read says so', async ({ page }) => {
+  // The first read is held until releaseRead(), which returns the real
+  // read so the release can wait for it. The second read rejects. Any later
+  // read is real.
+  await page.addInitScript(() => {
+    const real = Blob.prototype.text;
+    let calls = 0;
+    File.prototype.text = function () {
+      calls += 1;
+      if (calls === 1) {
+        return new Promise((resolve) => {
+          window.releaseRead = () => { const read = real.call(this); resolve(read); return read; };
+        });
+      }
+      if (calls === 2) return Promise.reject(new DOMException('planted read failure', 'NotReadableError'));
+      return real.call(this);
+    };
+  });
+  await openBuilder(page);
+  const box = page.locator('textarea[name="module"]');
+
+  await page.locator('#moduleFile').setInputFiles(FIXTURE);
+  await page.waitForFunction(() => typeof window.releaseRead === 'function');
+  await box.pressSequentially('typed');
+  // As in MF5, the release waits for the read and then one task, so any
+  // fill from the file is in the box before the reads below.
+  await page.evaluate(async () => {
+    await window.releaseRead();
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  await expect(box).toHaveValue('typed');
+  await expect(page.locator('#moduleFileStatus')).toHaveText('');
+
+  // The control is emptied as the first read ends, so choosing the same
+  // file again fires a change.
+  await expect(page.locator('#moduleFile')).toHaveValue('');
+  await page.locator('#moduleFile').setInputFiles(FIXTURE);
+  await expect(page.locator('#moduleFileErr')).toHaveText('The module file could not be read.');
+  await expect(box).toHaveValue('typed');
+});
+
+// MF7
+test('a chosen instrument export is refused, naming the files to use', async ({ page }) => {
+  const exp = await fetchExport('hitopsr');
+  await openBuilder(page);
+  await page.locator('#moduleFile').setInputFiles({
+    name: 'hitopsr.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(exp), 'utf8'),
+  });
+  await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file hitopsr.json.');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const err = page.locator('#err');
+  await expect(err).toHaveText('The module file could not be used: it is the instrument export, not a module file. Use the file that the Module Builder or write_module() saved.');
+  const message = await err.textContent();
+  expect(message).not.toContain('Paste');
+  expect(message).toContain('Module Builder');
+  expect(message).toContain('write_module()');
+  await expect(page.locator('#out')).toHaveText('');
 });
