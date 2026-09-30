@@ -103,7 +103,7 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Study Link Builder</h1>
-  <p class="muted" id="intro">A study link opens the online form with your choices built in. Fill in the three required parts, open any optional section you need, and press "Make the link". This page keeps nothing and sends nothing you type. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
+  <p class="muted" id="intro">A study link opens the online form with your choices. Fill in the required parts, then press "Make the link". This page keeps nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
     <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
@@ -164,8 +164,8 @@
         <option value="other">Another site</option>
       </select>
     </label>
-    <p class="site-hint" id="prolificHint" hidden>The page reads each participant's Prolific ID from the address as their identifier. Paste the link, with its three placeholders, as the study URL on Prolific. The file gains two columns, <code>prolific_study</code> and <code>prolific_session</code>.</p>
-    <p class="site-hint" id="sonaHint" hidden>The page reads each participant's SONA survey code from the <code>id</code> parameter as their identifier. Paste the link, which ends in <code>id=%SURVEY_CODE%</code>, as the Study URL in SONA. Participants can read the credit token in SONA's completion URL.</p>
+    <p class="site-hint" id="prolificHint" hidden>The page reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, the page reads the filled ones. The file gains <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
+    <p class="site-hint" id="sonaHint" hidden>The page reads each participant's SONA survey code from the <code>id</code> parameter. Paste the link as SONA's Study URL. As the completion URL, give SONA's client-side one with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
     <p class="site-hint" id="connectHint" hidden>The page reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
@@ -193,11 +193,11 @@
       <textarea name="consentText" class="prose"></textarea>
     </label>
     <label>Declined text
-      <span class="hint">Only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, it says "You chose not to take part." After a decline, the page sends no answer and saves no file.</span>
+      <span class="hint">Only beside consent text, up to 2,000 characters. Shown after "I do not agree". Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL. A decline sends and saves nothing.</span>
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Only beside consent text. An https:// address the page sends the participant to after "I do not agree". For Prolific, the completion URL of your code for a participant who does not consent.</span>
+      <span class="hint">Only beside consent text. An https:// address the online form sends the participant to after "I do not agree". <code>{participant}</code> works here too. For Prolific, the completion URL of your code for a participant who does not consent.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
@@ -208,7 +208,7 @@
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
-      <span class="hint">Only beside a completion URL. The saved-file screen links here in place of the completion URL. For Prolific, the URL of your study's completion code for a saved file.</span>
+      <span class="hint">Only beside a completion URL. The saved-file screen links here in place of the completion URL, which still applies when responses arrive. For Prolific, the URL of your study's completion code for a saved file.</span>
       <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>

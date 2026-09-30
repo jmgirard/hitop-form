@@ -34,6 +34,13 @@
 //       most 40 words; the intro (all text between the h1 and the first
 //       form part) holds at most 60; the page's text, placeholders and
 //       aria-labels hold none of the retired terms, the built link exempt
+//   S9: the short hints keep the facts a researcher acts on: the intro says
+//       an opened study link reaches the host's logs; the Prolific hint says
+//       a doubled parameter reads its filled value; the SONA hint gives the
+//       XXXX rule and says the credit token is readable in the study link;
+//       the declined-text hint gives both fixed sentences; the decline
+//       address takes {participant}; the saved-file address leaves the
+//       completion URL in force when responses arrive
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -599,6 +606,26 @@ test('every README link on the page names a README heading', async ({ page }) =>
   const anchors = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => a.hash.slice(1)));
   expect(anchors.length).toBeGreaterThan(8);
   expect(anchors.filter((a) => !slugs.has(a))).toEqual([]);
+});
+
+// S9: each fact stated here, so a shortened hint that drops one fails.
+test('the hints keep the facts a researcher acts on', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  const intro = page.locator('#intro');
+  await expect(intro).toContainText('Opening a study link, here or on the online form, puts its setup in GitHub Pages\' logs.');
+  await expect(intro.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
+  await openSection(page, 'secParticipants');
+  const site = page.locator('select[name="site"]');
+  await site.selectOption('prolific');
+  await expect(page.locator('#prolificHint')).toContainText('If Prolific\'s URL-parameters option adds them again, the page reads the filled ones.');
+  await site.selectOption('sona');
+  const sona = page.locator('#sonaHint');
+  await expect(sona).toContainText('As the completion URL, give SONA\'s client-side one with {participant} for XXXX.');
+  await expect(sona).toContainText('XXXX. Its credit token is readable in the study link.');
+  const hintOf = (name) => page.locator(`label:has([name="${name}"]) .hint`);
+  await expect(hintOf('declinedText')).toContainText('Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL.');
+  await expect(hintOf('completeDeclined')).toContainText('{participant} works here too.');
+  await expect(hintOf('completeSaved')).toContainText('in place of the completion URL, which still applies when responses arrive.');
 });
 
 test('a link setting no optional field leaves every section closed', async ({ page }) => {

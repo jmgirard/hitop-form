@@ -355,9 +355,9 @@ test('Prolific as the recruiting site: its hint, and the link it builds', async 
   await expect(box).toBeVisible();
   await expect(box).toHaveValue('');
   const hint = page.locator('#prolificHint');
-  await expect(hint).toContainText("reads each participant's Prolific ID from the address as their identifier");
+  await expect(hint).toContainText("reads each participant's Prolific ID from the address");
   await expect(page.locator('label:has(select[name="site"]) .hint')).toContainText('Leave the participant field empty');
-  await expect(hint).toContainText('Paste the link, with its three placeholders, as the study URL on Prolific');
+  await expect(hint).toContainText('Paste the link, placeholders included, as the study URL');
   await expect(hint).toContainText('prolific_study');
   await expect(hint).toContainText('prolific_session');
 
@@ -421,8 +421,9 @@ test('the Completion URL field puts complete in the link, and an http:// address
 // L14: the saved-file completion field.
 test('the Completion URL after a saved file field puts completeSaved in the link, and refuses http:// and an empty completion field', async ({ page }) => {
   await page.goto(`${base()}link.html`);
-  // The fuller account of completion codes and Prolific's URL-parameters
-  // option is in the README section the completion hint links to.
+  // The fuller account of completion codes is in the README section the
+  // completion hint links to; S9 in link-sections.spec.js checks the rule
+  // this hint keeps.
   const hint = page.locator('label:has(input[name="completeSaved"]) .hint');
   await expect(hint).toContainText('Only beside a completion URL');
   await expect(hint).toContainText("your study's completion code for a saved file");
@@ -715,7 +716,7 @@ test('a load with no c leaves #err empty', async ({ page }) => {
 test('the intro above the form, the builder link in the module hint, and the tutorial link', async ({ page }) => {
   await openBuilder(page);
   const intro = page.locator('#intro');
-  await expect(intro).toContainText('Fill in the three required parts');
+  await expect(intro).toContainText('Fill in the required parts');
   await expect(intro).toContainText('press "Make the link"');
   const introBox = await intro.boundingBox();
   const formBox = await page.locator('#f').boundingBox();
@@ -908,11 +909,9 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
     for (const sel of SITE_ELEMENTS) await expect(page.locator(sel), `${sel} under ${c.value || 'none'}`).toBeVisible({ visible: sel === c.shows });
   }
   const sona = page.locator('#sonaHint');
-  // The completion URL's XXXX and the credit token's detail are in the
-  // README section the recruiting-site hint links to.
-  await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter as their identifier");
-  await expect(sona).toContainText('which ends in id=%SURVEY_CODE%');
-  await expect(sona).toContainText("Participants can read the credit token in SONA's completion URL");
+  // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
+  await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter");
+  await expect(sona).toContainText("Paste the link as SONA's Study URL");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
   await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
 });
