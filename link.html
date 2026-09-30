@@ -799,8 +799,9 @@
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
     // The check names each question as it reaches it, so the last group
     // named and the field key are the refused ones. The refusal carries
-    // that group's control as `control`, its first control when the fault
-    // names no field.
+    // that group's control for the field as `control`. A fault that names
+    // no question, or a field outside QUESTION_CONTROLS, carries none, and
+    // focus goes to the message.
     let group;
     let key;
     try {
@@ -816,12 +817,17 @@
         },
       });
     } catch (e) {
-      if (group !== undefined) e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key] ?? 'qList'}]`);
+      if (group !== undefined && Object.hasOwn(QUESTION_CONTROLS, key)) {
+        e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key]}]`);
+      }
       throw e;
     }
   }
+  // The fields the editor can hand the check a fault in. Its menus offer
+  // only the list and the types the check takes, and its box only sets
+  // required to true, so those three fields never fault from here.
   const QUESTION_CONTROLS = {
-    name: 'qName', text: 'qText', type: 'qType', options: 'qOptions', min: 'qMin', max: 'qMax', required: 'qRequired',
+    name: 'qName', text: 'qText', options: 'qOptions', min: 'qMin', max: 'qMax',
   };
 
   // A study link's own `c` or `z` parameter, opened on this page, fills the
