@@ -70,7 +70,7 @@
 //       past the three checks among them (one after a completion URL is
 //       filled), and the submit handler still runs; a load with no c leaves
 //       #err empty
-//  L19: above the form, the intro names the required parts and
+//  L19: above the form, the intro asks for the required parts, names
 //       "Make the link" and links the online-collection tutorial; the module
 //       hint links the Module Builder
 //  L20: a c filling any of the four address fields (Web address, Project
@@ -711,7 +711,7 @@ test('a load with no c leaves #err empty', async ({ page }) => {
   await expect(page.locator('#err')).toBeHidden();
 });
 
-// L19: the intro above the form names the required parts and links
+// L19: the intro above the form asks for the required parts and links
 // the tutorial; the module hint links the Module Builder.
 test('the intro above the form, the builder link in the module hint, and the tutorial link', async ({ page }) => {
   await openBuilder(page);
