@@ -423,7 +423,7 @@ const TEST_THEN_GIVE = 'open the link once to test it, and then give it to each 
 function expectedNext(site, kind) {
   const then = SITE_TEXT[site] === null ? TEST_THEN_GIVE : `paste the link into your study's page on ${SITE_TEXT[site]}.`;
   if (kind === 'supabase' && SITE_TEXT[site] === null) {
-    return `Run the SQL below once in your Supabase project's SQL editor. Then open the link once to test it, and give it to each participant.`;
+    return `Run the SQL below once in your Supabase project's SQL editor, then open the link once to test it and give it to each participant.`;
   }
   if (kind === 'supabase') return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
   return then[0].toUpperCase() + then.slice(1);
@@ -477,6 +477,10 @@ for (const site of Object.keys(SITE_TEXT)) {
       await expect(page.locator('#err')).toHaveText('');
       await expectRegion(page);
       await expect(page.locator('#next')).toHaveText(expectedNext(site, kind));
+      // One sentence, counted from the page's text and not from the copy
+      // above: one sentence end, at the close.
+      const next = await page.locator('#next').textContent();
+      expect(next.match(/[.!?](\s|$)/g), `one sentence: ${next}`).toEqual(['.']);
       await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
     });
   }

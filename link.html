@@ -1208,7 +1208,7 @@
   function nextStep(site, supabase) {
     const sql = 'Run the SQL below once in your Supabase project\'s SQL editor';
     if (supabase && !(site in SITE_NAMES)) {
-      return `${sql}. Then open the link once to test it, and give it to each participant.`;
+      return `${sql}, then open the link once to test it and give it to each participant.`;
     }
     const then = site in SITE_NAMES
       ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
