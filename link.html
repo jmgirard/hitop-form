@@ -1051,7 +1051,10 @@
           label: (name) => INSTRUMENTS[name] ?? JSON.stringify(name),
         });
       } catch (e) {
-        refuseAt(e.message, instrumentList.querySelector('select'));
+        // The row at fault: the later of a repeated instrument, or the
+        // second PID-5 form. A fault with no row focuses the first.
+        const rows = instrumentList.querySelectorAll('select');
+        refuseAt(e.message, rows[e.index] ?? rows[0]);
         return;
       }
     }

@@ -78,7 +78,10 @@ export const PID5_FORMS = ['pid5', 'pid5sf', 'pid5bf'];
 // included), a name given twice, and two or three PID-5 forms.
 // Each entry is named by `entry(i)`, `i` counted from 0, and each
 // instrument by `label(name)`. link.html runs the same check on its
-// instrument rows, with its own `bad`, `entry` and `label`.
+// instrument rows, with its own `bad`, `entry` and `label`. A fault in one
+// entry carries that entry's `i` as the thrown error's `index`: the entry
+// not known, the later of a name given twice, and the second PID-5 form.
+// link.html focuses that row.
 export function checkInstruments(
   list,
   {
@@ -87,6 +90,7 @@ export function checkInstruments(
     label = (name) => JSON.stringify(name),
   } = {},
 ) {
+  const badAt = (why, i) => Object.assign(bad(why), { index: i });
   if (!Array.isArray(list)) throw bad(`it is not a list, and it is ${JSON.stringify(list)}.`);
   if (list.length < 2) {
     throw bad(`it names ${list.length} ${list.length === 1 ? 'instrument' : 'instruments'}, and a list names 2 or ${INSTRUMENTS_MAX}. For one instrument, use the instrument field.`);
@@ -98,16 +102,16 @@ export function checkInstruments(
     // An entry that is not text is refused here: Object.hasOwn() reads
     // ["hitopbr"] as the key "hitopbr".
     if (typeof name !== 'string' || !Object.hasOwn(INSTRUMENTS, name)) {
-      throw bad(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`);
+      throw badAt(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`, i);
     }
     const first = list.indexOf(name);
-    if (first !== i) throw bad(`it names ${label(name)} twice, as ${entry(first)} and ${entry(i)}.`);
+    if (first !== i) throw badAt(`it names ${label(name)} twice, as ${entry(first)} and ${entry(i)}.`, i);
   });
   const pid = list.filter((name) => PID5_FORMS.includes(name));
   if (pid.length > 1) {
     const names = pid.map(label);
     const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-    throw bad(`it names ${listed}, ${pid.length === 2 ? 'two' : 'three'} forms of the PID-5, and a list holds one.`);
+    throw badAt(`it names ${listed}, ${pid.length === 2 ? 'two' : 'three'} forms of the PID-5, and a list holds one.`, list.indexOf(pid[1]));
   }
   return list;
 }

@@ -32,7 +32,8 @@ the labels of its fields that hold a value ("Question 1", "Question 2" and
 so on in the questions section). Fill in what you need and press
 "Make the link". When the builder refuses a field, it opens the field's
 section and moves focus to the field. A refusal of the instruments list
-moves focus to the first instrument. A refusal that names no one field
+moves focus to the instrument at fault: the second of a repeated
+instrument, or the second PID-5 form. A refusal that names no one field
 moves focus to the message.
 
 ### Required parts
