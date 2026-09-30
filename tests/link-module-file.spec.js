@@ -125,7 +125,8 @@ test('the later of two chosen files wins when the earlier read ends last', async
     Blob.prototype.text = function () {
       Blob.prototype.text = real;
       return new Promise((resolve) => {
-        window.releaseRead = () => resolve(real.call(this));
+        // Returns the real read, so the release below can wait for it.
+        window.releaseRead = () => { const read = real.call(this); resolve(read); return read; };
       });
     };
   });
@@ -134,10 +135,13 @@ test('the later of two chosen files wins when the earlier read ends last', async
   await page.locator('#moduleFile').setInputFiles(later);
   await expect(page.locator('textarea[name="module"]')).toHaveValue(laterText);
 
-  await page.evaluate(() => window.releaseRead());
-  // The held read's promise settles on the page's next turn; a round trip
-  // later, a fill from it would be in the box.
-  await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+  // The release waits for the held read to end, then for one task, which
+  // lets the change handler run past its await: any fill from the earlier
+  // file is in the box before the reads below.
+  await page.evaluate(async () => {
+    await window.releaseRead();
+    await new Promise((r) => setTimeout(r, 0));
+  });
   await expect(page.locator('textarea[name="module"]')).toHaveValue(laterText);
   await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file module-shuffled.json.');
 });
