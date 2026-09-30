@@ -704,6 +704,12 @@ export async function parseLink(search) {
       );
     }
     checkInstruments(config.instruments);
+  } else if (config.instrument !== undefined && typeof config.instrument !== 'string') {
+    // Refused here, before the name is looked up: Object.hasOwn() reads
+    // ["hitopbr"] as the key "hitopbr".
+    throw new Error(
+      `The study link's instrument field must be text, and it is ${JSON.stringify(config.instrument)}.`,
+    );
   } else if (!Object.hasOwn(INSTRUMENTS, config.instrument)) {
     throw new Error(
       `The study link names an instrument this page does not know: ${JSON.stringify(config.instrument)}.`,

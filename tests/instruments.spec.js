@@ -13,11 +13,16 @@
 //       rule; beside a list with "hitopsr", a descriptor of another
 //       instrument is refused naming "hitopsr", and ones of another format
 //       or with items not ascending are refused by checkModule()'s messages
+//   I3: an instrument field that is present and is not text (["hitopbr"],
+//       [["pid5"]], null, 1, true, {}) is refused naming the field, and no
+//       export is requested
 //
 // Each probe fails at the link check, before any export is fetched.
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor } from './helpers.mjs';
+import {
+  useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, EXPORT_BASE,
+} from './helpers.mjs';
 
 const base = useTarget();
 
@@ -133,5 +138,20 @@ for (const entry of NOT_ASCENDING) {
     const module = await notAscendingDescriptor(entry);
     await openForm(page, base(), { ...LINK, instruments: ['pid5bf', 'hitopsr'], module });
     await expectRefused(page, NOT_ASCENDING_MESSAGE);
+  });
+}
+
+// I3: an instrument field that is not text. Object.hasOwn() reads
+// ["hitopbr"] and [["pid5"]] as the keys "hitopbr" and "pid5", so before the
+// check these two reached an export request.
+for (const instrument of [['hitopbr'], [['pid5']], null, 1, true, {}]) {
+  test(`an instrument field of ${JSON.stringify(instrument)} is refused before any export is requested`, async ({ page }) => {
+    const exports = [];
+    page.on('request', (r) => {
+      if (r.url().startsWith(EXPORT_BASE)) exports.push(r.url());
+    });
+    await openForm(page, base(), { ...LINK, instrument });
+    await expectRefused(page, `The study link's instrument field must be text, and it is ${JSON.stringify(instrument)}.`);
+    expect(exports).toEqual([]);
   });
 }
