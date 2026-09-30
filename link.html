@@ -103,7 +103,7 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Study Link Builder</h1>
-  <p class="muted" id="intro">A study link opens the online form with your choices. Fill in the required parts, then press "Make the link". This page keeps nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
+  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". This page keeps and sends nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
     <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
@@ -121,7 +121,7 @@
     </label>
     <fieldset id="destBlock">
       <legend id="destLegend">Where responses go</legend>
-      <span class="hint" id="destHint">A file lands in the participant's downloads folder. A web address, such as a Google Sheet's web app, or a Supabase table gets one row per participant. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
+      <span class="hint" id="destHint">A file lands in the participant's downloads folder. A web address, such as a Google Apps Script web app, or a Supabase table gets one JSON row per participant. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
       <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
         <option value="">A file on the participant's device</option>
         <option value="webhook">A web address</option>
@@ -143,7 +143,7 @@
           <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
         </label>
         <label>Table name
-          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that makes the table comes with the link.</span>
+          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that makes the table comes with the link. To write it, this page downloads each instrument from the hitop site.</span>
           <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
         </label>
       </div>
@@ -164,8 +164,8 @@
         <option value="other">Another site</option>
       </select>
     </label>
-    <p class="site-hint" id="prolificHint" hidden>The online form reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, it reads the filled ones. The file gains <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
-    <p class="site-hint" id="sonaHint" hidden>The online form reads each participant's SONA survey code from the <code>id</code> parameter. Paste the link as SONA's Study URL. For completion, give SONA's client-side URL with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
+    <p class="site-hint" id="prolificHint" hidden>The online form reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, it reads the filled ones. The responses gain <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
+    <p class="site-hint" id="sonaHint" hidden>The link ends in <code>id=%SURVEY_CODE%</code>, which SONA fills with each participant's survey code. Paste the link as SONA's Study URL. For completion, give SONA's client-side URL with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
     <p class="site-hint" id="connectHint" hidden>The online form reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
@@ -183,7 +183,7 @@
     <label class="check">
       <input name="shuffle" type="checkbox" value="true">
       Show the items in a random order
-      <span class="hint">Each participant sees a new order, in place of a module's printed order. The file still lists the items in the instrument's order, and an <code>item_order</code> column records the order that participant saw.</span>
+      <span class="hint">Each participant sees a new order, in place of a module's printed order. The responses still list the items in the instrument's order, and an <code>item_order</code> column records the order that participant saw.</span>
     </label>
     </details>
     <details class="optional" id="secConsent">
@@ -197,14 +197,14 @@
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Only beside consent text. An https:// address the online form sends the participant to after "I do not agree". <code>{participant}</code> works here too. For Prolific, the completion URL of your code for a participant who does not consent.</span>
+      <span class="hint">Only beside consent text. An https:// address the online form sends the participant to after "I do not agree". <code>{participant}</code> is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
     <details class="optional" id="secFinish">
       <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
     <label>Completion URL
-      <span class="hint">An https:// address the online form sends the participant to once their responses arrive, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
+      <span class="hint">An https:// address the online form sends the participant to after showing that their responses arrived, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
@@ -615,7 +615,7 @@
       field('Name', 'A lower-case letter, then lower-case letters, digits and "_", up to 30 in all. The answer\'s column is q_ plus this name.', name),
       field('Question', 'One line, up to 1,000 characters.', text),
       field('Type', null, typeSelect),
-      field('Options', 'One per line, 2 to 20, each up to 200 characters, without "|". The answer is the chosen option\'s number, counted from 1, so keep this order in every link of a study.', options, 'options-field'),
+      field('Options', 'One per line, 2 to 20, each up to 200 characters, without "|". Blank lines are skipped. The answer is the chosen option\'s number, counted from 1, so keep this order in every link of a study.', options, 'options-field'),
       bounds,
       requiredLabel,
       moves,

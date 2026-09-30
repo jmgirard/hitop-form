@@ -319,7 +319,7 @@ test('the random-order box: its label and hint, and the link it builds', async (
   await expect(box).not.toBeChecked();
   const hint = page.locator('label.check', { hasText: 'Show the items in a random order' }).locator('.hint');
   await expect(hint).toContainText("Each participant sees a new order, in place of a module's printed order");
-  await expect(hint).toContainText("The file still lists the items in the instrument's order");
+  await expect(hint).toContainText("The responses still list the items in the instrument's order");
   await expect(hint).toContainText('item_order column records the order that participant saw');
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
@@ -910,7 +910,7 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   }
   const sona = page.locator('#sonaHint');
   // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
-  await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter");
+  await expect(sona).toContainText("The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code");
   await expect(sona).toContainText("Paste the link as SONA's Study URL");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
   await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
@@ -1093,5 +1093,5 @@ test('the recruiting-site menu is described by the chosen site\'s hint', async (
     else await expect(menu, `under ${site}`).toHaveAttribute('aria-describedby', hint);
   }
   await menu.selectOption('sona');
-  await expect(menu).toHaveAccessibleDescription(/reads each participant's SONA survey code from the id parameter/);
+  await expect(menu).toHaveAccessibleDescription(/The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code/);
 });

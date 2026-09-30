@@ -725,8 +725,21 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('XXXX. Its credit token is readable in the study link.');
   const hintOf = (name) => page.locator(`label:has([name="${name}"]) .hint`);
   await expect(hintOf('declinedText')).toContainText('Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL.');
-  await expect(hintOf('completeDeclined')).toContainText('{participant} works here too.');
+  await expect(hintOf('completeDeclined')).toContainText('{participant} is empty unless the link or a recruiting site gives it.');
   await expect(hintOf('completeSaved')).toContainText('in place of the completion URL, which still applies when responses arrive.');
+  await expect(hintOf('complete')).toContainText('sends the participant to after showing that their responses arrived');
+  await expect(intro).toContainText('This page keeps and sends nothing you type.');
+  await expect(sona).toContainText('The link ends in id=%SURVEY_CODE%, which SONA fills with each participant\'s survey code.');
+  await site.selectOption('prolific');
+  await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
+  await expect(page.locator('#destHint')).toContainText('such as a Google Apps Script web app, or a Supabase table gets one JSON row per participant.');
+  await expect(hintOf('supabaseTable')).toContainText('To write it, this page downloads each instrument from the hitop site.');
+  await openSection(page, 'secOrder');
+  await expect(hintOf('shuffle')).toContainText('The responses still list the items in the instrument\'s order');
+  await openSection(page, 'secQuestions');
+  await page.getByRole('button', { name: 'Add a question' }).click();
+  await page.locator('select[name="qType"]').first().selectOption('choice');
+  await expect(page.locator('.options-field .hint').first()).toContainText('Blank lines are skipped.');
 });
 
 test('a link setting no optional field leaves every section closed', async ({ page }) => {
