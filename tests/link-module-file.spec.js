@@ -5,8 +5,11 @@
 //        builds the same link as the same text pasted into the box; that
 //        link's module is the fixture's
 //   MF2: after the choice, the section's summary reads "Module file", not the
-//        file control's label; emptying the box and choosing the same file
-//        again fills the box again
+//        file control's label, and the status line under the control names
+//        the file read; emptying the box and choosing the same file again
+//        fills the box again
+//   MF3: a link made while the chosen file is still being read comes from
+//        the box's old text, and the fill that follows hides it
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -56,10 +59,40 @@ test('the summary lists the module box, and the same file reads again', async ({
   await page.locator('#moduleFile').setInputFiles(FIXTURE);
   await expect(page.locator('textarea[name="module"]')).toHaveValue(text);
   await expect(state).toHaveText('Module file');
+  await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file module-plain.json.');
 
   await page.locator('textarea[name="module"]').fill('');
   await expect(state).toHaveText('Not used');
   await page.locator('#moduleFile').setInputFiles(FIXTURE);
   await expect(page.locator('textarea[name="module"]')).toHaveValue(text);
   await expect(state).toHaveText('Module file');
+});
+
+// MF3
+test('a link made during the file read is hidden when the box fills', async ({ page }) => {
+  const text = await readFile(FIXTURE, 'utf8');
+
+  await openBuilder(page);
+  // The read is held until the link is made. Blob.prototype.text is put
+  // back at its first call, so nothing else the page reads waits on it.
+  await page.evaluate(() => {
+    const real = Blob.prototype.text;
+    Blob.prototype.text = function () {
+      Blob.prototype.text = real;
+      return new Promise((resolve) => {
+        window.releaseRead = () => resolve(real.call(this));
+      });
+    };
+  });
+  await page.locator('#moduleFile').setInputFiles(FIXTURE);
+  await page.waitForFunction(() => typeof window.releaseRead === 'function');
+
+  // The link made now carries no module: the box is still empty.
+  const made = await makeLink(page);
+  await expect(page.locator('#result')).toBeVisible();
+  expect(decodeLinkParam(made).module).toBeUndefined();
+
+  await page.evaluate(() => window.releaseRead());
+  await expect(page.locator('textarea[name="module"]')).toHaveValue(text);
+  await expect(page.locator('#result')).toBeHidden();
 });

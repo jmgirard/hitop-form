@@ -84,7 +84,7 @@
   .instrument-row .moves button.secondary { margin-left: 0; }
   /* After the rules above, so a hidden label or range row stays hidden. */
   .question-edit [hidden] { display: none; }
-  #questionsStatus:empty { display: none; }
+  #questionsStatus:empty, #moduleFileStatus:empty { display: none; }
   /* Lined up with "Add a question" above, with a gap when they wrap. */
   .file-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); padding-left: var(--s2); }
   .file-buttons button.secondary { margin-left: 0; }
@@ -184,6 +184,7 @@
       <input type="file" id="moduleFile" accept=".json,application/json">
     </label>
     <p role="alert" id="moduleFileErr" tabindex="-1"></p>
+    <p role="status" id="moduleFileStatus" class="muted"></p>
     <label class="check">
       <input name="shuffle" type="checkbox" value="true">
       Show the items in a random order
@@ -641,16 +642,24 @@
   // control's change event hides a built link, as any change in the form
   // does, and the control is emptied after each read, so choosing the same
   // file again reads it again. The box is filled by script, which fires no
-  // event, so the section's summary is written again here.
+  // event, so the section's summary is written again here, and the fill
+  // counts as a change through hideResult(): a link made while the file was
+  // being read came from the box's old text, so it is hidden, or the build
+  // ends with its stale message. The status line under the control names
+  // the file read.
   const moduleFile = document.getElementById('moduleFile');
   const moduleFileErr = document.getElementById('moduleFileErr');
+  const moduleFileStatus = document.getElementById('moduleFileStatus');
   moduleFile.addEventListener('change', async () => {
     const file = moduleFile.files[0];
     if (file === undefined) return;
     moduleFileErr.textContent = '';
+    moduleFileStatus.textContent = '';
     try {
       f.elements.module.value = await file.text();
+      hideResult();
       showHeld();
+      moduleFileStatus.textContent = `Read the module file ${file.name}.`;
     } catch {
       moduleFileErr.textContent = 'The module file could not be read.';
     } finally {
