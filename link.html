@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Study Link Builder</title>
+<title>HiTOP Study Link Builder</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -111,7 +111,7 @@
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add up to two more. The page gives them one after another, in this order. A list holds one form of the PID-5 at most. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
+      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, in this order. A list holds one form of the PID-5 at most. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
@@ -151,7 +151,7 @@
     <details class="optional" id="secParticipants">
       <summary><span class="sec-name">Participants and recruiting site</span> <span class="sec-state">Not used</span></summary>
     <label>Participant
-      <span class="hint">Leave it empty for a link shared with many participants. The page then asks each one for an identifier.</span>
+      <span class="hint">Leave it empty for a link shared with many participants. The online form then asks each one for an identifier.</span>
       <input name="participant" type="text" autocomplete="off">
     </label>
     <label>Recruiting site
@@ -164,9 +164,9 @@
         <option value="other">Another site</option>
       </select>
     </label>
-    <p class="site-hint" id="prolificHint" hidden>The page reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, the page reads the filled ones. The file gains <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
-    <p class="site-hint" id="sonaHint" hidden>The page reads each participant's SONA survey code from the <code>id</code> parameter. Paste the link as SONA's Study URL. As the completion URL, give SONA's client-side one with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
-    <p class="site-hint" id="connectHint" hidden>The page reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
+    <p class="site-hint" id="prolificHint" hidden>The online form reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, it reads the filled ones. The file gains <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
+    <p class="site-hint" id="sonaHint" hidden>The online form reads each participant's SONA survey code from the <code>id</code> parameter. Paste it as SONA's Study URL. As the completion URL, give SONA's client-side one with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
+    <p class="site-hint" id="connectHint" hidden>The online form reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
         <span class="hint">The name of the parameter the site adds to the address with the identifier. Letters, digits, "_", "." and "-", up to 64. Not <code>c</code>, <code>z</code> or a Prolific name.</span>
@@ -177,7 +177,7 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The page then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The online form then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label class="check">
@@ -189,7 +189,7 @@
     <details class="optional" id="secConsent">
       <summary><span class="sec-name">Consent</span> <span class="sec-state">Not used</span></summary>
     <label>Consent text
-      <span class="hint">Your consent text, as your review board approved it. The page shows it as plain text on its own screen before the form, with "I agree" and "I do not agree". Up to 20,000 characters. <a href="https://github.com/jmgirard/hitop-form#show-consent-text-before-the-form">How it is shown</a>.</span>
+      <span class="hint">Your consent text, as your review board approved it. The online form shows it as plain text on its own screen before the form, with "I agree" and "I do not agree". Up to 20,000 characters. <a href="https://github.com/jmgirard/hitop-form#show-consent-text-before-the-form">How it is shown</a>.</span>
       <textarea name="consentText" class="prose"></textarea>
     </label>
     <label>Declined text
@@ -204,7 +204,7 @@
     <details class="optional" id="secFinish">
       <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
     <label>Completion URL
-      <span class="hint">An https:// address the page sends the participant to once their responses arrive, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
+      <span class="hint">An https:// address the online form sends the participant to once their responses arrive, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
@@ -480,9 +480,19 @@
   // names the section and, under the name, "Not used" or the labels of its
   // fields that hold a value, joined by ", ". A field holds a value when it
   // is shown and is a checked box, a menu set away from its empty first
-  // option, or a box holding more than spaces. In the questions section each
-  // question holds a value by being there, and is listed by its legend.
+  // option, or a box holding more than spaces. The consent and declined
+  // boxes hold a value when they hold anything, since "Make the link"
+  // refuses white space there rather than leaving it out. In the questions
+  // section each question holds a value by being there, and is listed by
+  // its legend.
   const SECTIONS = [...f.querySelectorAll('details.optional')];
+
+  // The links in the intro, the hints and the SQL block open a new tab, so
+  // what the researcher typed stays on this one.
+  for (const a of document.querySelectorAll('#intro a, #f a, #sqlBlock a')) {
+    a.target = '_blank';
+    a.rel = 'noopener';
+  }
   function labelText(control) {
     const copy = control.closest('label').cloneNode(true);
     copy.querySelectorAll('.hint, input, select, textarea').forEach((n) => n.remove());
@@ -495,7 +505,8 @@
     const held = [];
     for (const c of section.querySelectorAll('input, select, textarea')) {
       if (c.closest('[hidden]') !== null) continue;
-      if (c.type === 'checkbox' ? c.checked : c.value.trim() !== '') held.push(labelText(c));
+      const value = c.classList.contains('prose') ? c.value : c.value.trim();
+      if (c.type === 'checkbox' ? c.checked : value !== '') held.push(labelText(c));
     }
     return held;
   }
@@ -507,6 +518,15 @@
   }
   f.addEventListener('input', showHeld);
   f.addEventListener('change', showHeld);
+
+  // A built link goes once the fields change, so the region never shows a
+  // link or a next step the fields no longer match. The questions file
+  // input is in the form, so a file chosen there hides it too.
+  function hideResult() {
+    result.hidden = true;
+  }
+  f.addEventListener('input', hideResult);
+  f.addEventListener('change', hideResult);
 
   // A refusal: the message in the alert and focus on the field it names,
   // its section opened first, so the researcher lands on the field. A
@@ -966,7 +986,7 @@
     const site = data.get('site');
     const prolific = site === 'prolific';
     if (prolific && participant !== '') {
-      refuseAt('The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.', f.elements.participant);
+      refuseAt('The participant field must be empty when recruiting through Prolific: the online form takes each participant\'s identifier from the Prolific ID in the address.', f.elements.participant);
       return;
     }
     if (prolific) config.prolific = true;
@@ -999,7 +1019,7 @@
         return;
       }
       if (participant !== '') {
-        refuseAt(`The participant field must be empty when a recruiting site fills the identifier: the page takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`, f.elements.participant);
+        refuseAt(`The participant field must be empty when a recruiting site fills the identifier: the online form takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`, f.elements.participant);
         return;
       }
       config.participantParam = param;
@@ -1122,14 +1142,15 @@
       // The refused field is read from the message: a key or a table fault
       // opens its reason with "its key", "it names no key", "its table" or
       // "it names no table", and any other Supabase fault is the project
-      // URL's. Only that opening is read, since a URL the message quotes can
-      // hold either word.
+      // URL's. Only that opening, right after the message's prefix, is read,
+      // since a URL the message quotes can hold either phrase.
       try {
         config.store = checkStore(store);
       } catch (e) {
+        const opening = (what) => new RegExp(`^Where responses go could not be used: (its|it names no) ${what}\\b`);
         const name = kind === 'webhook' ? 'store'
-          : /: (its|it names no) key\b/.test(e.message) ? 'supabaseKey'
-          : /: (its|it names no) table\b/.test(e.message) ? 'supabaseTable' : 'supabaseUrl';
+          : opening('key').test(e.message) ? 'supabaseKey'
+          : opening('table').test(e.message) ? 'supabaseTable' : 'supabaseUrl';
         refuseAt(e.message, f.elements[name]);
         return;
       }
@@ -1181,10 +1202,14 @@
   // or else test the link and hand it out.
   const SITE_NAMES = { prolific: 'Prolific', sona: 'SONA', connect: 'CloudResearch Connect', other: 'your recruiting site' };
   function nextStep(site, supabase) {
+    const sql = 'Run the SQL below once in your Supabase project\'s SQL editor';
+    if (supabase && !(site in SITE_NAMES)) {
+      return `${sql}. Then open the link once to test it, and give it to each participant.`;
+    }
     const then = site in SITE_NAMES
       ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
       : 'open the link once to test it, and then give it to each participant.';
-    if (supabase) return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
+    if (supabase) return `${sql} before you ${then}`;
     return then.charAt(0).toUpperCase() + then.slice(1);
   }
 

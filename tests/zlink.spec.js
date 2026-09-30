@@ -60,10 +60,10 @@ const good = deflate(JSON.stringify(CONFIG));
 const REFUSED_Z = [
   { name: 'a character outside base64url', value: `${z(good)}*`, why: 'is not base64url text' },
   { name: 'a length no base64 has', value: 'abcde', why: 'is not base64url text' },
-  { name: 'bytes that are no stream', value: z(Buffer.from('hello world')), why: 'does not decompress' },
-  { name: 'a truncated stream', value: z(good.subarray(0, good.length - 2)), why: 'does not decompress' },
-  { name: 'bytes after the end of the stream', value: z(Buffer.concat([good, Buffer.from([1, 2, 3])])), why: 'does not decompress' },
-  { name: '100,001 bytes inflated', value: z(deflate(paddedJson(100_001))), why: 'decompresses to more than 100,000 bytes' },
+  { name: 'bytes that are no stream', value: z(Buffer.from('hello world')), why: 'does not unpack' },
+  { name: 'a truncated stream', value: z(good.subarray(0, good.length - 2)), why: 'does not unpack' },
+  { name: 'bytes after the end of the stream', value: z(Buffer.concat([good, Buffer.from([1, 2, 3])])), why: 'does not unpack' },
+  { name: '100,001 bytes inflated', value: z(deflate(paddedJson(100_001))), why: 'unpacks to more than 100,000 bytes' },
   { name: 'bytes that are not UTF-8', value: z(deflateRawSync(Buffer.from([0x7b, 0xff, 0xfe, 0x7d]))), why: 'is not UTF-8 text' },
   { name: 'text that is not JSON', value: z(deflate('{instrument: hitopbr}')), why: 'is not JSON' },
 ];

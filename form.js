@@ -201,13 +201,13 @@ export async function inflateConfig(z, bad) {
     try {
       step = await reader.read();
     } catch {
-      throw bad('does not decompress');
+      throw bad('does not unpack');
     }
     if (step.done) break;
     total += step.value.length;
     if (total > MAX_LINK_BYTES) {
       reader.cancel().catch(() => {});
-      throw bad('decompresses to more than 100,000 bytes');
+      throw bad('unpacks to more than 100,000 bytes');
     }
     chunks.push(step.value);
   }

@@ -144,6 +144,11 @@ test('a summary lists the labels of the fields that hold a value', async ({ page
   for (const name of ['consentText', 'declinedText']) await page.locator(`textarea[name="${name}"]`).fill('');
   await page.locator('input[name="completeDeclined"]').fill('');
   await expect(state(page, 'secConsent')).toHaveText('Not used');
+  // A box of white space alone is listed, as "Make the link" refuses it
+  // rather than leaving it out.
+  await page.locator('textarea[name="declinedText"]').fill('\n');
+  await expect(state(page, 'secConsent')).toHaveText('Declined text');
+  await page.locator('textarea[name="declinedText"]').fill('');
 
   await openSection(page, 'secFinish');
   await page.locator('input[name="complete"]').fill(COMPLETE);
@@ -238,6 +243,8 @@ for (const probe of [
   { name: 'a project URL holding "key"', url: 'http://example.org/key', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
   { name: 'an empty key', url: 'https://abcdefghijkl.supabase.co', key: ' ', table: 'responses', field: 'supabaseKey', message: /^Where responses go could not be used: it names no key|its key/ },
   { name: 'a bad table name', url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_x', table: 'Responses', field: 'supabaseTable', message: /^Where responses go could not be used: its table/ },
+  { name: 'a project URL quoting ": its table"', url: 'abc: its table', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
+  { name: 'a project URL quoting ": it names no key"', url: 'abc: it names no key', key: 'sb_publishable_x', table: 'responses', field: 'supabaseUrl', message: /^Where responses go could not be used: its url/ },
 ]) {
   test(`a Supabase refusal for ${probe.name} focuses ${probe.field}`, async ({ page }) => {
     await page.goto(`${base()}link.html`);
@@ -415,6 +422,9 @@ const SITE_TEXT = {
 const TEST_THEN_GIVE = 'open the link once to test it, and then give it to each participant.';
 function expectedNext(site, kind) {
   const then = SITE_TEXT[site] === null ? TEST_THEN_GIVE : `paste the link into your study's page on ${SITE_TEXT[site]}.`;
+  if (kind === 'supabase' && SITE_TEXT[site] === null) {
+    return `Run the SQL below once in your Supabase project's SQL editor. Then open the link once to test it, and give it to each participant.`;
+  }
   if (kind === 'supabase') return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
   return then[0].toUpperCase() + then.slice(1);
 }
@@ -606,6 +616,32 @@ test('every README link on the page names a README heading', async ({ page }) =>
   const anchors = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => a.hash.slice(1)));
   expect(anchors.length).toBeGreaterThan(8);
   expect(anchors.filter((a) => !slugs.has(a))).toEqual([]);
+  // Each opens in a new tab, so what the researcher typed stays put.
+  const targets = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => `${a.target} ${a.rel}`));
+  expect(targets.filter((t) => t !== '_blank noopener')).toEqual([]);
+});
+
+// A built link goes once a field changes or a questions file loads, so the
+// region never shows a link or a next step the fields no longer match.
+test('the result region hides when a field changes after a build', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await expect(page).toHaveTitle('HiTOP Study Link Builder');
+  await page.locator('input[name="study"]').fill('stale');
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  await page.locator('input[name="study"]').fill('stale2');
+  await expect(page.locator('#result')).toBeHidden();
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  await openSection(page, 'secParticipants');
+  await page.locator('select[name="site"]').selectOption('prolific');
+  await expect(page.locator('#result')).toBeHidden();
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  await openSection(page, 'secQuestions');
+  await page.locator('#questionsFile').setInputFiles({ name: 'q.csv', mimeType: 'text/csv', buffer: Buffer.from(csvOf(1)) });
+  await expect(page.locator('#questionsStatus')).toHaveText('Loaded 1 question from q.csv.');
+  await expect(page.locator('#result')).toBeHidden();
 });
 
 // S9: each fact stated here, so a shortened hint that drops one fails.
@@ -617,7 +653,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await openSection(page, 'secParticipants');
   const site = page.locator('select[name="site"]');
   await site.selectOption('prolific');
-  await expect(page.locator('#prolificHint')).toContainText('If Prolific\'s URL-parameters option adds them again, the page reads the filled ones.');
+  await expect(page.locator('#prolificHint')).toContainText('If Prolific\'s URL-parameters option adds them again, it reads the filled ones.');
   await site.selectOption('sona');
   const sona = page.locator('#sonaHint');
   await expect(sona).toContainText('As the completion URL, give SONA\'s client-side one with {participant} for XXXX.');

@@ -13,7 +13,7 @@ without a survey platform, and it scores nothing: scoring is the job of the
 [hitop](https://jmgirard.github.io/hitop/) R package.
 
 Live page: <https://jmgirard.github.io/hitop-form/>
-Make a study link: <https://jmgirard.github.io/hitop-form/link.html>
+Study Link Builder: <https://jmgirard.github.io/hitop-form/link.html>
 
 The page reads each instrument from the hitop package's JSON export
 (`https://jmgirard.github.io/hitop/downloads/hitopsr.json`, `hitopbr.json`,
@@ -31,7 +31,9 @@ closed until you open it. A section's summary reads "Not used", or it lists
 the labels of its fields that hold a value ("Question 1", "Question 2" and
 so on in the questions section). Fill in what you need and press
 "Make the link". When the builder refuses a field, it opens the field's
-section and moves focus to the field.
+section and moves focus to the field. A refusal of the instruments list
+moves focus to the first instrument. A refusal that names no one field
+moves focus to the message.
 
 ### Required parts
 

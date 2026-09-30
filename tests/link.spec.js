@@ -391,7 +391,7 @@ test('Prolific as the recruiting site beside a filled participant field is refus
   await page.locator('select[name="site"]').selectOption('prolific');
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#err')).toHaveText(
-    "The participant field must be empty when recruiting through Prolific: the page takes each participant's identifier from the Prolific ID in the address.",
+    "The participant field must be empty when recruiting through Prolific: the online form takes each participant's identifier from the Prolific ID in the address.",
   );
   expect(await page.locator('#out').textContent(), 'no link is built').toBe('');
 });
@@ -911,7 +911,7 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   const sona = page.locator('#sonaHint');
   // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
   await expect(sona).toContainText("reads each participant's SONA survey code from the id parameter");
-  await expect(sona).toContainText("Paste the link as SONA's Study URL");
+  await expect(sona).toContainText("Paste it as SONA's Study URL");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
   await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
 });
@@ -943,8 +943,8 @@ for (const c of [
   { site: 'other', param: LONG_PARAM, names: `The address parameter could not be used: it is longer than 64 characters, and it is "${LONG_PARAM}".` },
   { site: 'other', param: 'c', names: 'The address parameter could not be used: it is "c", the parameter that carries the study link itself.' },
   { site: 'other', param: 'PROLIFIC_PID', names: 'The address parameter could not be used: it is "PROLIFIC_PID", one of Prolific\'s parameters. For a Prolific study choose Prolific as the recruiting site, which also keeps STUDY_ID and SESSION_ID.' },
-  { site: 'sona', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the page takes each participant\'s identifier from the address parameter "id".' },
-  { site: 'other', param: 'workerId', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the page takes each participant\'s identifier from the address parameter "workerId".' },
+  { site: 'sona', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the online form takes each participant\'s identifier from the address parameter "id".' },
+  { site: 'other', param: 'workerId', participant: 'l26', names: 'The participant field must be empty when a recruiting site fills the identifier: the online form takes each participant\'s identifier from the address parameter "workerId".' },
 ]) {
   test(`the builder refuses ${c.participant ? `the site ${c.site} beside a participant` : `the address parameter ${JSON.stringify(c.param).slice(0, 30)}`}`, async ({ page }) => {
     const { err, href } = await buildSite(page, c);

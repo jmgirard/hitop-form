@@ -208,7 +208,7 @@ for (const probe of [
   {
     name: 'a z that does not decompress',
     query: `?z=${deflateRawSync(Buffer.from('{"instrument":"pid5"}')).subarray(0, 5).toString('base64url')}`,
-    message: "The study link you opened does not decompress. Fill in the form above to make a new link.",
+    message: "The study link you opened does not unpack. Fill in the form above to make a new link.",
   },
 ]) {
   test(`link.html with ${probe.name} is refused by name and fills nothing`, async ({ page }) => {
