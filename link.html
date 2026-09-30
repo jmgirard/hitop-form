@@ -1001,8 +1001,9 @@
   // "Make the link" is disabled in the markup until here, so a press before
   // the submit handler below exists submits nothing. A disabled default
   // button also stops Enter in a field from submitting the form. The
-  // markup's autocomplete="off" stops Firefox from keeping the enabled
-  // state across a reload.
+  // markup's autocomplete="off" is there because MDN's <button> page says
+  // Firefox keeps a button's changed disabled state across page loads
+  // without it. The tests run Chromium only, so they do not check this.
   const makeButton = f.querySelector('button[type="submit"]');
   makeButton.disabled = false;
   // Both messages are written before the page has loaded, so their live

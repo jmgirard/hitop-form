@@ -42,9 +42,11 @@
 //       address takes {participant}; the saved-file address leaves the
 //       completion URL in force when responses arrive
 //  S10: with "Another site" chosen and one question of each type, 50
-//       characters typed into each text input and box in the sections
-//       make no cloneNode() call, and each summary lists its filled
-//       fields; the body of labelText() holds no copying method
+//       characters put into each text input and box in the sections
+//       (typed where the field shows, sent as input events where the
+//       question's type hides it) make no cloneNode() call, and each
+//       summary lists its filled fields; the body of labelText() holds no
+//       copying method
 //  S11: when a setup step after the prefill throws, the message says the
 //       link was not read, every summary reads "Not used", every section
 //       is closed, no site hint or destination block shows, and a build
