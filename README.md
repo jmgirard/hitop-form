@@ -169,7 +169,9 @@ recruiting site, it says to paste the link into your study's page on that
 site. With a Supabase table, it says to run the SQL shown under the link
 first. Otherwise it says to open the link once to test it, and then to give
 it to each participant. "Open the link" opens it in a new tab, and the
-number beside it is the link's length in characters.
+number beside it is the link's length in characters. If a field changes
+while the link is being made, no link is shown, and a message asks you to
+press "Make the link" again.
 
 The link carries the instruments, the study, the participant, the module,
 the random-order choice, the recruiting site, the completion URLs, the

@@ -111,7 +111,7 @@
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, in this order. A list holds one form of the PID-5 at most. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
+      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
@@ -121,7 +121,7 @@
     </label>
     <fieldset id="destBlock">
       <legend id="destLegend">Where responses go</legend>
-      <span class="hint" id="destHint">A file lands in the participant's downloads folder. A web address, such as a Google Apps Script web app, or a Supabase table gets one JSON row per participant. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
+      <span class="hint" id="destHint">A file goes to the participant's downloads. A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
       <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
         <option value="">A file on the participant's device</option>
         <option value="webhook">A web address</option>
@@ -244,7 +244,7 @@
     <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor. It makes the table with one column per item and per question, and lets the key add rows and nothing else. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
+      <span class="hint">Run this in the project's SQL editor. Its table has a column per item and question. The key can only add rows. After changing instruments, module, random order, Prolific or questions, make a new table. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
@@ -953,9 +953,10 @@
     sqlBlock.hidden = true;
     sql.value = '';
     // The fields as read now. A change during a wait below makes them stale,
-    // and the build then ends with nothing shown.
+    // and the build then ends with no link shown and a message that says so.
     const at = changes;
     const stale = () => changes !== at;
+    const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
     const data = new FormData(f);
     // One row makes an `instrument` link, as before the list. Two or three
     // make an `instruments` list, which takes the form page's own check with
@@ -1177,10 +1178,13 @@
       try {
         items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
       } catch (e) {
-        if (!stale()) refuseAt(e.message);
+        refuseAt(stale() ? STALE : e.message);
         return;
       }
-      if (stale()) return;
+      if (stale()) {
+        refuseAt(STALE);
+        return;
+      }
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
       sqlBlock.hidden = false;
     }
@@ -1190,12 +1194,13 @@
     try {
       url.search = `?${await encodeLink(config)}`;
     } catch (e) {
-      if (!stale()) refuseAt(e.message);
+      refuseAt(stale() ? STALE : e.message);
       return;
     }
     if (stale()) {
       sqlBlock.hidden = true;
       sql.value = '';
+      refuseAt(STALE);
       return;
     }
     // A Prolific link ends in the three placeholders and a SONA link in

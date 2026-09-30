@@ -706,8 +706,11 @@ test('a field changed while a build waits leaves the result hidden', async ({ pa
   release();
   await expect(make(page)).toBeEnabled();
   await expect(page.locator('#result')).toBeHidden();
-  await expect(page.locator('#err')).toHaveText('');
+  // The stopped build says so, and focus lands on the message.
+  await expect(page.locator('#err')).toHaveText('A field changed while the link was being made. Press "Make the link" again.');
+  await expect(page.locator('#err')).toBeFocused();
   await make(page).click();
+  await expect(page.locator('#err')).toHaveText('');
   await expect(page.locator('#result')).toBeVisible();
   await expect(page.locator('#next')).toContainText('Prolific');
   await expect(page.locator('#sql')).toHaveValue(/"prolific_study" text/);
@@ -736,7 +739,11 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('The link ends in id=%SURVEY_CODE%, which SONA fills with each participant\'s survey code.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
-  await expect(page.locator('#destHint')).toContainText('such as a Google Apps Script web app, or a Supabase table gets one JSON row per participant.');
+  await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');
+  await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
+  const sqlHint = page.locator('#sqlBlock .hint');
+  await expect(sqlHint).toContainText('Its table has a column per item and question.');
+  await expect(sqlHint).toContainText('After changing instruments, module, random order, Prolific or questions, make a new table.');
   await expect(hintOf('supabaseTable')).toContainText('To write it, this page downloads each instrument from the hitop site.');
   await openSection(page, 'secOrder');
   await expect(hintOf('shuffle')).toContainText('The responses still list the items in the instrument\'s order');
