@@ -35,9 +35,10 @@
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
+import { useTarget, openBuilderSections, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 async function openBuilder(page, query = '') {
   await page.goto(`${base()}link.html${query}`);
@@ -286,7 +287,7 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);
-  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.");
+  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.");
   await expect(page.locator('#out')).toHaveText('');
 });
 
@@ -307,15 +308,15 @@ test('Move up, Move down and Remove reorder and renumber the questions', async (
   for (const name of ['a', 'b', 'c']) await addQ(page, { name, text: name.toUpperCase() });
   const names = () => page.$$eval('fieldset.question-edit', (gs) => gs.map((g) => `${g.querySelector('legend').textContent}:${g.querySelector('[name=qName]').value}`));
   // Each button's accessible name carries its question's number.
-  await page.getByRole('button', { name: 'Move question 3 up', exact: true }).click();
+  await page.getByRole('button', { name: 'Move up question 3', exact: true }).click();
   expect(await names()).toEqual(['Question 1:a', 'Question 2:c', 'Question 3:b']);
-  await expect(page.getByRole('button', { name: 'Move question 2 up', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Move up question 2', exact: true })).toBeFocused();
   await expect(group(page, 2).locator('.up')).toHaveText('Move up');
-  await page.getByRole('button', { name: 'Move question 1 down', exact: true }).click();
+  await page.getByRole('button', { name: 'Move down question 1', exact: true }).click();
   expect(await names()).toEqual(['Question 1:c', 'Question 2:a', 'Question 3:b']);
-  await expect(page.getByRole('button', { name: 'Move question 2 down', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: 'Move question 1 up', exact: true }).click();
-  expect(await names()).toEqual(['Question 1:c', 'Question 2:a', 'Question 3:b']);
+  await expect(page.getByRole('button', { name: 'Move down question 2', exact: true })).toBeFocused();
+  // The first group's Move up does nothing, so it is disabled.
+  await expect(page.getByRole('button', { name: 'Move up question 1', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Remove question 2', exact: true }).click();
   expect(await names()).toEqual(['Question 1:c', 'Question 2:b']);
   await expect(group(page, 2).locator('[name=qList]')).toBeFocused();

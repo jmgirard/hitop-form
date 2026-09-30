@@ -25,9 +25,10 @@
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
+import { useTarget, openBuilderSections, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 
 const TEXT = [
   'You are invited to take part in a study.',
@@ -141,7 +142,7 @@ test('a z parameter fills the consent fields and round-trips', async ({ page }) 
   await expect(page.locator('#prefilled li')).toHaveText([
     `Completion URL: ${config.complete}`,
     `Completion URL after a decline: ${config.completeDeclined}`,
-    `Address: ${config.store.url}`,
+    `Web address: ${config.store.url}`,
   ]);
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#out')).not.toBeEmpty();
@@ -193,7 +194,7 @@ test('"Another site" with the address parameter "z" is refused by name', async (
   await page.locator('select[name="site"]').selectOption('other');
   await page.locator('input[name="participantParam"]').fill('z');
   await make(page);
-  await expect(page.locator('#err')).toHaveText('The address parameter could not be used: it is "z", the parameter that carries a compressed study link.');
+  await expect(page.locator('#err')).toHaveText('The address parameter could not be used: it is "z", which also carries the study link itself.');
   await expect(page.locator('#out')).toHaveText('');
 });
 
@@ -202,12 +203,12 @@ for (const probe of [
   {
     name: 'both c and z',
     query: `?c=${encodeConfig({ instrument: 'pid5' })}&z=${encodeCompressed({ instrument: 'pid5' })}`,
-    message: 'The link carries both a c and a z parameter. Fill in the form above to make a new link.',
+    message: 'The study link you opened holds its setup twice, in two forms, and a study link holds it once. Fill in the form above to make a new link.',
   },
   {
     name: 'a z that does not decompress',
     query: `?z=${deflateRawSync(Buffer.from('{"instrument":"pid5"}')).subarray(0, 5).toString('base64url')}`,
-    message: "The link's z parameter does not decompress. Fill in the form above to make a new link.",
+    message: "The study link you opened does not unpack. Fill in the form above to make a new link.",
   },
 ]) {
   test(`link.html with ${probe.name} is refused by name and fills nothing`, async ({ page }) => {

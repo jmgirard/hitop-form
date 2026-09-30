@@ -622,7 +622,7 @@ for (const u of UNCONFIRMED) {
 // unconfirmed: the file is saved and the screen says so.
 const SUPABASE_UNCONFIRMED = [
   { name: 'a 401', make: () => supabase(store(), { table: 'status_401' }), why: 'answered HTTP 401' },
-  { name: 'a 302', make: () => supabase(store(), { table: 'redirect_302' }), why: 'the endpoint redirected the send' },
+  { name: 'a 302', make: () => supabase(store(), { table: 'redirect_302' }), why: 'the server redirected the send' },
   {
     name: 'a refused connection',
     make: async () => ({ kind: 'supabase', url: `http://127.0.0.1:${await unusedPort()}`, key: 'sb_publishable_x', table: 'responses' }),

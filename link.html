@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HiTOP form: make a study link</title>
+<title>HiTOP Study Link Builder</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -48,20 +48,24 @@
     background: var(--accent); color: var(--accent-fg); cursor: pointer;
   }
   button.secondary { background: var(--bg); color: var(--accent); margin-left: var(--s2); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   [role="alert"] {
     background: var(--error-bg); color: var(--error); border: 1px solid var(--error);
     border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4);
   }
   [role="alert"]:empty { display: none; }
-  #out { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
+  h2 { font-size: 1.25rem; margin: var(--s5) 0 var(--s3); }
+  /* The built link in a box that scrolls past 10rem, the copy button beside
+     it. */
+  .link-row { display: flex; gap: var(--s2); align-items: flex-start; margin: 0 0 var(--s4); }
+  .link-row button.secondary { margin-left: 0; flex: none; }
+  #out { flex: 1; min-width: 0; max-height: 10rem; overflow-y: auto;
+         background: var(--surface); border: 1px solid var(--line); border-radius: var(--r1);
          padding: var(--s3) var(--s4); word-break: break-all; font-family: var(--mono);
          font-size: .875rem; }
-  #out:empty { display: none; }
   .upnav { margin: 0 0 var(--s4); font-size: .875rem; }
   .upnav a { color: var(--muted); }
-  ol.steps { margin: 0 0 var(--s5); padding-left: 1.25rem; }
-  ol.steps li { margin: 0 0 var(--s2); }
   #prefilled { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r1);
                padding: var(--s3) var(--s4); margin: 0 0 var(--s5); word-break: break-all; }
   #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
@@ -84,6 +88,13 @@
   /* Lined up with "Add a question" above, with a gap when they wrap. */
   .file-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); padding-left: var(--s2); }
   .file-buttons button.secondary { margin-left: 0; }
+  fieldset > .hint { display: block; color: var(--muted); font-size: .875rem; }
+  /* The optional sections: closed until opened, each summary naming the
+     section and, under it, what the section holds. */
+  details.optional { border: 1px solid var(--line); border-radius: var(--r1); padding: 0 var(--s4); margin: 0 0 var(--s4); }
+  details.optional > summary { cursor: pointer; padding: var(--s3) 0; font-weight: 600; }
+  details.optional[open] > summary { margin-bottom: var(--s2); }
+  details.optional .sec-state { display: block; font-weight: 400; color: var(--muted); font-size: .875rem; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -91,43 +102,60 @@
   <nav class="upnav">
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
-  <h1>Make a study link</h1>
-  <p class="muted">The link opens the form page with the instrument or instruments, the study and, when you give them, the participant, the module and the store to send responses to folded into its address. This builder keeps nothing and sends none of what you type anywhere. Opening a study link here to edit it (<code>link.html?c=…</code>, or <code>link.html?z=…</code> for a link with consent text or questions) puts its <code>c</code> or <code>z</code> parameter in this page's address, which your browser sends to the page's host when it requests the page. For a Supabase table the builder downloads each instrument from the hitop package's site, as the form page does. Give each participant a link. When they finish, the page sends their responses to the store you named, or, with none, saves them as a file in their own downloads folder.</p>
-  <ol class="steps">
-    <li>Choose the instrument, or up to three in order, and name the study. For part of the HiTOP-SR, build a module in the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> first and paste its descriptor below.</li>
-    <li>Say where the responses go: a file on the participant's device, a web address, or a Supabase table.</li>
-    <li>Press "Make the link" and give the link to each participant. The <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online-collection tutorial</a> walks the whole route, from the link to the scored responses.</li>
-  </ol>
+  <h1>Study Link Builder</h1>
+  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". This page keeps and sends nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
-    <p>The link you opened filled in these addresses. Check each one before you make a link.</p>
+    <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
   </div>
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add a second and a third. The page gives them one after another in one session, in this order, each with its own start screen and pages. A list holds at most one form of the PID-5. The saved file and the table hold one group of item columns per instrument, in this order.</p>
+      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
-    <label>Study
-      <span class="hint">Written into every saved file. Required.</span>
+    <label>Study name
+      <span class="hint">Written into every saved file and every row. Required.</span>
       <input name="study" type="text" autocomplete="off">
     </label>
+    <fieldset id="destBlock">
+      <legend id="destLegend">Where responses go</legend>
+      <span class="hint" id="destHint">A file goes to the participant's downloads. A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
+      <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
+        <option value="">A file on the participant's device</option>
+        <option value="webhook">A web address</option>
+        <option value="supabase">A Supabase table</option>
+      </select>
+      <div id="webhookFields" hidden>
+        <label>Web address
+          <span class="hint">The https:// address that receives each participant's row.</span>
+          <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+        </label>
+      </div>
+      <div id="supabaseFields" hidden>
+        <label>Project URL
+          <span class="hint">In the dashboard: Project Settings, then Data API.</span>
+          <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
+        </label>
+        <label>Publishable key
+          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key.</span>
+          <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
+        </label>
+        <label>Table name
+          <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that makes the table comes with the link. To write it, this page downloads each instrument from the hitop site.</span>
+          <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
+        </label>
+      </div>
+    </fieldset>
+    <details class="optional" id="secParticipants">
+      <summary><span class="sec-name">Participants and recruiting site</span> <span class="sec-state">Not used</span></summary>
     <label>Participant
-      <span class="hint">Optional. Leave it empty for a link shared with many participants; the page then asks each one for an identifier.</span>
+      <span class="hint">Leave it empty for a link shared with many participants. The online form then asks each one for an identifier.</span>
       <input name="participant" type="text" autocomplete="off">
     </label>
-    <label>Module descriptor
-      <span class="hint">Optional, HiTOP-SR only. With several instruments it applies to the HiTOP-SR among them. Paste the JSON that the hitop package's <code>write_module()</code> wrote, or that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> saved beside your form. The page then shows only the module's items, in the descriptor's printed order when it records one, unless the random-order box below is checked.</span>
-      <textarea name="module" spellcheck="false"></textarea>
-    </label>
-    <label class="check">
-      <input name="shuffle" type="checkbox" value="true">
-      Show the items in a random order
-      <span class="hint">Each participant sees a new order, drawn when the page opens. The file and the table still list the items in the instrument's order under their item names, and an <code>item_order</code> column records the order that participant saw. A module's printed order is not followed.</span>
-    </label>
     <label>Recruiting site
-      <span class="hint">Optional. A site that passes each participant's identifier in the study link's address. The page then takes the identifier from there, so leave the participant field empty.</span>
+      <span class="hint">A site that passes each participant's identifier in the study link's address. Leave the participant field empty. <a href="https://github.com/jmgirard/hitop-form#participants-and-recruiting-site">How each site works</a>.</span>
       <select name="site">
         <option value="">None</option>
         <option value="prolific">Prolific</option>
@@ -136,95 +164,92 @@
         <option value="other">Another site</option>
       </select>
     </label>
-    <p class="site-hint" id="prolificHint" hidden>The page takes each participant's Prolific ID from the address as their identifier, so leave the participant field empty. Paste the link below, with its three placeholders, as the study URL on Prolific, which fills them in. Prolific's "I'll use URL parameters" option appends the three parameters to the study URL itself, so a pasted link carries each parameter once unless that option adds it again, and the page then reads the filled value. The file and the table gain two columns, <code>prolific_study</code> and <code>prolific_session</code>, after <code>submitted</code> (and after <code>item_order</code> under the random order).</p>
-    <p class="site-hint" id="sonaHint" hidden>The page takes each participant's SONA survey code from the <code>id</code> parameter of the address as their identifier, so leave the participant field empty. The link below ends in <code>id=%SURVEY_CODE%</code>. Paste it as the Study URL in SONA, which puts each participant's survey code in place of <code>%SURVEY_CODE%</code>. For the completion URL, give SONA's client-side completion URL with <code>{participant}</code> in place of its <code>XXXX</code>. That URL carries the study's credit token, and a participant can read it in the study link.</p>
-    <p class="site-hint" id="connectHint" hidden>The page takes each participant's Connect ID from the <code>participantId</code> parameter of the address as their identifier, so leave the participant field empty. Give the link below as the project URL in Connect. For the completion URL, give the completion redirect URL Connect shows for the study.</p>
+    <p class="site-hint" id="prolificHint" hidden>The online form reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, it reads the filled ones. The responses gain <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
+    <p class="site-hint" id="sonaHint" hidden>The link ends in <code>id=%SURVEY_CODE%</code>, which SONA fills with each participant's survey code. Paste the link as SONA's Study URL. For completion, give SONA's client-side URL with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
+    <p class="site-hint" id="connectHint" hidden>The online form reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
-        <span class="hint">The name of the parameter the site adds to the study link's address with the participant's identifier. Letters A-Z and a-z, digits, "_", "." and "-", up to 64, and not <code>c</code>, <code>z</code> or a Prolific parameter.</span>
+        <span class="hint">The name of the parameter the site adds to the address with the identifier. Letters, digits, "_", "." and "-", up to 64. Not <code>c</code>, <code>z</code> or a Prolific name.</span>
         <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
       </label>
     </div>
-    <label>Completion URL
-      <span class="hint">Optional. An https:// address the page sends the participant to after a confirmed send, once the sent screen is drawn, and links to after a saved file. For Prolific, the completion URL shown on the study's page. Where the address must carry the participant's identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>, and the page puts the identifier there.</span>
-      <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </details>
+    <details class="optional" id="secOrder">
+      <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
+    <label>Module file
+      <span class="hint">HiTOP-SR only. Paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The online form then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <textarea name="module" spellcheck="false"></textarea>
     </label>
-    <label>Completion URL after a saved file
-      <span class="hint">Optional, and only beside a completion URL. An https:// address the page links to after a saved file in place of the completion URL, when the link names no store or the send was not confirmed. A confirmed send still goes to the completion URL. For Prolific, the study's completion code for a saved file: a study can hold one code per outcome, each with its own <code>?cc=</code> address.</span>
-      <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    <label class="check">
+      <input name="shuffle" type="checkbox" value="true">
+      Show the items in a random order
+      <span class="hint">Each participant sees a new order, in place of a module's printed order. The responses still list the items in the instrument's order, and an <code>item_order</code> column records the order that participant saw.</span>
     </label>
+    </details>
+    <details class="optional" id="secConsent">
+      <summary><span class="sec-name">Consent</span> <span class="sec-state">Not used</span></summary>
     <label>Consent text
-      <span class="hint">Optional. Your consent text, as your review board approved it. The page shows it on a screen of its own before the form, with an "I agree" and an "I do not agree" button. It is shown as plain text: a blank line starts a new paragraph, and a single line break stays a line break. Up to 20,000 characters. A link with consent text is written compressed, as <code>?z=</code> in place of <code>?c=</code>.</span>
+      <span class="hint">Your consent text, as your review board approved it. The online form shows it as plain text on its own screen before the form, with "I agree" and "I do not agree". Up to 20,000 characters. <a href="https://github.com/jmgirard/hitop-form#show-consent-text-before-the-form">How it is shown</a>.</span>
       <textarea name="consentText" class="prose"></textarea>
     </label>
     <label>Declined text
-      <span class="hint">Optional, and only beside consent text. What the page shows after "I do not agree", up to 2,000 characters. Left empty, the page shows "You chose not to take part. You can close this page.", or only its first sentence when the completion URL after a decline is given. After "I do not agree" the page sends no answer and saves no file.</span>
+      <span class="hint">Only beside consent text, up to 2,000 characters. Shown after "I do not agree". Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL. A decline sends and saves nothing.</span>
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Optional, and only beside consent text. An https:// address the page sends the participant to after "I do not agree", once the declined screen is drawn. For Prolific, the completion URL of the code your study gives a participant who does not consent. A <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier from the address or the link, or nothing when the page holds none yet.</span>
+      <span class="hint">Only beside consent text. An https:// address the online form sends the participant to after "I do not agree". <code>{participant}</code> is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
-    <fieldset id="questionsBlock">
-      <legend>Your own questions</legend>
-      <p class="hint">Optional. Questions of your own, such as age or how the participant heard of the study. The page asks them on a screen before the form or on a screen after its last page, never beside the items. Each answer is written in a column named <code>q_</code> plus the question's name, after the item columns. A text answer is written as typed. A whole number is written in digits. A choice is written as the number of the chosen option, counted from 1, and several choices as those numbers in order, separated by spaces. An unanswered question is written empty. Up to 50 questions. A link with questions is written compressed, as <code>?z=</code>.</p>
+    </details>
+    <details class="optional" id="secFinish">
+      <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
+    <label>Completion URL
+      <span class="hint">An https:// address the online form sends the participant to after showing that their responses arrived, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
+      <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    <label>Completion URL after a saved file
+      <span class="hint">Only beside a completion URL. The saved-file screen links here in place of the completion URL, which still applies when responses arrive. For Prolific, the URL of your study's completion code for a saved file.</span>
+      <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
+    </label>
+    </details>
+    <details class="optional" id="secQuestions">
+      <summary><span class="sec-name">Your own questions</span> <span class="sec-state">Not used</span></summary>
+    <div id="questionsBlock">
+      <p class="hint">Questions of your own, asked on a screen before or after the form. Each answer goes in a column named <code>q_</code> plus the question's name, after the item columns. Up to 50 questions. <a href="https://github.com/jmgirard/hitop-form#ask-your-own-questions">How answers are written</a>.</p>
       <div id="questionList"></div>
       <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
-      <p class="hint">You can also write the questions in a spreadsheet. "Download a template" saves a CSV file with the columns and one example question of each type. "Download these questions" saves the questions above in the same form, to edit in a spreadsheet or keep for another link.</p>
+      <p class="hint">You can also write the questions in a spreadsheet. "Download a template" saves a CSV file with one example of each type. "Download these questions" saves the questions above.</p>
       <p class="file-buttons">
         <button type="button" class="secondary" id="downloadTemplate">Download a template</button>
         <button type="button" class="secondary" id="downloadQuestions">Download these questions</button>
       </p>
       <label>Load questions from a file
-        <span class="hint">A CSV file, saved from a spreadsheet as "CSV UTF-8". Its first row names the columns in lower case: list, name, text and type, and as you need them options, required, min and max. Each further row is one question. A list is before or after, and a type is text, number, choice or multi, in lower case. Write the options in one cell, separated by <code>|</code>. The README describes each column. The questions in the file take the place of the questions above. The file is read in this browser and sent nowhere.</span>
+        <span class="hint">A CSV file saved as "CSV UTF-8", one question per row. Its questions replace the questions above. This browser reads the file and sends it nowhere. <a href="https://github.com/jmgirard/hitop-form#write-your-questions-in-a-spreadsheet">The file's columns</a>.</span>
         <input type="file" id="questionsFile" accept=".csv,text/csv">
       </label>
       <p role="alert" id="questionsErr" tabindex="-1"></p>
       <p role="status" id="questionsStatus" class="muted"></p>
-    </fieldset>
-    <label>Send responses to
-      <span class="hint">Where each participant's responses go when they finish. A file is saved in their own downloads folder. A web address is an endpoint that accepts one JSON row, such as a Google Apps Script web app that appends to a sheet. A Supabase table is one row per participant in a project you own. The README describes the last two.</span>
-      <select name="storeKind">
-        <option value="">A file on the participant's device</option>
-        <option value="webhook">A web address</option>
-        <option value="supabase">A Supabase table</option>
-      </select>
-    </label>
-    <div id="webhookFields" hidden>
-      <label>Address
-        <span class="hint">The https:// address of the endpoint.</span>
-        <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
-      </label>
     </div>
-    <div id="supabaseFields" hidden>
-      <label>Project URL
-        <span class="hint">In the dashboard: Project Settings, then Data API.</span>
-        <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
-      </label>
-      <label>Publishable key
-        <span class="hint">The project's publishable key (or its legacy anon key). It goes into every study link, so use no other key.</span>
-        <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
-      </label>
-      <label>Table name
-        <span class="hint">Lower-case letters, digits and underscores, up to 63, not starting with a digit. The SQL that creates it is shown under the link.</span>
-        <input name="supabaseTable" type="text" autocomplete="off" spellcheck="false" placeholder="responses">
-      </label>
-    </div>
+    </details>
     <p role="alert" id="err" tabindex="-1"></p>
-    <p>
-      <button type="submit">Make the link</button>
-      <button type="button" class="secondary" id="copy" hidden>Copy</button>
-    </p>
+    <p><button type="submit">Make the link</button></p>
   </form>
-  <p id="out"></p>
-  <p id="open" class="muted"></p>
+  <section id="result" aria-labelledby="resultHeading" hidden>
+    <h2 id="resultHeading" tabindex="-1">Your study link</h2>
+    <div class="link-row">
+      <div id="out" role="region" aria-label="The study link" tabindex="0"></div>
+      <button type="button" class="secondary" id="copy">Copy the link</button>
+    </div>
+    <p id="next"></p>
+    <p id="open" class="muted"></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
-      <span class="hint">Run this once in the project's SQL editor before sending the link. It creates the table with the five study columns, an <code>item_order</code> column when the random-order box is checked, the two Prolific columns when the recruiting site is Prolific, one column per item in the order the file keeps them (one group per instrument, in the list's order), and one text column per question of your own after the items, turns on row-level security, and lets the key insert rows and nothing else.</span>
+      <span class="hint">Run this in the project's SQL editor. Its table has a column per item and question. The key can only add rows. After changing instruments, module, random order, Prolific or questions, make a new table. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
       <textarea id="sql" readonly spellcheck="false"></textarea>
     </label>
     <p><button type="button" class="secondary" id="copySql">Copy the SQL</button></p>
   </div>
+  </section>
 </main>
 <script type="module">
   import {
@@ -255,6 +280,12 @@
   const err = document.getElementById('err');
   const out = document.getElementById('out');
   const open = document.getElementById('open');
+  const result = document.getElementById('result');
+  // How many times hideResult() ran: a build reads it before and after
+  // each wait.
+  let changes = 0;
+  const resultHeading = document.getElementById('resultHeading');
+  const next = document.getElementById('next');
   const copy = document.getElementById('copy');
   const sqlBlock = document.getElementById('sqlBlock');
   const sql = document.getElementById('sql');
@@ -300,18 +331,37 @@
   const addInstrument = document.getElementById('addInstrument');
 
   // Each row's label and the names of its three buttons carry its number,
-  // counted from 1 in the list's order.
+  // counted from 1 in the list's order, each name starting with the
+  // button's own text. Move up is disabled on the first row, Move down on
+  // the last, and Remove while one row is left.
   function renumberInstruments() {
     const rows = [...instrumentList.children];
     rows.forEach((row, k) => {
       const n = k + 1;
       row.querySelector('.label').textContent = `Instrument ${n}`;
-      row.querySelector('.up').setAttribute('aria-label', `Move instrument ${n} up`);
-      row.querySelector('.down').setAttribute('aria-label', `Move instrument ${n} down`);
-      row.querySelector('.remove').setAttribute('aria-label', `Remove instrument ${n}`);
+      setMoves(row, `instrument ${n}`, k === 0, k === rows.length - 1);
       row.querySelector('.remove').disabled = rows.length === 1;
     });
     addInstrument.disabled = rows.length >= INSTRUMENTS_MAX;
+    hideResult();
+  }
+
+  // The names and the disabled state of a row's or a group's Move up and
+  // Move down, and the name of its Remove.
+  function setMoves(node, what, first, last) {
+    const up = node.querySelector('.up');
+    const down = node.querySelector('.down');
+    up.setAttribute('aria-label', `Move up ${what}`);
+    down.setAttribute('aria-label', `Move down ${what}`);
+    node.querySelector('.remove').setAttribute('aria-label', `Remove ${what}`);
+    up.disabled = first;
+    down.disabled = last;
+  }
+
+  // After a move, focus stays on the pressed button, or goes to the other
+  // move button when the pressed one is now disabled.
+  function focusMove(pressed, other) {
+    (pressed.disabled ? other : pressed).focus();
   }
 
   // A new row at the end, its menu set to `stem`, or to the first of the
@@ -332,12 +382,12 @@
     const up = button('Move up', () => {
       if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
       renumberInstruments();
-      up.focus();
+      focusMove(up, down);
     });
     const down = button('Move down', () => {
       if (row.nextElementSibling) instrumentList.insertBefore(row.nextElementSibling, row);
       renumberInstruments();
-      down.focus();
+      focusMove(down, up);
     });
     const remove = button('Remove', () => {
       const next = row.nextElementSibling ?? row.previousElementSibling;
@@ -416,16 +466,87 @@
     group.querySelector('.bounds').hidden = type !== 'number';
   }
 
-  // Each group's legend and the names of its three move buttons carry its
-  // number, counted from 1 in the editor's order.
+  // Each group's legend and the names of its three buttons carry its number,
+  // counted from 1 in the editor's order. Move up is disabled on the first
+  // group and Move down on the last. Remove stays enabled, since the editor
+  // may be emptied.
   function renumber() {
-    [...questionList.children].forEach((group, k) => {
+    const groups = [...questionList.children];
+    groups.forEach((group, k) => {
       const n = k + 1;
       group.querySelector('legend').textContent = `Question ${n}`;
-      group.querySelector('.up').setAttribute('aria-label', `Move question ${n} up`);
-      group.querySelector('.down').setAttribute('aria-label', `Move question ${n} down`);
-      group.querySelector('.remove').setAttribute('aria-label', `Remove question ${n}`);
+      setMoves(group, `question ${n}`, k === 0, k === groups.length - 1);
     });
+    showHeld();
+    hideResult();
+  }
+
+  // The five optional sections. Each is a closed <details> whose summary
+  // names the section and, under the name, "Not used" or the labels of its
+  // fields that hold a value, joined by ", ". A field holds a value when it
+  // is shown and is a checked box, a menu set away from its empty first
+  // option, or a box holding more than spaces. The consent and declined
+  // boxes hold a value when they hold anything, since "Make the link"
+  // refuses white space there rather than leaving it out. In the questions
+  // section each question holds a value by being there, and is listed by
+  // its legend.
+  const SECTIONS = [...f.querySelectorAll('details.optional')];
+
+  // The links in the top bar, the intro, the hints and the SQL block open a
+  // new tab, so what the researcher typed stays on this one.
+  for (const a of document.querySelectorAll('.upnav a, #intro a, #f a, #sqlBlock a')) {
+    a.target = '_blank';
+    a.rel = 'noopener';
+  }
+  function labelText(control) {
+    const copy = control.closest('label').cloneNode(true);
+    copy.querySelectorAll('.hint, input, select, textarea').forEach((n) => n.remove());
+    return copy.textContent.replace(/\s+/g, ' ').trim();
+  }
+  function heldLabels(section) {
+    if (section.id === 'secQuestions') {
+      return [...questionList.children].map((group) => group.querySelector('legend').textContent);
+    }
+    const held = [];
+    for (const c of section.querySelectorAll('input, select, textarea')) {
+      if (c.closest('[hidden]') !== null) continue;
+      const value = c.classList.contains('prose') ? c.value : c.value.trim();
+      if (c.type === 'checkbox' ? c.checked : value !== '') held.push(labelText(c));
+    }
+    return held;
+  }
+  function showHeld() {
+    for (const section of SECTIONS) {
+      const held = heldLabels(section);
+      section.querySelector('.sec-state').textContent = held.length === 0 ? 'Not used' : held.join(', ');
+    }
+  }
+  f.addEventListener('input', showHeld);
+  f.addEventListener('change', showHeld);
+
+  // A built link goes on any input or change event in the form, so typing,
+  // a menu choice or a box ticked after a build hides it. The questions
+  // file input is in the form, so a file chosen there hides it too. Add,
+  // Move up, Move down and Remove fire neither event, so the two renumber
+  // functions they end in call this as well. Each call also counts a change,
+  // so a build that waited through one shows nothing (see build()). The
+  // count is declared with `result`, because setup renumbers before here.
+  function hideResult() {
+    changes += 1;
+    result.hidden = true;
+  }
+  f.addEventListener('input', hideResult);
+  f.addEventListener('change', hideResult);
+
+  // A refusal: the message in the alert and focus on the field it names,
+  // its section opened first, so the researcher lands on the field. A
+  // refusal that names no one field focuses the alert.
+  function refuseAt(message, control) {
+    err.textContent = message;
+    const target = control ?? err;
+    const section = target.closest('details');
+    if (section !== null) section.open = true;
+    target.focus();
   }
 
   // A new group at the end, filled from `q` (a question as a link holds it)
@@ -472,12 +593,12 @@
     const up = button('Move up', () => {
       if (group.previousElementSibling) questionList.insertBefore(group, group.previousElementSibling);
       renumber();
-      up.focus();
+      focusMove(up, down);
     });
     const down = button('Move down', () => {
       if (group.nextElementSibling) questionList.insertBefore(group.nextElementSibling, group);
       renumber();
-      down.focus();
+      focusMove(down, up);
     });
     const remove = button('Remove', () => {
       const next = group.nextElementSibling ?? group.previousElementSibling;
@@ -494,7 +615,7 @@
       field('Name', 'A lower-case letter, then lower-case letters, digits and "_", up to 30 in all. The answer\'s column is q_ plus this name.', name),
       field('Question', 'One line, up to 1,000 characters.', text),
       field('Type', null, typeSelect),
-      field('Options', 'One per line, 2 to 20, each up to 200 characters and without "|". Blank lines are skipped. The answer is the number of the chosen option, counted from 1, so keep the order the same in every link of a study.', options, 'options-field'),
+      field('Options', 'One per line, 2 to 20, each up to 200 characters, without "|". Blank lines are skipped. The answer is the chosen option\'s number, counted from 1, so keep this order in every link of a study.', options, 'options-field'),
       bounds,
       requiredLabel,
       moves,
@@ -618,11 +739,32 @@
     });
     const questions = {};
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
-    return checkQuestions(questions, {
-      bad: (why) => new Error(`The questions could not be used: ${why}`),
-      where: (list, i) => `question ${numbers[list][i]}`,
-    });
+    // The check names each question as it reaches it, so the last group
+    // named and the field key are the refused ones. The refusal carries
+    // that group's control as `control`, its first control when the fault
+    // names no field.
+    let group;
+    let key;
+    try {
+      return checkQuestions(questions, {
+        bad: (why) => new Error(`The questions could not be used: ${why}`),
+        where: (list, i) => {
+          group = groups[numbers[list][i] - 1];
+          return `question ${numbers[list][i]}`;
+        },
+        field: (at, k) => {
+          key = k;
+          return at;
+        },
+      });
+    } catch (e) {
+      if (group !== undefined) e.control = group.querySelector(`[name=${QUESTION_CONTROLS[key] ?? 'qList'}]`);
+      throw e;
+    }
   }
+  const QUESTION_CONTROLS = {
+    name: 'qName', text: 'qText', type: 'qType', options: 'qOptions', min: 'qMin', max: 'qMax', required: 'qRequired',
+  };
 
   // A study link's own `c` or `z` parameter, opened on this page, fills the
   // controls from the config it encodes, so a link can be edited here and
@@ -646,14 +788,14 @@
   const opened = new URLSearchParams(window.location.search);
   const linkParam = opened.has('z') ? 'z' : 'c';
   const refuse = (what) => {
-    err.textContent = `The link's ${linkParam} parameter ${what} Fill in the form above to make a new link.`;
+    err.textContent = `The study link you opened ${what} Fill in the form above to make a new link.`;
   };
   // Returns the addresses filled, each as [label, the field's value] in the
   // form's order, the label named as the form shows it.
   async function prefill() {
     const filled = [];
     if (opened.has('c') && opened.has('z')) {
-      err.textContent = 'The link carries both a c and a z parameter. Fill in the form above to make a new link.';
+      err.textContent = 'The study link you opened holds its setup twice, in two forms, and a study link holds it once. Fill in the form above to make a new link.';
       return filled;
     }
     const param = opened.get(linkParam);
@@ -661,7 +803,7 @@
     let config;
     if (linkParam === 'z') {
       if (!canInflate()) {
-        refuse('could not be read, because this browser cannot decompress it.');
+        refuse('could not be read, because this browser cannot unpack it.');
         return filled;
       }
       try {
@@ -749,7 +891,7 @@
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
       kindSelect.value = store.kind;
       if (store.kind === 'webhook') {
-        address('store', 'Address', store.url);
+        address('store', 'Web address', store.url);
       } else {
         address('supabaseUrl', 'Project URL', store.url);
         text('supabaseKey', store.key);
@@ -774,6 +916,9 @@
   }
   showKind();
   showSite();
+  // A section the opened link filled a field of opens; the rest stay closed.
+  showHeld();
+  for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
   // when it holds text, else to the notice when it shows.
@@ -801,11 +946,17 @@
     notice.hidden = true;
     noticeList.replaceChildren();
     err.textContent = '';
+    result.hidden = true;
     out.textContent = '';
     open.textContent = '';
-    copy.hidden = true;
+    next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
+    // The fields as read now. A change during a wait below makes them stale,
+    // and the build then ends with no link shown and a message that says so.
+    const at = changes;
+    const stale = () => changes !== at;
+    const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
     const data = new FormData(f);
     // One row makes an `instrument` link, as before the list. Two or three
     // make an `instruments` list, which takes the form page's own check with
@@ -822,13 +973,13 @@
           label: (name) => INSTRUMENTS[name] ?? JSON.stringify(name),
         });
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, instrumentList.querySelector('select'));
         return;
       }
     }
     config.study = data.get('study').trim();
     if (config.study === '') {
-      err.textContent = 'Give the study a name.';
+      refuseAt('Give the study a name.', f.elements.study);
       return;
     }
     // Read from the field, not the FormData: FormData would already hold an
@@ -837,7 +988,7 @@
     // Only a prefilled `c` can put one in.
     const participant = f.elements.participant.value.trim();
     if (!isWritableIdentifier(participant)) {
-      err.textContent = 'The participant field holds a character that cannot be written. Type the identifier again.';
+      refuseAt('The participant field holds a character that cannot be written. Type the identifier again.', f.elements.participant);
       return;
     }
     if (participant !== '') config.participant = participant;
@@ -850,7 +1001,7 @@
     const site = data.get('site');
     const prolific = site === 'prolific';
     if (prolific && participant !== '') {
-      err.textContent = 'The participant field must be empty when recruiting through Prolific: the page takes each participant\'s identifier from the Prolific ID in the address.';
+      refuseAt('The participant field must be empty when recruiting through Prolific: the online form takes each participant\'s identifier from the Prolific ID in the address.', f.elements.participant);
       return;
     }
     if (prolific) config.prolific = true;
@@ -879,11 +1030,11 @@
           param = SITES[site].param;
         }
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.participantParam);
         return;
       }
       if (participant !== '') {
-        err.textContent = `The participant field must be empty when a recruiting site fills the identifier: the page takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`;
+        refuseAt(`The participant field must be empty when a recruiting site fills the identifier: the online form takes each participant's identifier from the address parameter ${JSON.stringify(param)}.`, f.elements.participant);
         return;
       }
       config.participantParam = param;
@@ -895,7 +1046,7 @@
       try {
         config.complete = checkCompleteUrl(complete, (why) => new Error(`The completion URL could not be used: ${why}`));
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.complete);
         return;
       }
     }
@@ -905,13 +1056,13 @@
     const completeSaved = data.get('completeSaved').trim();
     if (completeSaved !== '') {
       if (complete === '') {
-        err.textContent = 'The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.';
+        refuseAt('The completion URL after a saved file needs a completion URL beside it: give the completion URL first, or leave this field empty.', f.elements.completeSaved);
         return;
       }
       try {
         config.completeSaved = checkCompleteUrl(completeSaved, (why) => new Error(`The completion URL after a saved file could not be used: ${why}`));
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.completeSaved);
         return;
       }
     }
@@ -928,23 +1079,23 @@
     const completeDeclined = data.get('completeDeclined').trim();
     if (consentText === '') {
       if (declinedText !== '') {
-        err.textContent = 'The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.';
+        refuseAt('The declined text needs consent text beside it: give the consent text first, or leave the declined text empty.', f.elements.declinedText);
         return;
       }
       if (completeDeclined !== '') {
-        err.textContent = 'The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.';
+        refuseAt('The completion URL after a decline needs consent text beside it: give the consent text first, or leave this field empty.', f.elements.completeDeclined);
         return;
       }
     } else {
       const textFault = consentTextFault(consentText, CONSENT_TEXT_MAX);
       if (textFault !== null) {
-        err.textContent = `The consent text could not be used: it ${textFault}.`;
+        refuseAt(`The consent text could not be used: it ${textFault}.`, f.elements.consentText);
         return;
       }
       if (declinedText !== '') {
         const declinedFault = consentTextFault(declinedText, CONSENT_DECLINED_MAX);
         if (declinedFault !== null) {
-          err.textContent = `The declined text could not be used: it ${declinedFault}.`;
+          refuseAt(`The declined text could not be used: it ${declinedFault}.`, f.elements.declinedText);
           return;
         }
       }
@@ -953,7 +1104,7 @@
         try {
           config.completeDeclined = checkCompleteUrl(completeDeclined, (why) => new Error(`The completion URL after a decline could not be used: ${why}`));
         } catch (e) {
-          err.textContent = e.message;
+          refuseAt(e.message, f.elements.completeDeclined);
           return;
         }
       }
@@ -964,7 +1115,7 @@
       const questions = readQuestions();
       if (questions !== undefined) config.questions = questions;
     } catch (e) {
-      err.textContent = e.message;
+      refuseAt(e.message, e.control);
       return;
     }
     const text = data.get('module').trim();
@@ -973,20 +1124,20 @@
       try {
         m = JSON.parse(text);
       } catch {
-        err.textContent = 'The module descriptor is not JSON.';
+        refuseAt('The module file could not be used: it is not JSON.', f.elements.module);
         return;
       }
       // The same checks the form page runs on the link, so a bad descriptor
       // is refused here, at the researcher, and never at a participant.
       // Under a list the module applies to its HiTOP-SR row.
       if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
-        err.textContent = 'The module descriptor needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the module field.';
+        refuseAt('The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.', f.elements.module);
         return;
       }
       try {
         checkModule(m, config.instruments !== undefined ? 'hitopsr' : config.instrument);
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(e.message, f.elements.module);
         return;
       }
       config.module = m;
@@ -1003,10 +1154,19 @@
             key: data.get('supabaseKey').trim(),
             table: data.get('supabaseTable').trim(),
           };
+      // The refused field is read from the message: a key or a table fault
+      // opens its reason with "its key", "it names no key", "its table" or
+      // "it names no table", and any other Supabase fault is the project
+      // URL's. Only that opening, right after the message's prefix, is read,
+      // since a URL the message quotes can hold either phrase.
       try {
         config.store = checkStore(store);
       } catch (e) {
-        err.textContent = e.message;
+        const opening = (what) => new RegExp(`^Where responses go could not be used: (its|it names no) ${what}\\b`);
+        const name = kind === 'webhook' ? 'store'
+          : opening('key').test(e.message) ? 'supabaseKey'
+          : opening('table').test(e.message) ? 'supabaseTable' : 'supabaseUrl';
+        refuseAt(e.message, f.elements[name]);
         return;
       }
     }
@@ -1018,7 +1178,11 @@
       try {
         items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
       } catch (e) {
-        err.textContent = e.message;
+        refuseAt(stale() ? STALE : e.message);
+        return;
+      }
+      if (stale()) {
+        refuseAt(STALE);
         return;
       }
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
@@ -1030,7 +1194,13 @@
     try {
       url.search = `?${await encodeLink(config)}`;
     } catch (e) {
-      err.textContent = e.message;
+      refuseAt(stale() ? STALE : e.message);
+      return;
+    }
+    if (stale()) {
+      sqlBlock.hidden = true;
+      sql.value = '';
+      refuseAt(STALE);
       return;
     }
     // A Prolific link ends in the three placeholders and a SONA link in
@@ -1045,8 +1215,27 @@
     a.target = '_blank';
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${href.length} characters)`);
+    next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;
+    result.hidden = false;
+    resultHeading.focus();
+  }
+
+  // The one next step for the choices made: paste the link into the
+  // recruiting site's study page, run the SQL first for a Supabase table,
+  // or else test the link and hand it out.
+  const SITE_NAMES = { prolific: 'Prolific', sona: 'SONA', connect: 'CloudResearch Connect', other: 'your recruiting site' };
+  function nextStep(site, supabase) {
+    const sql = 'Run the SQL below once in your Supabase project\'s SQL editor';
+    if (supabase && !(site in SITE_NAMES)) {
+      return `${sql}, then open the link once to test it and give it to each participant.`;
+    }
+    const then = site in SITE_NAMES
+      ? `paste the link into your study's page on ${SITE_NAMES[site]}.`
+      : 'open the link once to test it, and then give it to each participant.';
+    if (supabase) return `${sql} before you ${then}`;
+    return then.charAt(0).toUpperCase() + then.slice(1);
   }
 
   copySql.addEventListener('click', async () => {
@@ -1063,7 +1252,7 @@
     try {
       await navigator.clipboard.writeText(out.textContent);
       copy.textContent = 'Copied';
-      setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      setTimeout(() => { copy.textContent = 'Copy the link'; }, 1500);
     } catch {
       err.textContent = 'The link could not be copied. Select it and copy by hand.';
     }

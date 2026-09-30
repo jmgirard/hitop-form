@@ -39,11 +39,12 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
+  useTarget, openBuilderSections, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
   exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig,
 } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 const store = useStore();
 
 // The page's own address, and the link builder's, carry the study link as

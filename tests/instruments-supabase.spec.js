@@ -14,11 +14,12 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
+  useTarget, openBuilderSections, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
   readFixture, prolificQuery, chosenIndexFor,
 } from './helpers.mjs';
 
 const base = useTarget();
+openBuilderSections();
 const store = useStore();
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));

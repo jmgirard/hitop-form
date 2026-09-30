@@ -119,13 +119,13 @@ test('a module beside a list without hitopsr is refused', async ({ page }) => {
 test('a module of another format beside a list with hitopsr is refused by the module check', async ({ page }) => {
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
   await openForm(page, base(), { ...LINK, instruments: ['hitopbr', 'hitopsr'], module });
-  await expectRefused(page, 'The module descriptor could not be used: this page reads format "1.0" and found format "2.0".');
+  await expectRefused(page, 'The module file could not be used: this page reads format "1.0" and found format "2.0".');
 });
 
 test('a module of another instrument beside a list with hitopsr is refused naming hitopsr', async ({ page }) => {
   const module = { ...(await readDescriptor('module-plain.json')), instrument: 'hitopbr' };
   await openForm(page, base(), { ...LINK, instruments: ['hitopbr', 'hitopsr'], module });
-  await expectRefused(page, 'The module descriptor could not be used: its instrument is "hitopbr" and the link\'s is "hitopsr".');
+  await expectRefused(page, 'The module file could not be used: its instrument is "hitopbr" and the link\'s is "hitopsr".');
 });
 
 for (const entry of NOT_ASCENDING) {

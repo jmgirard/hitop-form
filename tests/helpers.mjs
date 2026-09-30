@@ -56,7 +56,7 @@ export const NOT_ASCENDING = [
     },
   },
 ];
-export const NOT_ASCENDING_MESSAGE = 'The module descriptor could not be used: its items are not in ascending order.';
+export const NOT_ASCENDING_MESSAGE = 'The module file could not be used: its items are not in ascending order.';
 
 // module-plain.json with its items altered by one NOT_ASCENDING entry.
 export async function notAscendingDescriptor(entry) {
@@ -131,6 +131,21 @@ export async function allowLocalStore(context) {
   } catch (e) {
     test.skip(true, `the deployed page cannot post to the local recording endpoint: ${e.message}`);
   }
+}
+
+// Registers a beforeEach hook that opens every optional section of the Study
+// Link Builder once each page loads, so a spec about the fields themselves
+// can fill them without opening their sections first. The sections' own
+// closed and opened states are tested in link-sections.spec.js, which does
+// not use this.
+export function openBuilderSections() {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        for (const d of document.querySelectorAll('details.optional')) d.open = true;
+      });
+    });
+  });
 }
 
 // The store a link names for a path on the recording endpoint.

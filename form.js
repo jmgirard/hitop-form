@@ -165,7 +165,7 @@ export async function encodeLink(config) {
   if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
   const bytes = new TextEncoder().encode(json).length;
   if (bytes > MAX_LINK_BYTES) {
-    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the form page reads. Shorten the consent text or the questions.`);
+    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.`);
   }
   if (typeof CompressionStream !== 'function') {
     const parts = [config.consent === undefined ? null : 'consent text', config.questions === undefined ? null : 'questions'];
@@ -201,13 +201,13 @@ export async function inflateConfig(z, bad) {
     try {
       step = await reader.read();
     } catch {
-      throw bad('does not decompress');
+      throw bad('does not unpack');
     }
     if (step.done) break;
     total += step.value.length;
     if (total > MAX_LINK_BYTES) {
       reader.cancel().catch(() => {});
-      throw bad('decompresses to more than 100,000 bytes');
+      throw bad('unpacks to more than 100,000 bytes');
     }
     chunks.push(step.value);
   }
@@ -236,16 +236,16 @@ export async function inflateConfig(z, bad) {
 export async function decodeLink(search) {
   const params = new URLSearchParams(search);
   if (params.has('c') && params.has('z')) {
-    throw new Error('The study link carries both a c and a z parameter, and a study link carries one. Ask the study team for a new link.');
+    throw new Error('The study link holds its setup twice, in two forms, and a study link holds it once. Ask the study team for a new link.');
   }
   const c = params.get('c');
   const z = params.get('z');
   let config;
   if (z) {
     if (!canInflate()) {
-      throw new Error("This browser cannot read the study link, because it cannot decompress the link's z parameter. Open the link in a current version of Chrome, Edge, Firefox or Safari.");
+      throw new Error('This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.');
     }
-    config = await inflateConfig(z, (why) => new Error(`The study link could not be read: its z parameter ${why}. Ask the study team for a new link.`));
+    config = await inflateConfig(z, (why) => new Error(`The study link could not be read: it ${why}. Ask the study team for a new link.`));
   } else if (c) {
     try {
       config = decodeConfig(c);
@@ -835,7 +835,7 @@ export function checkParticipantParam(
     throw bad(`it must hold only the letters A-Z and a-z, digits, "_", "." and "-", and it is ${JSON.stringify(name)}.`);
   }
   if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
-  if (name === 'z') throw bad('it is "z", the parameter that carries a compressed study link.');
+  if (name === 'z') throw bad('it is "z", which also carries the study link itself.');
   if (PROLIFIC_PARAMS.includes(name)) {
     throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. ${prolificAdvice}, which also keeps STUDY_ID and SESSION_ID.`);
   }
@@ -872,7 +872,7 @@ export const TABLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 // is the parsed address's string form, or throws naming the fault. link.html
 // runs the same check before it builds a link.
 export function checkStore(store) {
-  const bad = (why) => new Error(`The study link's store could not be used: ${why}`);
+  const bad = (why) => new Error(`Where responses go could not be used: ${why}`);
   if (store === null || typeof store !== 'object' || Array.isArray(store)) {
     throw bad('it is not an object.');
   }
@@ -933,7 +933,7 @@ export function checkStore(store) {
 // The address a store may name: `https:` to any host, or `http:` to this
 // machine (host exactly 127.0.0.1 or localhost), which the tests' recording
 // endpoint needs. Anything else is refused by name.
-export function checkStoreUrl(url, bad = (why) => new Error(`The store address could not be used: ${why}`)) {
+export function checkStoreUrl(url, bad = (why) => new Error(`The web address for responses could not be used: ${why}`)) {
   if (url === undefined) throw bad('it names no url.');
   const u = parseAddress(url, bad, 'its url');
   const loopback = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
@@ -1038,13 +1038,13 @@ function refuseCredentials(u, url, bad, what) {
 // a permutation of `items`. The other fields are for the reader and are not
 // read here. link.html runs the same check on a pasted descriptor.
 export function checkModule(m, instrument) {
-  const bad = (why) => new Error(`The module descriptor could not be used: ${why}`);
+  const bad = (why) => new Error(`The module file could not be used: ${why}`);
   if (m === null || typeof m !== 'object' || Array.isArray(m)) throw bad('it is not an object.');
   // The instrument export has the same top-level shape (a `format`, an
   // `items` list) but names its instrument as `stem` and its items as
   // objects; a pasted export is named as such rather than as a bad descriptor.
   if (m.instrument === undefined && typeof m.stem === 'string' && Array.isArray(m.items)) {
-    throw bad('it is the instrument export, not a module descriptor. Paste the JSON that write_module() wrote.');
+    throw bad('it is the instrument export, not a module file. Paste the file that the Module Builder or write_module() saved.');
   }
   if (m.format !== MODULE_FORMAT) {
     throw bad(`this page reads format "${MODULE_FORMAT}" and found ${m.format === undefined ? 'no format field' : `format ${JSON.stringify(m.format)}`}.`);
@@ -1421,8 +1421,8 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
         why: e && e.name === 'AbortError' ? `no answer within ${Math.round(timeoutMs / 1000)} seconds` : 'the connection failed',
       };
     }
-    if (res.type === 'opaqueredirect') return { confirmed: false, why: 'the endpoint redirected the send' };
-    if (!res.ok) return { confirmed: false, why: `the endpoint answered HTTP ${res.status}` };
+    if (res.type === 'opaqueredirect') return { confirmed: false, why: 'the server redirected the send' };
+    if (!res.ok) return { confirmed: false, why: `the server answered HTTP ${res.status}` };
     if (store.kind === 'supabase') return { confirmed: true };
     let ack;
     try {
@@ -1431,10 +1431,10 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
       if (controller.signal.aborted) {
         return { confirmed: false, why: `no answer within ${Math.round(timeoutMs / 1000)} seconds` };
       }
-      return { confirmed: false, why: 'the endpoint did not answer with JSON' };
+      return { confirmed: false, why: 'the server did not answer with JSON' };
     }
     if (ack === null || typeof ack !== 'object' || ack.ok !== true) {
-      return { confirmed: false, why: 'the endpoint did not confirm the send' };
+      return { confirmed: false, why: 'the server did not confirm the send' };
     }
     return { confirmed: true };
   } finally {
