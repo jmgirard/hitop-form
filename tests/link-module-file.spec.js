@@ -10,6 +10,10 @@
 //        fills the box again
 //   MF3: a link made while the chosen file is still being read comes from
 //        the box's old text, and the fill that follows hides it
+//   MF4: an edit to the "Module file" box after a file read clears the
+//        status line that named the file
+//   MF5: of two files chosen in turn, the later one fills the box and names
+//        itself in the status, even when the earlier read ends last
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -95,4 +99,45 @@ test('a link made during the file read is hidden when the box fills', async ({ p
   await page.evaluate(() => window.releaseRead());
   await expect(page.locator('textarea[name="module"]')).toHaveValue(text);
   await expect(page.locator('#result')).toBeHidden();
+});
+
+// MF4
+test('an edit to the box clears the file status', async ({ page }) => {
+  await openBuilder(page);
+  await page.locator('#moduleFile').setInputFiles(FIXTURE);
+  await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file module-plain.json.');
+
+  await page.locator('textarea[name="module"]').press('End');
+  await page.locator('textarea[name="module"]').press('Space');
+  await expect(page.locator('#moduleFileStatus')).toHaveText('');
+});
+
+// MF5
+test('the later of two chosen files wins when the earlier read ends last', async ({ page }) => {
+  const later = path.join(FIXTURES, 'module-shuffled.json');
+  const laterText = await readFile(later, 'utf8');
+
+  await openBuilder(page);
+  // The first read is held; the second runs at once. Blob.prototype.text is
+  // put back at its first call, so only the first read waits.
+  await page.evaluate(() => {
+    const real = Blob.prototype.text;
+    Blob.prototype.text = function () {
+      Blob.prototype.text = real;
+      return new Promise((resolve) => {
+        window.releaseRead = () => resolve(real.call(this));
+      });
+    };
+  });
+  await page.locator('#moduleFile').setInputFiles(FIXTURE);
+  await page.waitForFunction(() => typeof window.releaseRead === 'function');
+  await page.locator('#moduleFile').setInputFiles(later);
+  await expect(page.locator('textarea[name="module"]')).toHaveValue(laterText);
+
+  await page.evaluate(() => window.releaseRead());
+  // The held read's promise settles on the page's next turn; a round trip
+  // later, a fill from it would be in the box.
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+  await expect(page.locator('textarea[name="module"]')).toHaveValue(laterText);
+  await expect(page.locator('#moduleFileStatus')).toHaveText('Read the module file module-shuffled.json.');
 });
