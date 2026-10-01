@@ -16,8 +16,10 @@
 //        z, setup without sha256, sha256 without setup, a sha256 that is
 //        not 43 base64url characters, a setup that is not an absolute
 //        https: address (relative, and http:), a setup holding a user name
-//        and password, a fetch that throws (kind connection), a status
-//        outside 200 to 299, a body over 100,000 bytes, bytes that are not
+//        and password, a fetch that throws (kind connection), a file not
+//        arrived after 30 seconds (kind connection, the page's clock
+//        advanced), a status outside 200 to 299, a body over 100,000
+//        bytes, bytes that are not
 //        UTF-8, text that is not JSON, JSON that is not an object, a
 //        fingerprint that differs, and a browser without crypto.subtle
 //        (kind browser)
@@ -27,7 +29,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, refusalText, begin, walkAll, awaitDownload, parseCsv, encodeConfig, encodeCompressed,
-  setupFingerprint, serveSetup, setupQuery, SETUP_URL,
+  setupFingerprint, serveSetup, setupQuery, SETUP_URL, SETUP_TIMEOUT_MS,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -202,6 +204,22 @@ for (const fault of FILE_FAULTS) {
     expect(requests.length, 'the file was asked for once').toBe(1);
   });
 }
+
+// The page's clock is installed and paused once the request is made, so the
+// wait runs in moments. Two seconds short of the limit the form is still
+// loading, and past the limit it is refused.
+test('a setup file that has not arrived after 30 seconds is refused (kind connection)', async ({ page }) => {
+  await page.clock.install();
+  const requests = await serveSetup(page, '', { hang: true });
+  await page.goto(`${base()}?${setupQuery({ sha256: SHA })}`);
+  await expect.poll(() => requests.length).toBe(1);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.fastForward(SETUP_TIMEOUT_MS - 2000);
+  await expect(page.locator('main')).toHaveText('Loading the form…');
+  await page.clock.fastForward(2000);
+  await expectRefused(page, fileFault('did not arrive within 30 seconds'), CONNECTION);
+  expect(requests.length, 'the file was asked for once').toBe(1);
+});
 
 test('a setup file whose fingerprint differs from sha256 is refused, naming both', async ({ page }) => {
   const edited = { ...SETUP, study: 'edited' };

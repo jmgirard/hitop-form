@@ -264,6 +264,10 @@ export async function inflateConfig(z, bad) {
 // The most bytes a setup file may hold. The page stops reading there.
 export const SETUP_FILE_MAX = 100_000;
 
+// How long the page waits for the whole setup file, in milliseconds, as
+// long as it waits for a send to be confirmed.
+export const SETUP_TIMEOUT_MS = 30_000;
+
 // A fingerprint as a link carries it: 32 bytes as base64url, no padding.
 export const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
 
@@ -296,36 +300,49 @@ export function checkSetupAddress(url, bad) {
 // `bad(why, fault)`. `why` reads after "it" and ends with no full stop.
 // `fault` is one of `connection` (the fetch threw: no connection, or a host
 // that does not let other sites read the file), `status` (an answer
-// outside 200 to 299), `size` (more than SETUP_FILE_MAX bytes), `utf8`,
-// `json` and `object` (JSON that is not an object). The fetch sends no
+// outside 200 to 299), `size` (more than SETUP_FILE_MAX bytes), `timeout`
+// (the whole file had not arrived after SETUP_TIMEOUT_MS), `utf8`, `json`
+// and `object` (JSON that is not an object). The fetch sends no
 // credentials and no referrer, and skips the browser's cache.
 export async function fetchSetup(address, bad) {
-  let res;
-  try {
-    res = await fetch(address, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
-  } catch {
-    throw bad('could not be fetched', 'connection');
-  }
-  if (!res.ok) throw bad(`was answered with HTTP ${res.status}`, 'status');
+  // A host that never answers would otherwise leave the online form on its
+  // loading screen, and the Study Link Builder waiting with "Make the link"
+  // disabled. Aborting ends the fetch and the body read alike.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), SETUP_TIMEOUT_MS);
+  const failed = () => (ctl.signal.aborted
+    ? bad(`did not arrive within ${SETUP_TIMEOUT_MS / 1000} seconds`, 'timeout')
+    : bad('could not be fetched', 'connection'));
   const chunks = [];
   let total = 0;
-  if (res.body !== null) {
-    const reader = res.body.getReader();
-    for (;;) {
-      let step;
-      try {
-        step = await reader.read();
-      } catch {
-        throw bad('could not be fetched', 'connection');
-      }
-      if (step.done) break;
-      total += step.value.length;
-      if (total > SETUP_FILE_MAX) {
-        reader.cancel().catch(() => {});
-        throw bad('is larger than 100,000 bytes', 'size');
-      }
-      chunks.push(step.value);
+  try {
+    let res;
+    try {
+      res = await fetch(address, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl.signal });
+    } catch {
+      throw failed();
     }
+    if (!res.ok) throw bad(`was answered with HTTP ${res.status}`, 'status');
+    if (res.body !== null) {
+      const reader = res.body.getReader();
+      for (;;) {
+        let step;
+        try {
+          step = await reader.read();
+        } catch {
+          throw failed();
+        }
+        if (step.done) break;
+        total += step.value.length;
+        if (total > SETUP_FILE_MAX) {
+          reader.cancel().catch(() => {});
+          throw bad('is larger than 100,000 bytes', 'size');
+        }
+        chunks.push(step.value);
+      }
+    }
+  } finally {
+    clearTimeout(timer);
   }
   const bytes = new Uint8Array(total);
   let at = 0;
@@ -380,7 +397,7 @@ async function readSetupFile(params) {
   }
   const setup = await fetchSetup(address, (why, fault) => Object.assign(
     new Error(`The setup file at ${address} could not be used: it ${why}.`),
-    fault === 'connection' ? { kind: 'connection' } : {},
+    fault === 'connection' || fault === 'timeout' ? { kind: 'connection' } : {},
   ));
   const found = await setupFingerprint(setup);
   if (found !== sha256) {

@@ -111,17 +111,23 @@ export function setupFingerprint(setup) {
 // tests answer it through a route, inside the browser.
 export const SETUP_URL = 'https://setup.example.org/study/setup.json';
 
+// The page's limit on fetching a setup file, stated here rather than read
+// from form.js.
+export const SETUP_TIMEOUT_MS = 30 * 1000;
+
 // Answers `url` through a route with `body` (a string or bytes) and
-// `status`, letting other sites read it, or aborts the request when
-// `abort` is true, as a fetch that gets no answer. Returns the requests
-// that reached the route, each as its method and address, with its
-// headers as a property that toEqual() does not compare.
-export async function serveSetup(page, body, { url = SETUP_URL, status = 200, abort = false } = {}) {
+// `status`, letting other sites read it. It aborts the request when
+// `abort` is true, as a fetch that gets no answer, and never answers it
+// when `hang` is true, as a host that keeps the request open. Returns the
+// requests that reached the route, each as its method and address, with
+// its headers as a property that toEqual() does not compare.
+export async function serveSetup(page, body, { url = SETUP_URL, status = 200, abort = false, hang = false } = {}) {
   const requests = [];
   await page.route(url, (route) => {
     const request = { method: route.request().method(), url: route.request().url() };
     Object.defineProperty(request, 'headers', { value: route.request().headers() });
     requests.push(request);
+    if (hang) return undefined;
     if (abort) return route.abort('connectionrefused');
     return route.fulfill({
       status,

@@ -17,7 +17,8 @@
 //        (saying the host must let other sites read the file), a status
 //        outside 200 to 299, a body over 100,000 bytes, bytes that are not
 //        UTF-8, text that is not JSON, JSON that is not an object, and a
-//        file that does not match the form
+//        file that does not match the form; and a file not arrived after
+//        30 seconds, the page's clock advanced
 //   LF4: a downloaded file served back makes the link: the online form's
 //        address with setup and sha256 written by URLSearchParams, plus
 //        Prolific's ending when Prolific is chosen; an address holding "&"
@@ -32,7 +33,9 @@
 //        fills the form, and the next link carries the file's current
 //        fingerprint
 //   LF8: an opened link whose fetch throws, is answered 404, or is over
-//        100,000 bytes is refused in the builder's refusal pattern
+//        100,000 bytes is refused in the builder's refusal pattern; one
+//        whose file has not arrived after 30 seconds is refused at the
+//        limit, and "Make the link" then works
 //
 // Every refusal checked here holds none of the retired terms.
 
@@ -40,7 +43,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
-  SETUP_URL, COMPLETE_URL,
+  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -360,6 +363,43 @@ const FETCH_FAULTS = [
   { name: 'a status of 404', body: 'not found', serve: { status: 404 }, why: 'was answered with HTTP 404' },
   { name: 'a body of 100,001 bytes', body: `{"a":"${'x'.repeat(100_001 - 8)}"}`, why: 'is larger than 100,000 bytes' },
 ];
+
+// The page's clock is installed and paused once the request is made, as in
+// setupfile.spec.js. Before the limit "Make the link" stays disabled; past
+// it the link is refused and the builder can be used.
+test('an opened link whose file has not arrived after 30 seconds is refused, and the builder works', async ({ page }) => {
+  await page.clock.install();
+  const requests = await serveSetup(page, '', { hang: true });
+  await page.goto(`${base()}link.html?${setupQuery({ sha256: SHA })}`);
+  await expect.poll(() => requests.length).toBe(1);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.fastForward(SETUP_TIMEOUT_MS - 2000);
+  await expect(make(page)).toBeDisabled();
+  await page.clock.fastForward(2000);
+  await expectRefused(page, refusal(`names the setup file ${SETUP_URL}, which did not arrive within 30 seconds.`));
+  await expect(make(page)).toBeEnabled();
+  await fillPlain(page);
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+});
+
+// "Make the link" against a host that never answers: refused past the
+// limit, naming the address.
+test('"Make the link" refuses a file that has not arrived after 30 seconds', async ({ page }) => {
+  await page.clock.install();
+  const requests = await serveSetup(page, '', { hang: true });
+  await openBuilder(page);
+  await fillPlain(page);
+  await chooseFile(page, SETUP_URL);
+  await make(page).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.clock.fastForward(SETUP_TIMEOUT_MS - 2000);
+  await expect(err(page)).toHaveText('');
+  await page.clock.fastForward(2000);
+  await expectRefused(page, `The setup file at ${SETUP_URL} could not be used: it did not arrive within 30 seconds.`);
+  await expect(addressField(page)).toBeFocused();
+});
 
 for (const fault of FETCH_FAULTS) {
   test(`an opened link whose file has ${fault.name} is refused`, async ({ page }) => {
