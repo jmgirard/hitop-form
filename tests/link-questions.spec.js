@@ -28,9 +28,10 @@
 //        no question the builder writes ?c= and no questions field; in a
 //        browser without CompressionStream a link with questions, consent
 //        text, or both is refused naming what it holds; a setup whose JSON
-//        is over 100,000 bytes is refused with its size, and one of exactly
-//        100,000 bytes is built and opens, for a z setup and for a c setup
-//        with no consent text and no questions; the min and max boxes ask for no
+//        is over 100,000 bytes is refused with its size; one of exactly
+//        100,000 bytes is built and opens as a z setup, and as a c setup
+//        with no consent text and no questions it passes the size check and
+//        is refused for its length; the min and max boxes ask for no
 //        numeric keypad, so a minus sign can be typed
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
@@ -312,22 +313,25 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await expect(page.locator('#out')).toHaveText('');
 });
 
-test('a c setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens', async ({ page }) => {
+test('a c setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes passes that check and is refused for its length', async ({ page }) => {
   // No consent text and no questions, so the link is ?c=. The study name
-  // sets the total byte for byte.
+  // sets the total byte for byte. A ?c= of n bytes is base64url with no
+  // padding, so its length is b64Length(n).
+  const b64Length = (n) => Math.floor(n / 3) * 4 + [0, 2, 3][n % 3];
   await openBuilder(page);
   await make(page, 's');
   await expect(page.locator('#err')).toHaveText('');
-  const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(await page.locator('#out').textContent())));
+  const first = await page.locator('#out').textContent();
+  expect([...new URL(first).searchParams.keys()]).toEqual(['c']);
+  const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
   const study = (bytes) => 's'.repeat(1 + bytes - base1);
 
+  // The online form's host takes 8,192 characters of path and query (link.spec.js
+  // L38), so the size check passes and the length check refuses.
+  const length = first.length - b64Length(base1) + b64Length(100_000);
   await make(page, study(100_000));
-  await expect(page.locator('#err')).toHaveText('');
-  const href = await page.locator('#out').textContent();
-  expect([...new URL(href).searchParams.keys()]).toEqual(['c']);
-  expect(Buffer.byteLength(JSON.stringify(decodeLinkParam(href)))).toBe(100_000);
-  await page.goto(href);
-  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+  await expect(page.locator('#err')).toHaveText(`This link is ${length.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`);
+  await expect(page.locator('#out')).toHaveText('');
 
   await openBuilder(page);
   await make(page, study(100_001));

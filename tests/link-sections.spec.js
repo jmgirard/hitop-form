@@ -1466,6 +1466,15 @@ const REFUSE_AT = [
     focus: null,
   },
   {
+    // A ?c= of some 9,400 characters. link.spec.js L38 checks the length
+    // the message names.
+    name: 'a link longer than the online form\'s host accepts',
+    call: ['longer than the online form'],
+    study: 'x'.repeat(7_000),
+    message: /^This link is [\d,]+ characters long, longer than the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
+    focus: null,
+  },
+  {
     name: 'the encode fails',
     call: ['refuseAt(stale() ? STALE : e.message)', 1],
     init: () => { delete window.CompressionStream; },

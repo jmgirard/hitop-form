@@ -1394,9 +1394,63 @@ for (const length of [LONG_AT, LONG_AT + 1]) {
 
 test('L37: the warning goes when a shorter link is made', async ({ page }) => {
   await openBuilder(page);
-  await buildPadded(page, 'x'.repeat(7_000));
+  // A ?c= of some 8,050 characters: past the warning, within the host's
+  // 8,192 (L38).
+  await buildPadded(page, 'x'.repeat(6_000));
   await expect(page.locator('#long')).toBeVisible();
   await buildPadded(page, 's');
   await expect(page.locator('#long')).toBeHidden();
   await expect(page.locator('#long')).toHaveText('');
+});
+
+// L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
+// and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
+// and refused 8,193. The count here is made apart from the builder: the link
+// after its origin, with each Prolific placeholder as the 24-character ID
+// Prolific puts in its place. Which lengths a ?c= link can reach depends on
+// the page's address and the site's ending (L37), so each length is tried
+// with no ending, SONA's and Prolific's, and each must be reached by one.
+const HOST_AT = 8_192;
+const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
+const HOST_REFUSED = (n) => `This link is ${n.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`;
+
+// Presses "Make the link" with the study name given, and waits for a link
+// or a refusal.
+async function press(page, study) {
+  await page.locator('input[name="study"]').fill(study);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out').or(page.locator('#err')).filter({ hasText: /./ })).toHaveCount(1);
+}
+
+test('L38: a link counting 8,192 characters after its origin is made, and one counting 8,193 is refused', async ({ page }) => {
+  const reached = { [HOST_AT]: [], [HOST_AT + 1]: [] };
+  for (const site of ['', 'sona', 'prolific']) {
+    await openBuilder(page);
+    await openSectionOf(page, 'site');
+    await page.locator('select[name="site"]').selectOption(site);
+    await press(page, 's');
+    const first = await page.locator('#out').textContent();
+    const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
+    const restCount = hostCount(first) - b64Length(bytes);
+    const restLength = first.length - b64Length(bytes);
+    for (const target of [HOST_AT, HOST_AT + 1]) {
+      const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => restCount + b64Length(k) === target);
+      if (n === undefined) continue;
+      reached[target].push(site);
+      await press(page, `s${'x'.repeat(n - bytes)}`);
+      if (target <= HOST_AT) {
+        await expect(page.locator('#err')).toHaveText('');
+        const href = await page.locator('#out').textContent();
+        expect(hostCount(href), `${site || 'no site'} at ${target}`).toBe(target);
+      } else {
+        await expect(page.locator('#err')).toHaveText(HOST_REFUSED(restLength + b64Length(n)));
+        await expect(page.locator('#result')).toBeHidden();
+        await expect(page.locator('#out')).toHaveText('');
+      }
+    }
+  }
+  expect(reached[HOST_AT].length, 'some site reaches 8,192').toBeGreaterThan(0);
+  expect(reached[HOST_AT + 1].length, 'some site reaches 8,193').toBeGreaterThan(0);
+  expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
+  expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
 });

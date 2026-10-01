@@ -312,6 +312,14 @@
   // URIs of at least 8,000 octets. A study link is ASCII, so its length in
   // characters is its length in octets. A longer link gets a warning.
   const LINK_WARN_LENGTH = 8_000;
+  // Fastly, which serves GitHub Pages, answers "414 URI Too Long" for a URL
+  // over 8 KB. On 2026-10-01 GitHub Pages answered a path and query of 8,192
+  // characters and refused one of 8,193 (hitop's
+  // cairn/references/fastly2026limits.md). A longer link is refused.
+  const HOST_PATH_MAX = 8_192;
+  // Prolific's help gives its participant ID as 24 characters. Its study and
+  // session IDs are taken to be as long.
+  const PROLIFIC_ID_LENGTH = 24;
   const result = document.getElementById('result');
   // How many times hideResult() ran: a build reads it before and after
   // each wait.
@@ -1319,6 +1327,16 @@
     // the site as it expects them.
     const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
     const href = url.href + suffix;
+    // The host sees the path and query, with each Prolific placeholder
+    // replaced by the ID Prolific puts in its place.
+    const sent = url.pathname.length + url.search.length
+      + (prolific ? suffix.replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH)) : suffix).length;
+    if (sent > HOST_PATH_MAX) {
+      sqlBlock.hidden = true;
+      sql.value = '';
+      refuseAt(`This link is ${href.length.toLocaleString('en-US')} characters long, longer than the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
+      return;
+    }
     out.textContent = href;
     const a = document.createElement('a');
     a.href = href;
