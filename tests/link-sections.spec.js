@@ -72,12 +72,19 @@
 //       (a repeat and a second PID-5 form, each at rows 2 and 3), each
 //       question field in the page's control map and a fault with no
 //       question, and the four store fields. The fetch failure, the encode
-//       failure and the four stale-build refusals are among them
+//       failure and the four stale-build refusals are among them, and so
+//       are the setup file's: no address, an http:// address, no
+//       crypto.subtle, a failed fetch, a field changed while it fails and
+//       while it succeeds, a file that does not match, and a download over
+//       100,000 bytes
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE } from './helpers.mjs';
+import {
+  useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE, retiredIn,
+  setupFingerprint, setupQuery, SETUP_URL,
+} from './helpers.mjs';
 
 const base = useTarget();
 
@@ -662,13 +669,7 @@ for (const width of [375, 1280]) {
   }
 }
 
-// S8: the retired terms, stated here as the naming decision lists them:
-// six case-insensitive patterns, four more, and two fixed strings.
-const RETIRED = [
-  /\bdescriptor\b/i, /\bscoring file\b/i, /\bbundle\b/i, /\bendpoint\b/i, /\bstores?\b/i, /\bcompressed\b/i,
-  /\b(hitop-form )?form page\b/i, /(?<!study )\blink builder\b/i, /\b[cz] parameter\b/i, /\$\{[^}]*\} parameter/i,
-  '?c=', '?z=',
-];
+// S8: the retired terms are helpers.mjs RETIRED, matched by retiredIn().
 
 // Reads the page as it stands: the word count of each hint, of the intro,
 // and every retired term found in the page's text (the built link's box
@@ -702,10 +703,7 @@ async function readText(page) {
   const hits = [];
   for (const [kind, strings] of [['text', [found.text]], ['placeholder', found.placeholders], ['aria-label', found.labels]]) {
     for (const s of strings) {
-      for (const term of RETIRED) {
-        const hit = typeof term === 'string' ? s.includes(term) : term.test(s);
-        if (hit) hits.push(`${kind}: ${term} in ${JSON.stringify(s.slice(0, 80))}`);
-      }
+      for (const term of retiredIn(s)) hits.push(`${kind}: ${term} in ${JSON.stringify(s.slice(0, 80))}`);
     }
   }
   return { ...found, hits };
@@ -750,7 +748,26 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
   const href = await page.locator('#out').textContent();
   expect(href, 'the built link, exempt, holds a fixed retired string').toContain('?z=');
   await expectText(page, 'after a Supabase build');
+  await page.getByLabel('In a file I host').check();
+  await expect(page.locator('#setupFileFields')).toBeVisible();
+  await expectText(page, 'In a file I host');
+  // The offer to fill the form from a setup file that changed: a message
+  // above the form, so only its terms are read, not the intro's length.
+  const setup = { instrument: 'hitopbr', study: 'text' };
+  await answerSetup(page, JSON.stringify({ ...setup, study: 'changed' }));
+  await page.goto(`${base()}link.html?${setupQuery({ sha256: setupFingerprint(setup) })}`);
+  await expect(page.locator('#setupChanged')).toBeVisible();
+  expect((await readText(page)).hits, 'the offer: retired terms').toEqual([]);
 });
+
+// Answers the setup-file address through a route marked as answered.
+async function answerSetup(page, body, { status = 200, abort = false } = {}) {
+  await page.route(SETUP_URL, (route) => {
+    answered.add(route.request());
+    if (abort) return route.abort();
+    return route.fulfill({ status, headers: { 'access-control-allow-origin': '*' }, body });
+  });
+}
 
 // S8: each hint's link to the README lands on one of its headings, slugged
 // as GitHub slugs them: lower case, spaces to "-", other punctuation but
@@ -1426,7 +1443,7 @@ const REFUSE_AT = [
   },
   {
     name: 'stale: a field changes while the export fetch succeeds',
-    call: ['refuseAt(STALE)', 0],
+    call: ['refuseAt(STALE)', 1],
     fill: async (page) => {
       const hold = holdExports(page);
       await hold.ready;
@@ -1460,7 +1477,7 @@ const REFUSE_AT = [
   },
   {
     name: 'stale: a field changes while the encode succeeds',
-    call: ['refuseAt(STALE)', 1],
+    call: ['refuseAt(STALE)', 2],
     init: holdEncode,
     fill: (page) => inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('I agree.')),
     press: (page) => changeDuringWait(
@@ -1471,7 +1488,113 @@ const REFUSE_AT = [
     message: STALE,
     focus: null,
   },
+  // "In a file I host": the address, the browser, the fetch and its waits,
+  // the match, and the download's size.
+  {
+    name: 'setup file: no address',
+    call: ['Give the address of the setup file'],
+    fill: (page) => page.getByLabel('In a file I host').check(),
+    message: 'Give the address of the setup file, or choose "In the study link".',
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'setup file: an http:// address',
+    call: ['refuseAt(e.message, field)'],
+    fill: (page) => hostedAt(page, 'http://setup.example.org/study/setup.json'),
+    message: 'The address of the setup file could not be used: it must start with https://, and it is "http://setup.example.org/study/setup.json".',
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'setup file: no crypto.subtle',
+    call: ['cannot compute a fingerprint'],
+    init: () => { Object.defineProperty(Crypto.prototype, 'subtle', { get: () => undefined, configurable: true }); },
+    fill: (page) => hostedAt(page),
+    message: 'This browser cannot check the setup file, because it cannot compute a fingerprint. Use a current version of Chrome, Edge, Firefox or Safari.',
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'setup file: the fetch fails',
+    call: ['refuseAt(stale() ? STALE : e.message, field)'],
+    fill: async (page) => {
+      await answerSetup(page, '', { abort: true });
+      await hostedAt(page);
+    },
+    message: `The setup file at ${SETUP_URL} could not be fetched. Check the address and the connection. The host must let other sites read the file, as GitHub does for a raw-file address.`,
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'stale: a field changes while the setup fetch fails',
+    call: ['refuseAt(stale() ? STALE : e.message, field)'],
+    fill: async (page) => {
+      const hold = holdSetup(page);
+      await hold.ready;
+      await hostedAt(page);
+      return hold;
+    },
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('abort')),
+    message: STALE,
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'stale: a field changes while the setup fetch succeeds',
+    call: ['refuseAt(STALE)', 0],
+    fill: async (page) => {
+      const hold = holdSetup(page);
+      await hold.ready;
+      await hostedAt(page);
+      return hold;
+    },
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('fulfill')),
+    message: STALE,
+    focus: null,
+  },
+  {
+    name: 'setup file: a file that does not match',
+    call: ['does not match this setup'],
+    fill: async (page) => {
+      await answerSetup(page, JSON.stringify({ instrument: 'hitopbr', study: 'other' }));
+      await hostedAt(page);
+    },
+    message: `The file at ${SETUP_URL} does not match this setup. Download the setup file again and replace the hosted copy.`,
+    focus: field('setupAddress'),
+  },
+  {
+    name: 'setup file: a download over 100,000 bytes',
+    call: ['The setup file would be'],
+    // A control character takes 6 bytes in JSON, so 20,000 make a file of
+    // more than 120,000.
+    fill: async (page) => {
+      await inSection(page, 'secConsent', () => page.locator(field('consentText')).fill('\u0001'.repeat(20_000)));
+      await page.getByLabel('In a file I host').check();
+    },
+    press: (page) => page.getByRole('button', { name: 'Download the setup file' }).click(),
+    message: /^The setup file would be 12\d,\d\d\d bytes, more than the 100,000 bytes the online form reads\. Shorten the consent text or the questions\.$/,
+    focus: null,
+  },
 ];
+
+// "In a file I host" chosen, with `address` in its field.
+async function hostedAt(page, address = SETUP_URL) {
+  await page.getByLabel('In a file I host').check();
+  await page.locator(field('setupAddress')).fill(address);
+}
+
+// Holds the setup-file request until release(`how`): 'fulfill', with a
+// setup, or 'abort'.
+function holdSetup(page) {
+  let reached;
+  const asked = new Promise((r) => { reached = r; });
+  let release;
+  const released = new Promise((r) => { release = r; });
+  const ready = page.route(SETUP_URL, async (route) => {
+    answered.add(route.request());
+    reached();
+    const how = await released;
+    if (how === 'abort') return route.abort();
+    return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{"instrument":"hitopbr","study":"held"}' });
+  });
+  return { ready, asked, release };
+}
 
 // The refuseAt() lines of link.html, the definition left out, as the grep
 // lists them.

@@ -85,6 +85,20 @@ export function decodeLinkParam(href) {
   return JSON.parse(Buffer.from(params.get('c'), 'base64url').toString('utf8'));
 }
 
+// The retired terms, stated here as the naming decision lists them: six
+// case-insensitive patterns, four more, and two fixed strings. The Study
+// Link Builder's text and its refusals hold none of them.
+export const RETIRED = [
+  /\bdescriptor\b/i, /\bscoring file\b/i, /\bbundle\b/i, /\bendpoint\b/i, /\bstores?\b/i, /\bcompressed\b/i,
+  /\b(hitop-form )?form page\b/i, /(?<!study )\blink builder\b/i, /\b[cz] parameter\b/i, /\$\{[^}]*\} parameter/i,
+  '?c=', '?z=',
+];
+
+// The terms of RETIRED that `s` holds.
+export function retiredIn(s) {
+  return RETIRED.filter((term) => (typeof term === 'string' ? s.includes(term) : term.test(s)));
+}
+
 // The fingerprint a setup file's link carries, computed here with Node's
 // crypto rather than the browser's crypto.subtle that form.js uses: the
 // SHA-256 of the UTF-8 bytes of JSON.stringify of the parsed setup, as
