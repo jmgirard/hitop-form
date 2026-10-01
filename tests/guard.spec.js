@@ -112,7 +112,7 @@ for (const probe of PROBES) {
     });
     // G2, G3, G4
     const alert = page.locator('[role=alert]');
-    await expect(alert).toContainText('This page reads format "1.0"');
+    await expect(alert).toContainText('The online form reads format "1.0"');
     await expect(alert).toContainText(probe.names);
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
     await expect(page.locator('fieldset.item')).toHaveCount(0);
@@ -144,7 +144,7 @@ test('an export with no buildDate is refused', async ({ page }) => {
 test('a descriptor whose format is not "1.0" is refused', async ({ page }) => {
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
   await openForm(page, base(), { instrument: module.instrument, study: 'guard', module });
-  await expect(page.locator('[role=alert]')).toContainText('this page reads format "1.0" and found format "2.0"');
+  await expect(page.locator('[role=alert]')).toContainText('the online form reads format "1.0" and found format "2.0"');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -178,7 +178,7 @@ const REFUSED_STORES = [
   {
     name: 'an unknown kind',
     store: { kind: 'ftp', url: 'https://example.com/hook' },
-    names: 'its kind is "ftp", and this page knows only "webhook", "supabase".',
+    names: 'its kind is "ftp", and the online form knows only "webhook", "supabase".',
   },
   { name: 'a missing url', store: { kind: 'webhook' }, names: 'it names no url.' },
   { name: 'a url that is not text', store: { kind: 'webhook', url: 7 }, names: 'its url is not text.' },

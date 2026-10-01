@@ -130,10 +130,14 @@
 //       study name box change no address and start no navigation; once the
 //       wait ends, a press shows "Your study link". The button is enabled
 //       after a load with no link, a refused link and a filled one
+//  L35: the four form.js messages the builder shows from its imports name
+//       the online form, not "this page": an unknown instrument in an opened
+//       link, a store kind added to the destination menu, a module file of
+//       another format, and an instrument export of another format
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
+  useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
 } from './helpers.mjs';
 
@@ -432,7 +436,7 @@ test('the Completion URL after a saved file field puts completeSaved in the link
   // this hint keeps.
   const hint = page.locator('label:has(input[name="completeSaved"]) .hint');
   await expect(hint).toContainText('Only beside a completion URL');
-  await expect(hint).toContainText("your study's completion code for a saved file");
+  await expect(hint).toContainText("For Prolific, your saved-file code's URL.");
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
@@ -523,7 +527,7 @@ test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   // L3
   const hint = page.locator('label:has(textarea[name="module"]) .hint');
-  await expect(hint).toContainText(/^HiTOP-SR only\./);
+  await expect(hint).toContainText(/^HiTOP-SR only\. With several instruments/);
 });
 
 // L15: a pasted descriptor whose items are not in ascending order is refused
@@ -674,7 +678,7 @@ const BAD_C = [
   { name: 'a JSON array', config: [], message: NOT_A_FORM },
   { name: 'JSON null', config: null, message: NOT_A_FORM },
   { name: 'a JSON string', config: 'x', message: NOT_A_FORM },
-  { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' }, message: 'names an instrument this page does not offer: "hitophsum".' },
+  { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' }, message: 'names an instrument the Study Link Builder does not offer: "hitophsum".' },
   {
     name: 'a module that makes JSON.stringify throw after the study is filled',
     config: { instrument: 'hitopbr', study: 'deep', module: { throwOnStringify: true } },
@@ -916,10 +920,9 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   }
   const sona = page.locator('#sonaHint');
   // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
-  await expect(sona).toContainText("The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code");
-  await expect(sona).toContainText("Paste the link as SONA's Study URL");
+  await expect(sona).toContainText("Paste the link, ending in id=%SURVEY_CODE%, as SONA's Study URL.");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
-  await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
+  await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('{participant} after its ? or # becomes the identifier');
 });
 
 // L25: the link each choice builds.
@@ -1099,7 +1102,7 @@ test('the recruiting-site menu is described by the chosen site\'s hint', async (
     else await expect(menu, `under ${site}`).toHaveAttribute('aria-describedby', hint);
   }
   await menu.selectOption('sona');
-  await expect(menu).toHaveAccessibleDescription(/The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code/);
+  await expect(menu).toHaveAccessibleDescription(/Paste the link, ending in id=%SURVEY_CODE%, as SONA's Study URL/);
 });
 
 // L34: "Make the link" does nothing until the prefill ends. Before the
@@ -1199,3 +1202,38 @@ for (const [name, search] of [
     await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
   });
 }
+
+// L35: each message is fired on the builder, and its whole text asserted.
+test('the form.js messages the builder shows name the online form', async ({ page }) => {
+  const err = page.locator('#err');
+  const make = page.getByRole('button', { name: 'Make the link' });
+
+  // An opened link that names an unknown instrument.
+  await openBuilder(page, { config: { instruments: ['hitopbr', 'pid5x'], study: 'l35' } });
+  await expect(err).toHaveText('The study link you opened holds an instruments field that could not be used: entry 2 is "pid5x", an instrument the online form does not know. Fill in the form above to make a new link.');
+
+  // A store kind the menu does not offer, added to it.
+  await openBuilder(page);
+  await page.locator('input[name="study"]').fill('l35');
+  await page.locator('select[name="storeKind"]').evaluate((s) => s.add(new Option('FTP', 'ftp')));
+  await page.locator('select[name="storeKind"]').selectOption('ftp');
+  await make.click();
+  await expect(err).toHaveText('Where responses go could not be used: its kind is "ftp", and the online form knows only "webhook", "supabase".');
+
+  // A module file of another format.
+  await openBuilder(page);
+  await page.locator('select[name="instrument"]').selectOption('hitopsr');
+  await page.locator('input[name="study"]').fill('l35');
+  const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
+  await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  await make.click();
+  await expect(err).toHaveText('The module file could not be used: the online form reads format "1.0" and found format "2.0".');
+
+  // An instrument export of another format, read for a Supabase table's SQL.
+  const exp = await fetchExport('hitopbr');
+  await page.route(exportUrl('hitopbr'), (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
+  }));
+  const { err: exportErr } = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });
+  expect(exportErr).toBe('The online form reads format "1.0" of the instrument export and found format "2.0".');
+});

@@ -103,7 +103,7 @@ test('an export of another format in a list is refused naming its instrument', a
     status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
   }));
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopbr'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText('HiTOP-BR: This page reads format "1.0" of the instrument export and found format "2.0".');
+  await expect(page.locator('[role=alert]')).toHaveText('HiTOP-BR: The online form reads format "1.0" of the instrument export and found format "2.0".');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 

@@ -230,13 +230,13 @@ const OPENED_REFUSED = [
   {
     name: 'an unknown name',
     config: { instruments: ['hitopbr', 'pid5x'] },
-    why: 'The study link you opened holds an instruments field that could not be used: entry 2 is "pid5x", an instrument this page does not know. Fill in the form above to make a new link.',
+    why: 'The study link you opened holds an instruments field that could not be used: entry 2 is "pid5x", an instrument the online form does not know. Fill in the form above to make a new link.',
   },
   // A list as an entry is not a name, even where it holds one.
   ...[['hitopbr', ['hitopbr']], ['pid5', ['pid5bf']]].map((instruments) => ({
     name: `the entry ${JSON.stringify(instruments[1])}`,
     config: { instruments },
-    why: `The study link you opened holds an instruments field that could not be used: entry 2 is ${JSON.stringify(instruments[1])}, an instrument this page does not know. Fill in the form above to make a new link.`,
+    why: `The study link you opened holds an instruments field that could not be used: entry 2 is ${JSON.stringify(instruments[1])}, an instrument the online form does not know. Fill in the form above to make a new link.`,
   })),
   {
     name: 'a repeated name',
