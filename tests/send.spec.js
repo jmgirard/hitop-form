@@ -59,7 +59,7 @@
 //  T15: with a complete address in the link, a confirmed send draws the
 //       sent screen before it issues the one navigation request to it: while
 //       the request is held open, the heading is "Thank you", the paragraph
-//       says the responses were sent, a "Continue to the next step of the
+//       says the answers were sent, a "Continue to the next step of the
 //       study" paragraph links to the address, and no nav button is in the document; the row
 //       still reaches the store, and no file is saved
 //  T16: with a complete address, an unconfirmed send shows the saved screen

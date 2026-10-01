@@ -1702,7 +1702,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       ...(askParticipant
         ? [el('div', { class: 'field' }, [
             el('label', { for: 'participant', text: 'Participant identifier' }),
-            el('p', { class: 'hint', id: 'participant-hint', text: 'Type the identifier the study team gave you, exactly as they gave it.' }),
+            el('p', { class: 'hint', id: 'participant-hint', text: 'Type your participant identifier exactly as you received it.' }),
             input,
           ])]
         : []),

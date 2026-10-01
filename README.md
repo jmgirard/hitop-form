@@ -555,7 +555,8 @@ If they cannot be sent, they are saved as a file on this device. It names
 no address. Without one, it says the answers are saved to a file on this
 device. When the link carries no participant identifier, the start screen
 asks for one. A hint under the "Participant identifier" label asks for the
-identifier the study team gave. The field asks a phone keyboard not to
+identifier exactly as the participant received it, from the study team or
+a recruiting site. The field asks a phone keyboard not to
 capitalize, correct or spell-check it, and Enter in it works as "Begin"
 does. Under the Prolific route the identifier is the Prolific ID in the
 page's address, and the start screen asks only when the address carries

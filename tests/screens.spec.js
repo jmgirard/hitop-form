@@ -379,6 +379,10 @@ async function openIdentifierScreen(page) {
   return input;
 }
 
+// The hint names no giver, since a recruiting site's participant got the
+// identifier from the site and not from the study team.
+const HINT = 'Type your participant identifier exactly as you received it.';
+
 test('the identifier screen shows a hint under the label, tied to the input', async ({ page }) => {
   const input = await openIdentifierScreen(page);
   const label = page.locator('label[for="participant"]');
@@ -388,7 +392,7 @@ test('the identifier screen shows a hint under the label, tied to the input', as
   const hint = page.locator(`[id="${hintId}"]`);
   await expect(hint).toHaveCount(1);
   await expect(hint).toBeVisible();
-  await expect(hint).toHaveText('Type the identifier the study team gave you, exactly as they gave it.');
+  await expect(hint).toHaveText(HINT);
   // Under the label: the hint's top is at or below the label's bottom, and
   // above the input.
   const [l, h, i] = await Promise.all([label.boundingBox(), hint.boundingBox(), input.boundingBox()]);
@@ -396,9 +400,7 @@ test('the identifier screen shows a hint under the label, tied to the input', as
   expect(i.y, 'the input starts below the hint').toBeGreaterThanOrEqual(h.y + h.height - 1);
   // The label names the input, so the hint is its description and not its name.
   await expect(page.getByRole('textbox', { name: 'Participant identifier', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('textbox', { name: 'Participant identifier' })).toHaveAccessibleDescription(
-    'Type the identifier the study team gave you, exactly as they gave it.',
-  );
+  await expect(page.getByRole('textbox', { name: 'Participant identifier' })).toHaveAccessibleDescription(HINT);
 });
 
 test('the identifier input turns off capitals, correction and spell check', async ({ page }) => {
@@ -513,18 +515,20 @@ async function expectMissed(page, blank) {
 }
 
 // Probes the page on show: three items missed, then one, then all answered.
+// The one left is the middle item, well above the button the press scrolls
+// to, so the scroll check can fail; the last item would already be in view.
 async function probeMissed(page) {
   const n = await page.locator('fieldset.item').count();
   const blank = [Math.ceil(n / 2), n - 2, n];
   await answerPage(page, { skip: blank });
   await expectMissed(page, blank);
   // Each answer lowers the count at once, before any press.
-  for (const [k, i] of blank.slice(0, 2).entries()) {
+  for (const [k, i] of blank.slice(1).entries()) {
     await page.locator('fieldset.item').nth(i - 1).locator('input[type=radio]').first().check();
     await expect(page.locator('.missed-count'), 'the count after an answer').toHaveText(missedCount(blank.length - k - 1));
   }
-  await expectMissed(page, blank.slice(2));
-  await page.locator('fieldset.item').nth(n - 1).locator('input[type=radio]').first().check();
+  await expectMissed(page, blank.slice(0, 1));
+  await page.locator('fieldset.item').nth(blank[0] - 1).locator('input[type=radio]').first().check();
   await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveCount(0);
 }
 
