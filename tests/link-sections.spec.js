@@ -54,8 +54,8 @@
 //       instruments; the key hint says the key goes into every study link
 //       or setup file, and that an opened study link holding it, on either
 //       page, puts it in GitHub Pages' logs; the setup-file hint says anyone
-//       can then read where responses go; the intro says the builder sends
-//       what you type only as a setup file's address, to that file's host
+//       can then read where responses go; the intro says the builder keeps
+//       nothing you type, and no longer that it sends nothing
 //  S10: with "Another site" chosen and one question of each type, 50
 //       characters put into each text input and box in the sections
 //       (typed where the field shows, sent as input events where the
@@ -946,10 +946,13 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(hintOf('module')).toContainText('With several instruments, it applies to the HiTOP-SR among them.');
   const keyHint = hintOf('supabaseKey');
   await expect(keyHint).toContainText('It goes into every study link or setup file, so use no other key.');
-  await expect(keyHint).toContainText('A study link holding it, opened here or on the online form, puts it in GitHub Pages\' logs.');
+  await expect(keyHint).toContainText('A study link holding it, opened on either page, puts it in GitHub Pages\' logs.');
   await expect(page.locator('#setupFileFields .hint').first()).toContainText('Anyone can then read where responses go.');
   await expect(keyHint.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
-  await expect(intro).toContainText('The Study Link Builder keeps nothing you type and sends it nowhere, except a setup file\'s address to that file\'s host.');
+  await expect(intro).toContainText('The Study Link Builder keeps nothing you type. Opening');
+  // The builder fetches a setup file's address, so the intro claims no
+  // longer that it sends nothing.
+  await expect(intro).not.toContainText('sends nothing');
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
