@@ -447,7 +447,27 @@ for (const press of ['Enter', 'Begin']) {
   });
 }
 
-// ---- P4 ---------------------------------------------------------------
+// Safari sends the Enter that commits an input method's text as a keydown
+// with keyCode 229 and isComposing false. That Enter starts nothing; the
+// same keydown with keyCode 13 starts the form, so the event reaches the
+// handler.
+test('an Enter that commits an input method\'s text starts nothing, and a plain one starts the form', async ({ page }) => {
+  const input = await openIdentifierScreen(page);
+  await input.fill('p3');
+  const enter = (keyCode) => input.evaluate((n, code) => {
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: false });
+    Object.defineProperty(ev, 'keyCode', { value: code });
+    n.dispatchEvent(ev);
+  }, keyCode);
+  await enter(229);
+  await page.waitForTimeout(300);
+  await expect(page.locator('fieldset.item'), 'items after the commit Enter').toHaveCount(0);
+  await expect(input, 'the identifier field after the commit Enter').toBeVisible();
+  await enter(13);
+  await expect(page.locator('.progress'), 'the page after a plain Enter').toHaveText('Page 1 of 3');
+});
+
+// ---- P4---------------------------------------------------------------
 
 // The count above the first missed item, stated here.
 const missedCount = (n) => (n === 1 ? '1 item on this page has no answer yet.' : `${n} items on this page have no answer yet.`);

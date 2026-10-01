@@ -1664,7 +1664,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           'aria-describedby': 'participant-hint',
           required: '',
           onkeydown: (ev) => {
-            if (ev.key === 'Enter' && !ev.isComposing) {
+            // Safari sends the Enter that commits an input method's text
+            // with keyCode 229 and isComposing false.
+            if (ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229) {
               ev.preventDefault();
               begin();
             }
@@ -1723,8 +1725,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   }
 
   // The consent screen, before the start screen under a link with
-  // `consent`. It holds the researcher's text and the two buttons, and no
-  // item, option or instruction of the instrument.
+  // `consent`. It holds the researcher's text, the two buttons and the
+  // closed study-team section with the version lines, and no item, option
+  // or instruction of the instrument.
   //
   // "I do not agree" asks once before it declines: the two buttons give
   // way to a question with "Yes, I do not agree" and "Go back", the consent
@@ -2113,7 +2116,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     // text for the length of the send, which can take up to
     // SEND_TIMEOUT_MS. Screen readers generally announce a status region
     // when its text changes, and not always when it arrives with its text.
-    nav.previousElementSibling.textContent = 'Sending your answers. Please keep this page open.';
+    root.querySelector('p.sending').textContent = 'Sending your answers. Please keep this page open.';
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;
     finished = true;

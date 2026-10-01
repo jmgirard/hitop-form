@@ -17,8 +17,8 @@
 //   T6: a 200 with an HTML body, a 404, a 500, a refused connection and an
 //       endpoint that never answers (the page's 30-second limit) are each
 //       unconfirmed: the CSV is saved to the device, the final screen is
-//       headed "Your answers were not sent", says the answers could not be
-//       sent and names the saved file, holds the send's fault only in its
+//       headed "Your answers were not sent", says the page got no
+//       confirmation and names the saved file, holds the send's fault only in its
 //       closed study-team section, and does not say that no answer was sent
 //   T7: every nav button is disabled from Finish's first press until the
 //       outcome screen, and a line above them says the answers are sending
