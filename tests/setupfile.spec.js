@@ -206,9 +206,9 @@ for (const fault of FILE_FAULTS) {
   });
 }
 
-// The page's clock is installed and paused once the request is made, so the
-// wait runs in moments. Two seconds short of the limit the form is still
-// loading, and past the limit it is refused.
+// The page's clock is installed before the page loads and paused once the
+// request is made, so the wait runs in moments. Two seconds short of the
+// limit the form is still loading, and past the limit it is refused.
 test('a setup file that has not arrived after 30 seconds is refused (kind connection)', async ({ page }) => {
   await page.clock.install();
   const requests = await serveSetup(page, '', { hang: true });

@@ -357,7 +357,7 @@ test('a changed file is offered, and pressing the offer fills the form for a new
 });
 
 // LF7: the offer goes once the researcher makes a link of their own, so a
-// later press cannot empty the form they filled.
+// later press cannot overwrite the form they filled.
 test('making a link hides the offer to fill the form from a changed file', async ({ page }) => {
   await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
   await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
@@ -418,9 +418,10 @@ const FETCH_FAULTS = [
   { name: 'a body of 100,001 bytes', body: `{"a":"${'x'.repeat(100_001 - 8)}"}`, why: 'is larger than 100,000 bytes' },
 ];
 
-// The page's clock is installed and paused once the request is made, as in
-// setupfile.spec.js. Before the limit "Make the link" stays disabled; past
-// it the link is refused and the builder can be used.
+// The page's clock is installed before the page loads and paused once the
+// request is made, as in setupfile.spec.js. Before the limit "Make the
+// link" stays disabled; past it the link is refused and the builder can be
+// used.
 test('an opened link whose file has not arrived after 30 seconds is refused, and the builder works', async ({ page }) => {
   await page.clock.install();
   const requests = await serveSetup(page, '', { hang: true });
