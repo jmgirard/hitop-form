@@ -1692,7 +1692,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     };
     const counts = `${plan.shown.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}.`;
     const where = store
-      ? 'When you finish, your answers are sent to the study team. If they cannot be sent, they are saved as one file on this device instead.'
+      ? 'When you finish, your answers are sent to the study team. If the page gets no confirmation that they arrived, they are saved as one file on this device instead.'
       : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.';
     root.replaceChildren(
       heading(title),

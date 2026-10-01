@@ -551,7 +551,8 @@ A link with consent text shows its consent screen first, and the start
 screen after "I agree". A link with questions before the form shows them
 next, and the start screen after "Next". The start screen says where the
 answers go. With a send address, it says they are sent to the study team.
-If they cannot be sent, they are saved as a file on this device. It names
+If the page gets no confirmation that they arrived, they are saved as a
+file on this device. It names
 no address. Without one, it says the answers are saved to a file on this
 device. When the link carries no participant identifier, the start screen
 asks for one. A hint under the "Participant identifier" label asks for the

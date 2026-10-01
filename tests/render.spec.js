@@ -16,7 +16,7 @@
 //   R6: the start screen's disclosure: without a store it says the answers
 //       are saved to this device and none is sent anywhere; with a store it
 //       says the answers are sent to the study team, names no host, and says
-//       the file is saved instead when they cannot be sent
+//       the file is saved instead when the page gets no confirmation
 //   R7: a HiTOP-BR link with shuffle: true renders a rearrangement of the
 //       export's items, numbered 1 to 45 in the shown order, and two loads
 //       of the link render different orders
@@ -166,7 +166,7 @@ test('the start screen with a store says the answers are sent, names no host, an
     store: { kind: 'webhook', url: 'https://script.google.com/macros/s/AKfycbxyz/exec' },
   });
   await expect(page.locator('p.muted')).toHaveText(
-    '45 items over 3 pages. When you finish, your answers are sent to the study team. If they cannot be sent, they are saved as one file on this device instead.',
+    '45 items over 3 pages. When you finish, your answers are sent to the study team. If the page gets no confirmation that they arrived, they are saved as one file on this device instead.',
   );
   expect(await page.locator('main').innerText(), 'the shown text').not.toContain('script.google.com');
 });
