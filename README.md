@@ -590,8 +590,8 @@ moves to that item, and the page waits. Each answer to a marked item takes
 its mark away and lowers the count, and the count goes with the last mark.
 The count is an alert for screen readers. It is on the page before any
 press, empty and taking no room, and it stays in the accessibility tree. A press that finds a blank item writes its text
-anew. An answer writes it only when the number changes, so an answer that
-leaves the number gives a screen reader no new text to read.
+anew. An answer writes it only for a new number. With an unchanged number,
+an answer gives a screen reader no new text to read.
 
 The last page ends with "Finish". Until it is pressed the answers live only
 in the open page. If the participant reloads or closes the page, the browser
