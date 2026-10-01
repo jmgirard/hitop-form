@@ -58,12 +58,13 @@
 //  T15: with a complete address in the link, a confirmed send draws the
 //       sent screen before it issues the one navigation request to it: while
 //       the request is held open, the heading is "Thank you", the paragraph
-//       says the responses were sent, a "Continue to <host>." paragraph
-//       links to the address, and no nav button is in the document; the row
+//       says the responses were sent, a "Continue to the next step of the
+//       study" paragraph links to the address, and no nav button is in the document; the row
 //       still reaches the store, and no file is saved
 //  T16: with a complete address, an unconfirmed send shows the saved screen
-//       with a link to the address after the file name, labelled by its
-//       host, and no request reaches the address within five seconds
+//       with a link to the address after the file name, labelled "Continue
+//       to the next step of the study", and no request reaches the address
+//       within five seconds
 //  T17: with complete and completeSaved, a confirmed send's one navigation
 //       request goes to complete and none reaches completeSaved
 //  T18: with complete and completeSaved, an unconfirmed send's saved screen
@@ -75,9 +76,9 @@
 //       each save the file again with the Finish download's suggested file
 //       name and its bytes; without a complete address the screen's order is
 //       the heading, the lead, the file name, the trail, the button, the
-//       version line, and with one (the T16 walk) the screen's order is
-//       the heading, the lead, the file name, the trail, the button, the
-//       completion link, the version line
+//       closed study-team section, and with one (the T16 walk) the screen's
+//       order is the heading, the lead, the file name, the trail, the
+//       button, the completion link, the study-team section
 //  T20: the sent screen has no "Save the file" button: asserted in T5's
 //       walks and the supabase walks after the screen shows, and in T15's
 //       document at the held request
@@ -92,7 +93,7 @@ import {
   useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
   leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
-  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder,
+  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder, CONTINUE,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -455,7 +456,7 @@ for (const w of [
     const sentScreen = {
       h1: 'Thank you',
       done: 'Your responses were sent to the study team.',
-      cont: `Continue to ${new URL(COMPLETE_URL).host}.`,
+      cont: CONTINUE,
       href: COMPLETE_URL,
       close: false,
       navButtons: 0,
@@ -517,7 +518,7 @@ test('with complete and completeSaved, an unconfirmed send links to completeSave
   const link = page.locator('p.complete a');
   await expect(link).toHaveCount(1);
   await expect(link).toHaveAttribute('href', COMPLETE_SAVED_URL);
-  await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
+  await expect(link).toHaveText(CONTINUE);
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
   await page.waitForTimeout(5000);
@@ -544,7 +545,7 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
   const link = page.locator('p.complete a');
   await expect(link).toHaveAttribute('href', COMPLETE_URL);
-  await expect(link).toHaveText('app.prolific.com');
+  await expect(link).toHaveText(CONTINUE);
   // The link follows the file name in the document.
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
@@ -594,7 +595,10 @@ for (const u of UNCONFIRMED) {
     await expect(page.locator('h1')).toHaveText('Thank you');
     const done = page.locator('.done');
     await expect(done).toContainText('The send to the study team could not be confirmed');
-    await expect(done).toContainText(u.why);
+    // The send's own fault sits in the closed study-team section, and the
+    // screen shows none of it.
+    await expect(page.locator('details.study-team .fault')).toContainText(u.why);
+    expect(await page.locator('main').innerText(), 'the shown text').not.toContain(u.why);
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
     // Without a complete field the saved screen offers no completion link.
     await expect(page.locator('p.complete')).toHaveCount(0);
@@ -643,7 +647,8 @@ for (const u of SUPABASE_UNCONFIRMED) {
     await expect(page.locator('h1')).toHaveText('Thank you');
     const done = page.locator('.done');
     await expect(done).toContainText('The send to the study team could not be confirmed');
-    await expect(done).toContainText(u.why);
+    await expect(page.locator('details.study-team .fault')).toContainText(u.why);
+    expect(await page.locator('main').innerText(), 'the shown text').not.toContain(u.why);
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
     // Without a complete field the saved screen offers no completion link.
     await expect(page.locator('p.complete')).toHaveCount(0);

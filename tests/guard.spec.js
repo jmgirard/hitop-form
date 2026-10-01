@@ -1,7 +1,8 @@
 // The export's version display and the format guard.
 //
-//   G1: the start screen and the done screen show the export's buildDate and
-//       packageVersion (form_build in the saved file is S2 in save.spec.js)
+//   G1: the start screen and the done screen hold the export's buildDate and
+//       packageVersion, in the closed study-team section (form_build in the
+//       saved file is S2 in save.spec.js)
 //   G2: an export whose format is a string other than "1.0" is refused with
 //       a message naming the format found, and no form starts
 //   G3: an export with no format field is refused with a message saying so
@@ -272,15 +273,16 @@ for (const url of ['https://example.com/hook', 'http://127.0.0.1:8123/record', '
   });
 }
 
-// A project URL pasted with the REST path the dashboard shows is accepted,
-// and the start screen names the project host.
+// A project URL pasted with the REST path the dashboard shows is accepted:
+// the start screen says the answers are sent, and shows no refusal.
 test('a supabase store whose url ends in /rest/v1/ is accepted', async ({ page }) => {
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'guard', participant: 'g8',
     store: { kind: 'supabase', url: 'https://example.supabase.co/rest/v1/', key: 'sb_publishable_x', table: 'r' },
   });
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
-  await expect(page.locator('p.muted')).toContainText('sent to the study team at example.supabase.co.');
+  await expect(page.locator('p.muted')).toContainText('When you finish, your answers are sent to the study team.');
+  await expect(page.locator('[role=alert]:not(:empty)')).toHaveCount(0);
 });
 
 // The accepted table forms: the shortest, one with digits and underscores

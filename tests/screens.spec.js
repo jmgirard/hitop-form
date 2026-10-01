@@ -7,15 +7,59 @@
 //       the connection and reload, a browser that cannot unpack a `z` link
 //       says to open it in another browser, and any other refusal says to
 //       contact the study team. A search of form.js lists the calls
+//   P2: three walks, each screen read as shown: consent, questions before
+//       and after, two instruments and no store, to the saved-file screen;
+//       a web address with a complete address, from the identifier screen
+//       to the sent screen; and a send answered HTTP 500 with a
+//       completeSaved address, to the saved-file screen. On every screen
+//       the page's own text (all shown text but the consent text, the
+//       questions, the study name and the file name) holds no build date,
+//       package version, host name or HTTP status, and none of the words
+//       store, endpoint, JSON, descriptor and module. Every screen ends
+//       with the closed study-team section, whose footer holds one version
+//       line per instrument
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, openForm, formUrl, fetchExport, exportUrl, readDescriptor, refusalText, ROOT,
+  answerPage, nextButton, awaitDownload, COMPLETE_URL, COMPLETE_SAVED_URL, CONTINUE,
 } from './helpers.mjs';
 
 const base = useTarget();
+
+const TITLES = { hitopsr: 'HiTOP-SR', hitopbr: 'HiTOP-BR', pid5: 'PID-5', pid5sf: 'PID-5-SF', pid5bf: 'PID-5-BF' };
+
+// A web address no test server holds: each test answers it with a route.
+const STORE_URL = 'https://store.example.org/hook';
+const CORS = { 'access-control-allow-origin': '*' };
+
+// Answers the store's POST with `status`, a 200 carrying the confirmation
+// the page reads. Returns the requests it saw.
+async function routeStore(page, status) {
+  const seen = [];
+  await page.route(STORE_URL, (route) => {
+    seen.push(route.request().method());
+    return route.fulfill({
+      status,
+      headers: CORS,
+      contentType: 'application/json',
+      body: status === 200 ? '{"ok":true}' : '{"error":"down"}',
+    });
+  });
+  return seen;
+}
+
+// Marks the screen on show, so waitNewScreen() can tell when a press has
+// replaced it: every screen is drawn new, heading included.
+async function markScreen(page) {
+  await page.locator('main > h1').evaluate((h) => { h.dataset.old = '1'; });
+}
+
+async function waitNewScreen(page) {
+  await expect(page.locator('main > h1:not([data-old])')).toHaveCount(1);
+}
 
 const SUMMARY = 'Details for the study team';
 
@@ -124,4 +168,155 @@ test('a module naming an item the export lacks says to contact the study team', 
   await expect(page.locator('details.study-team > footer .version')).toHaveText(
     `Form build ${exp.buildDate} · ${exp.package} ${exp.packageVersion}`,
   );
+});
+
+// ---- P2 ---------------------------------------------------------------
+
+const CONSENT = 'This study asks about your mood.\n\nYou can stop at any time.';
+const AGE = { name: 'age', text: 'Your age in years', type: 'number', min: 18, max: 99, required: true };
+const NOTE = { name: 'note', text: 'Anything else to tell us?', type: 'text' };
+const WORDS = [/\bstores?\b/i, /\bendpoint\b/i, /\bjson\b/i, /\bdescriptor\b/i, /\bmodule\b/i];
+
+// The page's own text on the screen on show: the rendered text of `main`,
+// which leaves out the body of the closed study-team section, with each
+// piece of the researcher's text cut out.
+async function ownText(page, researcher) {
+  let text = await page.locator('main').innerText();
+  for (const piece of researcher) text = text.split(piece).join('\n');
+  return text;
+}
+
+// The checks P2 makes on each screen. `exps` and `stems` are the link's,
+// `hosts` every host the walk touches, and `researcher` the researcher's
+// text the screen can show.
+async function expectOwnText(page, { exps, stems, hosts, researcher }) {
+  const h1 = await page.locator('main > h1').textContent();
+  const own = await ownText(page, researcher);
+  for (const exp of exps) {
+    expect(own, `${h1}: the build date`).not.toContain(exp.buildDate);
+    expect(own, `${h1}: the package version`).not.toContain(exp.packageVersion);
+  }
+  for (const host of hosts) expect(own, `${h1}: the host ${host}`).not.toContain(host);
+  expect(own, `${h1}: an HTTP status`).not.toMatch(/\bHTTP\b|\b500\b/i);
+  for (const word of WORDS) expect(own, `${h1}: ${word}`).not.toMatch(word);
+  const details = page.locator('main > details.study-team');
+  await expect(details, `${h1}: the study-team section`).toHaveCount(1);
+  await expect(details).toHaveJSProperty('open', false);
+  await expect(page.locator('main > *').last(), `${h1}: the section ends the screen`).toHaveClass('study-team');
+  await expect(details.locator('> footer > .version'), `${h1}: the version lines`).toHaveText(
+    stems.length > 1
+      ? exps.map((e, k) => `${TITLES[stems[k]]} form build ${e.buildDate} · ${e.package} ${e.packageVersion}`)
+      : [`Form build ${exps[0].buildDate} · ${exps[0].package} ${exps[0].packageVersion}`],
+  );
+}
+
+// Walks from the screen on show to a closing screen, checking each screen
+// on the way, and returns the headings in order. Each press is the one a
+// participant makes: I agree, the questions answered then Next or Finish,
+// Begin (with `participant` typed when asked), and each item page answered
+// then Next or Finish.
+async function walkScreens(page, check, { participant } = {}) {
+  const headings = [];
+  for (;;) {
+    await check();
+    const h1 = await page.locator('main > h1').textContent();
+    headings.push(h1);
+    await markScreen(page);
+    if (h1 === 'Consent to take part') {
+      await page.getByRole('button', { name: 'I agree' }).click();
+    } else if (h1 === 'Before you begin') {
+      await page.locator('input[name="q-age"]').fill('30');
+      await page.getByRole('button', { name: 'Next' }).click();
+    } else if (h1 === 'Before you finish') {
+      await page.locator('input[name="q-note"]').fill('Nothing.');
+      await page.getByRole('button', { name: 'Finish' }).click();
+    } else if (await page.getByRole('button', { name: 'Begin' }).count() === 1) {
+      const input = page.locator('input[name="participant"]');
+      if (await input.count() === 1) await input.fill(participant);
+      await page.getByRole('button', { name: 'Begin' }).click();
+    } else if (await page.locator('fieldset.item').count() > 0) {
+      await answerPage(page);
+      await nextButton(page).click();
+    } else {
+      return headings;
+    }
+    await waitNewScreen(page);
+  }
+}
+
+test('a walk with consent, questions and two instruments to the saved-file screen shows only the participant text', async ({ page }) => {
+  const stems = ['pid5bf', 'hitopbr'];
+  const exps = await Promise.all(stems.map(fetchExport));
+  const config = {
+    instruments: stems, study: 'screens', participant: 'p2a',
+    consent: { text: CONSENT }, questions: { before: [AGE], after: [NOTE] },
+  };
+  await page.goto(formUrl(base(), config, '', 'z'));
+  await expect(page.locator('main > h1')).toHaveText('Consent to take part');
+  const downloading = awaitDownload(page);
+  let fileName = null;
+  const researcher = () => [
+    ...CONSENT.split('\n\n'), AGE.text, NOTE.text, 'Nothing.', config.study, ...(fileName ? [fileName] : []),
+  ];
+  const hosts = [new URL(base()).host, '127.0.0.1', 'localhost', new URL(exportUrl('hitopbr')).host];
+  const headings = await walkScreens(page, async () => {
+    if (await page.locator('code.filename').count() === 1) fileName = await page.locator('code.filename').textContent();
+    await expectOwnText(page, { exps, stems, hosts, researcher: researcher() });
+  });
+  await downloading;
+  expect(headings).toEqual([
+    'Consent to take part', 'Before you begin',
+    'PID-5-BF', 'PID-5-BF', 'PID-5-BF',
+    'HiTOP-BR', 'HiTOP-BR', 'HiTOP-BR', 'HiTOP-BR',
+    'Before you finish', 'Thank you',
+  ]);
+  expect(fileName, 'the walk reached the saved-file screen').not.toBeNull();
+});
+
+test('a walk from the identifier screen to the sent screen, with a complete address, shows only the participant text', async ({ page }) => {
+  const exps = [await fetchExport('pid5bf')];
+  const posts = await routeStore(page, 200);
+  // A 204 answer leaves the sent screen in place, so it can be read after
+  // the page asks for the completion address.
+  const navigations = [];
+  await page.route(COMPLETE_URL, (route) => {
+    navigations.push(route.request().url());
+    return route.fulfill({ status: 204 });
+  });
+  await openForm(page, base(), {
+    instrument: 'pid5bf', study: 'screens', store: { kind: 'webhook', url: STORE_URL }, complete: COMPLETE_URL,
+  });
+  await expect(page.locator('input[name="participant"]')).toBeVisible();
+  const hosts = [new URL(base()).host, '127.0.0.1', 'localhost', new URL(exportUrl('pid5bf')).host, 'store.example.org', 'app.prolific.com'];
+  const headings = await walkScreens(page, async () => {
+    await expectOwnText(page, { exps, stems: ['pid5bf'], hosts, researcher: ['screens', 'p2b'] });
+  }, { participant: 'p2b' });
+  expect(headings).toEqual(['PID-5-BF', 'PID-5-BF', 'PID-5-BF', 'Thank you']);
+  expect(posts, 'one send').toEqual(['POST']);
+  await expect.poll(() => navigations, 'the page asked for the completion address').toEqual([COMPLETE_URL]);
+  await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+  await expect(page.locator('p.complete a')).toHaveText(CONTINUE);
+});
+
+test('a walk whose send is answered HTTP 500, with a completeSaved address, shows only the participant text', async ({ page }) => {
+  const exps = [await fetchExport('pid5bf')];
+  await routeStore(page, 500);
+  await openForm(page, base(), {
+    instrument: 'pid5bf', study: 'screens', participant: 'p2c', store: { kind: 'webhook', url: STORE_URL },
+    complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL,
+  });
+  const downloading = awaitDownload(page);
+  let fileName = null;
+  const hosts = [
+    new URL(base()).host, '127.0.0.1', 'localhost', new URL(exportUrl('pid5bf')).host,
+    'store.example.org', 'app.prolific.com', 'saved.example.org',
+  ];
+  const headings = await walkScreens(page, async () => {
+    if (await page.locator('code.filename').count() === 1) fileName = await page.locator('code.filename').textContent();
+    await expectOwnText(page, { exps, stems: ['pid5bf'], hosts, researcher: ['screens', 'p2c', ...(fileName ? [fileName] : [])] });
+  });
+  await downloading;
+  expect(headings).toEqual(['PID-5-BF', 'PID-5-BF', 'PID-5-BF', 'Thank you']);
+  await expect(page.locator('p.complete a')).toHaveAttribute('href', COMPLETE_SAVED_URL);
+  await expect(refusalText(page)).toHaveText('The send was not confirmed: the server answered HTTP 500.');
 });

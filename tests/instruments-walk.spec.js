@@ -8,7 +8,8 @@
 //       in the list's order is named
 //   W3: a walk of two instruments (HiTOP-BR, PID-5-BF) and of three
 //       (PID-5-BF, a HiTOP-SR module, HiTOP-BR): each instrument has its own
-//       start screen with its title, its version line, "Part n of N", its
+//       start screen with its title, the version lines of every instrument
+//       in its study-team section, "Part n of N", its
 //       instructions and its own item and page counts, then its item pages.
 //       Positions and page labels count within each instrument, and the
 //       first page of each carries no Back. With no participant in the link,
@@ -50,7 +51,9 @@ async function walkPart(page, { k, stems, exps, module, participant }) {
   const count = shownNumbers(exp, module).length;
   const pages = Math.ceil(count / PAGE_SIZE);
   await expect(page.locator('h1')).toHaveText(TITLES[stems[k]]);
-  await expect(page.locator('.version')).toHaveText(`Form build ${exp.buildDate} · ${exp.package} ${exp.packageVersion}`);
+  await expect(page.locator('details.study-team > footer .version')).toHaveText(
+    exps.map((e, j) => `${TITLES[stems[j]]} form build ${e.buildDate} · ${e.package} ${e.packageVersion}`),
+  );
   await expect(page.locator('.part')).toHaveText(`Part ${k + 1} of ${stems.length}`);
   await expect(page.locator('.start')).toHaveText(exp.instructions.start);
   const counts = `${count} items over ${pages} ${pages === 1 ? 'page' : 'pages'}.`;

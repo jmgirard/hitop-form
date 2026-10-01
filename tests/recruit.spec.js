@@ -58,7 +58,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
-  prolificQuery, COMPLETE_URL,
+  prolificQuery, COMPLETE_URL, CONTINUE,
 } from './helpers.mjs';
 import { readParticipantParam, fillParticipant } from '../form.js';
 
@@ -250,7 +250,7 @@ test('a confirmed send fills the token with the identifier from the address in t
   await walkAll(page);
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
   expect(states.at(-1), 'the sent screen at the request').toEqual({
-    h1: 'Thank you', href: SONA_FILLED_ABC, text: 'yourschool.sona-systems.com',
+    h1: 'Thank you', href: SONA_FILLED_ABC, text: CONTINUE,
   });
   release();
   await expect(page).toHaveURL(SONA_FILLED_ABC);
@@ -280,7 +280,7 @@ test('with no store, the saved screen links to complete filled with the identifi
   await downloading;
   const link = page.locator('p.complete a');
   await expect(link).toHaveAttribute('href', SONA_FILLED_ABC);
-  await expect(link).toHaveText('yourschool.sona-systems.com');
+  await expect(link).toHaveText(CONTINUE);
   await page.waitForTimeout(2000);
   expect(requests, 'nothing requested of the completion address').toEqual([]);
 });
@@ -298,7 +298,7 @@ test('with no store, the saved screen links to completeSaved filled with the lin
   const link = page.locator('p.complete a');
   await expect(link).toHaveCount(1);
   await expect(link).toHaveAttribute('href', SAVED_FILLED_12345);
-  await expect(link).toHaveText('saved.sona-systems.com');
+  await expect(link).toHaveText(CONTINUE);
   await page.waitForTimeout(2000);
   expect(requests, 'nothing requested of either address').toEqual([]);
 });
@@ -344,7 +344,7 @@ test('under participantParam, a confirmed send uses a completion address without
   const states = await observeLink(page);
   await walkAll(page);
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
-  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: 'example.org' });
+  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: CONTINUE });
   release();
   await expect(page).toHaveURL(EXAMPLE_PARSED);
   expect(requests).toEqual([EXAMPLE_PARSED]);
@@ -417,7 +417,7 @@ test('an address value encoding a surrogate arrives as replacement characters, a
   await walkAll(page);
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
   const filled = 'https://example.org/done?code=%EF%BF%BD%EF%BF%BD%EF%BF%BD';
-  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: 'example.org' });
+  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: CONTINUE });
   release();
   await expect(page).toHaveURL(filled);
   expect(requests).toEqual([filled]);

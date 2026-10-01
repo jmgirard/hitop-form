@@ -47,7 +47,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
-  leadColumns, refusalText,
+  leadColumns, refusalText, CONTINUE,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -254,17 +254,17 @@ const DECLINED_CASES = [
   {
     name: 'a Prolific-shaped address with its cc code',
     fields: { ...LINK, completeDeclined: PROLIFIC_NO_CONSENT },
-    extra: '', reached: PROLIFIC_NO_CONSENT, host: 'app.prolific.com',
+    extra: '', reached: PROLIFIC_NO_CONSENT,
   },
   {
     name: 'a SONA-shaped address, the identifier from the address',
     fields: { instrument: 'hitopbr', study: 'consent', participantParam: 'id', completeDeclined: SONA_DECLINED },
-    extra: '&id=a%26b%20c', reached: SONA_FILLED_ABC, host: 'yourschool.sona-systems.com',
+    extra: '&id=a%26b%20c', reached: SONA_FILLED_ABC,
   },
   {
     name: 'a SONA-shaped address, with no identifier',
     fields: { instrument: 'hitopbr', study: 'consent', participantParam: 'id', completeDeclined: SONA_DECLINED },
-    extra: '', reached: SONA_FILLED_EMPTY, host: 'yourschool.sona-systems.com',
+    extra: '', reached: SONA_FILLED_EMPTY,
   },
 ];
 
@@ -288,7 +288,7 @@ for (const c of DECLINED_CASES) {
         expect(states.at(-1), 'the declined screen at the request').toEqual({
           h1: 'Thank you',
           declined: declined ? DECLINED_PARAGRAPHS : ['You chose not to take part.'],
-          links: [[c.reached, c.host]],
+          links: [[c.reached, CONTINUE]],
         });
         release();
         await expect(page).toHaveURL(c.reached);

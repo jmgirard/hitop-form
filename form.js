@@ -1610,13 +1610,20 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   let finished = false;
   let sending = false;
   const store = config.store;
-  const storeHost = store ? new URL(store.url).host : null;
   const before = config.questions?.before ?? [];
   const after = config.questions?.after ?? [];
   // The answers to the researcher's questions, by name, as the screens hold
   // them: the typed string for `text` and `number`, the chosen position for
   // `choice` and the set of chosen positions for `multi`, each counted from 1.
   const questionAnswers = new Map();
+
+  // The closed study-team section that ends each screen: `first`, when
+  // given, then the version lines of every export of the link.
+  const foot = (...first) => studyTeam([...first, versionFooter(exps, linkStems(config))]);
+
+  // A link to a completion address, with the same words whichever address
+  // it is, so no screen shows a host name.
+  const completeLink = (address) => el('a', { href: address, text: 'Continue to the next step of the study' });
 
   // A reload or a back gesture would lose every answer, since they live only
   // in memory until Finish writes the file. The browser asks first.
@@ -1657,11 +1664,10 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     };
     const counts = `${plan.shown.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}.`;
     const where = store
-      ? `When you finish, your answers are sent to the study team at ${storeHost}. If the send cannot be confirmed, they are saved as one file in this browser's downloads folder instead.`
+      ? 'When you finish, your answers are sent to the study team. If they cannot be sent, they are saved as one file on this device instead.'
       : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.';
     root.replaceChildren(
       heading(title),
-      versionLine(exp),
       ...(multi ? [el('p', { class: 'part', text: `Part ${k + 1} of ${parts.length}` })] : []),
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
       el('p', { class: 'muted', text: k === 0 ? `${counts} ${where}` : counts }),
@@ -1670,6 +1676,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
         : []),
       alert,
       el('div', { class: 'nav' }, [el('button', { type: 'button', text: 'Begin', onclick: begin })]),
+      foot(),
     );
     window.scrollTo(0, 0);
     if (input) input.focus();
@@ -1694,6 +1701,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
         el('button', { type: 'button', text: 'I agree', onclick: proceed }),
         el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: decline }),
       ]),
+      foot(),
     );
     focusHeading(root);
   }
@@ -1715,9 +1723,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     root.replaceChildren(
       heading('Thank you'),
       el('div', { class: 'declined' }, text),
-      ...(address === undefined
-        ? []
-        : [el('p', { class: 'complete' }, ['Continue to ', el('a', { href: address, text: new URL(address).host }), '.'])]),
+      ...(address === undefined ? [] : [el('p', { class: 'complete' }, [completeLink(address)])]),
+      foot(),
     );
     focusHeading(root);
     if (address !== undefined) window.location.assign(address);
@@ -1837,7 +1844,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
             },
           }),
         ]);
-    root.replaceChildren(heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, nav);
+    root.replaceChildren(heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, nav, foot());
     window.scrollTo(0, 0);
     focusHeading(root);
   }
@@ -1936,6 +1943,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       ...nodes,
       alert,
       nav,
+      foot(),
     );
     window.scrollTo(0, 0);
     focusHeading(root);
@@ -1977,11 +1985,10 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     };
     if (!store) {
       finished = true;
-      showSaved(
-        saveCsv(record),
-        'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
-        'Please send that file to the study team the way they asked. No answer was sent from this page.',
-      );
+      showSaved(saveCsv(record), {
+        lead: 'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
+        trail: 'Please send that file to the study team the way they asked. No answer was sent from this page.',
+      });
       return;
     }
     sending = true;
@@ -2004,22 +2011,18 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
         el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
         complete === undefined
           ? el('p', { text: 'You can close this page.' })
-          : el('p', { class: 'complete' }, [
-              'Continue to ',
-              el('a', { href: complete, text: new URL(complete).host }),
-              '.',
-            ]),
-        ...versionLines(),
+          : el('p', { class: 'complete' }, [completeLink(complete)]),
+        foot(),
       );
       focusHeading(root);
       if (complete !== undefined) window.location.assign(complete);
       return;
     }
-    showSaved(
-      saveCsv(record),
-      `The send to the study team could not be confirmed (${outcome.why}). Your responses were saved instead as one file, in the folder your browser uses for downloads:`,
-      'Please send that file to the study team the way they asked.',
-    );
+    showSaved(saveCsv(record), {
+      lead: 'The send to the study team could not be confirmed. Your responses were saved instead as one file, in the folder your browser uses for downloads:',
+      trail: 'Please send that file to the study team the way they asked.',
+      fault: `The send was not confirmed: ${outcome.why}.`,
+    });
   }
 
   // Saves the file and returns its name and text, so the saved screen's
@@ -2033,7 +2036,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
 
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
-  // name, labelled by its host, and navigate nowhere on their own. The
+  // name, and navigate nowhere on their own. The
   // address is `completeSaved` when the link carries one, else `complete`,
   // each `{participant}` in it filled with the identifier.
   // The trail paragraph ends by naming the "Save the file" button below it,
@@ -2042,16 +2045,14 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // the first press; each press rewrites it with the same sentence, and
   // `role="status"` marks the write for a screen reader to announce. Focus
   // is not moved, so after a keyboard press it stays on the button.
-  function showSaved({ name, text }, lead, trail) {
+  // `fault`, after a send that was not confirmed, is the send's own fault,
+  // shown only in the closed study-team section.
+  function showSaved({ name, text }, { lead, trail, fault }) {
     const given = config.completeSaved ?? config.complete;
     const address = given === undefined ? undefined : fillParticipant(given, participant);
     const complete = address === undefined
       ? []
-      : [el('p', { class: 'complete' }, [
-          'Then continue to ',
-          el('a', { href: address, text: new URL(address).host }),
-          '.',
-        ])];
+      : [el('p', { class: 'complete' }, [completeLink(address), ' once you have the file.'])];
     const status = el('p', { class: 'saved-again', role: 'status' });
     const saveAgain = () => {
       saveFile(name, text);
@@ -2065,15 +2066,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       el('button', { type: 'button', text: 'Save the file', onclick: saveAgain }),
       status,
       ...complete,
-      ...versionLines(),
+      fault === undefined ? foot() : foot(el('p', { class: 'fault', text: fault })),
     );
     focusHeading(root);
-  }
-
-  // The version lines of the closing screens: the one export's line, or
-  // under a list one line per export, each opening with its instrument.
-  function versionLines() {
-    return multi ? parts.map((p) => versionLine(p.exp, p.title)) : [versionLine(parts[0].exp)];
   }
 
   if (config.consent !== undefined) showConsent();
