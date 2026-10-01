@@ -1955,7 +1955,10 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // this item", inside it and named by its aria-describedby, and puts the
   // count of them in an alert directly above the first, which the page
   // scrolls to. Answering an item takes its mark away and lowers the count,
-  // and the count goes once no mark is left.
+  // and the count goes once no mark is left. The alert is drawn empty above
+  // the items and its text written only after it is in place, and an answer
+  // writes it only when the number changes, so a screen reader reads a new
+  // count and not each choice.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
@@ -1972,15 +1975,17 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       node.querySelector('.missed')?.remove();
       node.removeAttribute('aria-describedby');
     };
-    const countText = (n) => (n === 1
-      ? '1 item on this page has no answer yet.'
-      : `${n} items on this page have no answer yet.`);
+    const countText = (n) => {
+      if (n === 0) return '';
+      return n === 1 ? '1 item on this page has no answer yet.' : `${n} items on this page have no answer yet.`;
+    };
+    const writeCount = (n) => {
+      if (count.textContent !== countText(n)) count.textContent = countText(n);
+    };
     // itemNode's own handler has already taken `unanswered` off the item.
     nodes.forEach((node) => node.addEventListener('change', () => {
       unmark(node);
-      const left = nodes.filter((n) => n.classList.contains('unanswered')).length;
-      if (left === 0) count.remove();
-      else if (count.isConnected) count.textContent = countText(left);
+      writeCount(nodes.filter((n) => n.classList.contains('unanswered')).length);
     }));
 
     const advance = () => {
@@ -1996,10 +2001,15 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           n.querySelector('legend').after(el('p', { class: 'missed', id, text: 'Please answer this item' }));
           n.setAttribute('aria-describedby', id);
         }
-        count.textContent = countText(missed.length);
+        // Emptied before it moves, and filled in the next frame, so the
+        // text arrives in an alert already on the screen.
+        count.textContent = '';
         missed[0].before(count);
-        count.scrollIntoView({ block: 'start' });
         missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });
+        requestAnimationFrame(() => {
+          writeCount(missed.length);
+          count.scrollIntoView({ block: 'start' });
+        });
         return;
       }
       if (last && !lastPart) start(part + 1);
@@ -2036,6 +2046,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
         el('summary', { text: 'Instructions' }),
         el('p', { text: p.exp.instructions.start }),
       ]),
+      count,
       ...nodes,
       ...sendingLine(last && lastPart && after.length === 0),
       nav,

@@ -501,6 +501,8 @@ async function expectMissed(page, blank) {
   const items = page.locator('fieldset.item');
   const before = await page.locator('.progress').textContent();
   await nextButton(page).click();
+  // The count is written in the frame after the alert moves.
+  await expect(page.locator('.missed-count'), 'the count after the press').toHaveText(missedCount(blank.length));
   const marked = await items.evaluateAll((ns) => ns.map((n, i) => (n.querySelector('.missed') ? i + 1 : null)).filter((i) => i !== null));
   expect(marked, 'the items marked').toEqual(blank);
   for (const i of blank) await expect(items.nth(i - 1).locator('.missed')).toHaveText('Please answer this item');
@@ -515,23 +517,57 @@ async function expectMissed(page, blank) {
   await expect(page.locator('.progress'), 'the page stays').toHaveText(before);
 }
 
+// Whether item `i` (counted from 1 on the page) carries a mark: its
+// "Please answer this item" text and the aria-describedby naming it.
+async function markOf(page, i) {
+  return page.locator('fieldset.item').nth(i - 1).evaluate((n) => ({
+    text: n.querySelector('.missed')?.textContent ?? null,
+    describedBy: n.getAttribute('aria-describedby'),
+  }));
+}
+
 // Probes the page on show: three items missed, then one, then all answered.
 // The one left is the middle item, well above the Next or Finish button,
 // which the click brings into view, so the scroll check can fail; the last
 // item would already be in view.
 async function probeMissed(page) {
-  const n = await page.locator('fieldset.item').count();
+  const items = page.locator('fieldset.item');
+  const n = await items.count();
   const blank = [Math.ceil(n / 2), n - 2, n];
+  // The alert is on the page before any press, empty and hidden, above the
+  // first item.
+  const drawn = await items.first().evaluate((f) => {
+    const p = f.previousElementSibling;
+    return { cls: p?.className ?? null, role: p?.getAttribute('role') ?? null, text: p?.textContent ?? null, shown: p ? p.getClientRects().length > 0 : null };
+  });
+  expect(drawn, 'the alert drawn on show').toEqual({ cls: 'missed-count', role: 'alert', text: '', shown: false });
   await answerPage(page, { skip: blank });
   await expectMissed(page, blank);
-  // Each answer lowers the count at once, before any press.
+  // From here, count each change to the alert's text.
+  await page.locator('.missed-count').evaluate((c) => {
+    window.countWrites = 0;
+    new MutationObserver((ms) => { window.countWrites += ms.length; }).observe(c, { childList: true, characterData: true, subtree: true });
+  });
+  // A changed answer to an item that was never missed leaves the number,
+  // and the alert, as they are.
+  await items.nth(0).locator('input[type=radio]').nth(1).check();
+  await expect(items.nth(0).locator('input[type=radio]').nth(1)).toBeChecked();
+  expect(await page.evaluate(() => window.countWrites), 'writes to the alert after an answer that leaves the count').toBe(0);
+  // Each answer to a missed item takes its own mark away, leaves the other
+  // marks, and lowers the count at once, before any press.
   for (const [k, i] of blank.slice(1).entries()) {
-    await page.locator('fieldset.item').nth(i - 1).locator('input[type=radio]').first().check();
+    await items.nth(i - 1).locator('input[type=radio]').first().check();
+    expect(await markOf(page, i), `item ${i}'s mark after its answer`).toEqual({ text: null, describedBy: null });
+    for (const j of blank.slice(k + 2)) {
+      expect(await markOf(page, j), `item ${j}'s mark after item ${i}'s answer`).toEqual({ text: 'Please answer this item', describedBy: `missed-${await items.nth(j - 1).getAttribute('data-number')}` });
+    }
     await expect(page.locator('.missed-count'), 'the count after an answer').toHaveText(missedCount(blank.length - k - 1));
   }
+  expect(await page.evaluate(() => window.countWrites), 'writes to the alert after two answers that each lower the count').toBeGreaterThan(0);
   await expectMissed(page, blank.slice(0, 1));
-  await page.locator('fieldset.item').nth(blank[0] - 1).locator('input[type=radio]').first().check();
-  await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveCount(0);
+  await items.nth(blank[0] - 1).locator('input[type=radio]').first().check();
+  await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveText('');
+  await expect(page.locator('.missed-count'), 'the empty alert is hidden').toBeHidden();
 }
 
 for (const link of [
