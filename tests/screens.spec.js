@@ -447,24 +447,23 @@ for (const press of ['Enter', 'Begin']) {
   });
 }
 
-// Safari sends the Enter that commits an input method's text as a keydown
-// with keyCode 229 and isComposing false. That Enter starts nothing; the
-// same keydown with keyCode 13 starts the form, so the event reaches the
-// handler.
-test('an Enter that commits an input method\'s text starts nothing, and a plain one starts the form', async ({ page }) => {
+// An Enter keydown that says it is composing starts nothing. One with
+// keyCode 229 and isComposing false, as some phone keyboards send for
+// Enter, starts the form.
+test('an Enter while composing starts nothing, and an Enter with keyCode 229 starts the form', async ({ page }) => {
   const input = await openIdentifierScreen(page);
   await input.fill('p3');
-  const enter = (keyCode) => input.evaluate((n, code) => {
-    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: false });
+  const enter = (isComposing, keyCode) => input.evaluate((n, [composing, code]) => {
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: composing });
     Object.defineProperty(ev, 'keyCode', { value: code });
     n.dispatchEvent(ev);
-  }, keyCode);
-  await enter(229);
+  }, [isComposing, keyCode]);
+  await enter(true, 229);
   await page.waitForTimeout(300);
-  await expect(page.locator('fieldset.item'), 'items after the commit Enter').toHaveCount(0);
-  await expect(input, 'the identifier field after the commit Enter').toBeVisible();
-  await enter(13);
-  await expect(page.locator('.progress'), 'the page after a plain Enter').toHaveText('Page 1 of 3');
+  await expect(page.locator('fieldset.item'), 'items after the composing Enter').toHaveCount(0);
+  await expect(input, 'the identifier field after the composing Enter').toBeVisible();
+  await enter(false, 229);
+  await expect(page.locator('.progress'), 'the page after an Enter with keyCode 229').toHaveText('Page 1 of 3');
 });
 
 // ---- P4---------------------------------------------------------------
@@ -520,9 +519,36 @@ async function expectProgress(page, { p, n, k, m }) {
 async function expectMissed(page, blank) {
   const items = page.locator('fieldset.item');
   const before = await page.locator('.progress').textContent();
+  // A frame counter, and a log of the alert's place and text at each change
+  // to the page. A callback of frame f runs before f is drawn, so a write
+  // logged two frames after the move follows a drawn frame that held the
+  // alert empty in its new place.
+  // The counter and the observer start once per page; a later press only
+  // empties the log.
+  await page.evaluate(() => {
+    const c = document.querySelector('.missed-count');
+    if (window.countLogOf !== c) {
+      window.countLogOf = c;
+      window.frameNo = 0;
+      if (!window.ticking) {
+        window.ticking = true;
+        const tick = () => { window.frameNo += 1; requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }
+      new MutationObserver(() => {
+        window.countLog.push({ frame: window.frameNo, text: c.textContent, next: c.nextElementSibling?.dataset.number ?? null });
+      }).observe(document.querySelector('main'), { childList: true, subtree: true, characterData: true });
+    }
+    window.countLog = [];
+  });
   await nextButton(page).click();
-  // The count is written in the frame after the alert moves.
   await expect(page.locator('.missed-count'), 'the count after the press').toHaveText(missedCount(blank.length));
+  const firstNumber = await items.nth(blank[0] - 1).getAttribute('data-number');
+  const log = await page.evaluate(() => window.countLog);
+  const moved = log.find((e) => e.text === '' && e.next === firstNumber);
+  const written = log.find((e) => e.text !== '' && moved !== undefined && e.frame >= moved.frame && e.next === firstNumber);
+  expect(moved, 'the alert moved above the first missed item while empty').toBeDefined();
+  expect(written.frame - moved.frame, 'frames between the empty move and the text').toBeGreaterThanOrEqual(2);
   const marked = await items.evaluateAll((ns) => ns.map((n, i) => (n.querySelector('.missed') ? i + 1 : null)).filter((i) => i !== null));
   expect(marked, 'the items marked').toEqual(blank);
   for (const i of blank) await expect(items.nth(i - 1).locator('.missed')).toHaveText('Please answer this item');
@@ -593,8 +619,8 @@ async function probeMissed(page) {
   expect(await page.evaluate(() => window.countWrites), 'writes to the alert after two answers that each lower the count').toBeGreaterThan(0);
   await expectMissed(page, blank.slice(0, 1));
   await items.nth(blank[0] - 1).locator('input[type=radio]').first().check();
-  await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveText('');
-  await expect(page.locator('.missed-count'), 'the empty alert is hidden').toBeHidden();
+  await expect(page.locator('.missed-count'), 'the count is emptied once every item is answered').toHaveText('');
+  expect(await page.locator('.missed-count').evaluate((c) => c.getBoundingClientRect().height), 'the empty alert takes no room').toBe(0);
 }
 
 for (const link of [

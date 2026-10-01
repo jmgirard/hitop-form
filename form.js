@@ -21,8 +21,9 @@
 //
 // A link's `consent` field holds the researcher's consent text, which the
 // page shows on a screen of its own before the start screen, as plain text.
-// "I agree" goes on to the start screen. "I do not agree" shows a closing
-// screen and sends and saves nothing; `completeDeclined`, allowed only
+// "I agree" goes on to the start screen. "I do not agree" first asks once,
+// with "Yes, I do not agree" and "Go back". The confirming press shows a
+// closing screen and sends and saves nothing; `completeDeclined`, allowed only
 // beside `consent`, is an https:// address that screen then goes to, such as
 // a recruiting site's code for a participant who did not consent.
 //
@@ -1631,7 +1632,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   const foot = (...first) => studyTeam([...first, versionFooter(exps, linkStems(config))]);
 
   // A link to a completion address, with the same words whichever address
-  // it is, so no screen shows a host name.
+  // it is, so no screen shows a host name outside its closed study-team
+  // section.
   const completeLink = (address) => el('a', { href: address, text: 'Continue to the next step of the study' });
 
   // A reload or a back gesture would lose every answer, since they live only
@@ -1664,9 +1666,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           'aria-describedby': 'participant-hint',
           required: '',
           onkeydown: (ev) => {
-            // Safari sends the Enter that commits an input method's text
-            // with keyCode 229 and isComposing false.
-            if (ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229) {
+            // Only isComposing is read. Some phone keyboards send keyCode
+            // 229 for a plain Enter, so that code is not a sign of composing.
+            if (ev.key === 'Enter' && !ev.isComposing) {
               ev.preventDefault();
               begin();
             }
@@ -1958,10 +1960,12 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // this item", inside it and named by its aria-describedby, and puts the
   // count of them in an alert directly above the first, which the page
   // scrolls to. Answering an item takes its mark away and lowers the count,
-  // and the count goes once no mark is left. The alert is drawn empty above
-  // the items and its text written only after it is in place, and an answer
-  // writes it only when the number changes, so the alert's text changes for
-  // a new count and not for each choice.
+  // and the alert is emptied once no mark is left. The alert is drawn empty
+  // above the items. A press empties and moves it, and writes its text two
+  // frames later, so a frame is drawn with the empty alert in its new place
+  // before the text arrives. An answer writes it only when the number
+  // changes, so the alert's text changes for a new count and not for each
+  // choice.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
@@ -1985,10 +1989,15 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const writeCount = (n) => {
       if (count.textContent !== countText(n)) count.textContent = countText(n);
     };
+    const missedNow = () => nodes.filter((n) => n.classList.contains('unanswered')).length;
+    // A press's text, written after the frames below; a later press or an
+    // answer in between replaces it.
+    let pendingWrite = 0;
     // itemNode's own handler has already taken `unanswered` off the item.
     nodes.forEach((node) => node.addEventListener('change', () => {
       unmark(node);
-      writeCount(nodes.filter((n) => n.classList.contains('unanswered')).length);
+      pendingWrite += 1;
+      writeCount(missedNow());
     }));
 
     const advance = () => {
@@ -2004,15 +2013,19 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           n.querySelector('legend').after(el('p', { class: 'missed', id, text: 'Please answer this item' }));
           n.setAttribute('aria-describedby', id);
         }
-        // Emptied before it moves, and filled in the next frame, so the
-        // text arrives in an alert already in the page.
+        // Emptied before it moves. Its text is written in the second frame
+        // after the press, since a callback of the first runs before that
+        // frame is drawn. The number is counted then, so an answer in
+        // between is not undone.
         count.textContent = '';
         missed[0].before(count);
+        count.scrollIntoView({ block: 'start' });
         missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });
-        requestAnimationFrame(() => {
-          writeCount(missed.length);
-          count.scrollIntoView({ block: 'start' });
-        });
+        pendingWrite += 1;
+        const write = pendingWrite;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (write === pendingWrite && count.isConnected) writeCount(missedNow());
+        }));
         return;
       }
       if (last && !lastPart) start(part + 1);
@@ -2109,14 +2122,19 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       return;
     }
     sending = true;
-    const finishButton = [...nav.querySelectorAll('button')].at(-1);
-    for (const b of nav.querySelectorAll('button')) b.disabled = true;
+    // Finish is the nav's last button, on an item page (inside its forward
+    // group) and on "Before you finish" alike.
+    const buttons = nav.querySelectorAll('button');
+    const finishButton = buttons[buttons.length - 1];
+    for (const b of buttons) b.disabled = true;
     finishButton.textContent = 'Sending…';
     // The empty status line sendingLine() put above the buttons gets its
     // text for the length of the send, which can take up to
     // SEND_TIMEOUT_MS. Screen readers generally announce a status region
     // when its text changes, and not always when it arrives with its text.
-    root.querySelector('p.sending').textContent = 'Sending your answers. Please keep this page open.';
+    // A screen without the line still sends.
+    const line = root.querySelector('p.sending');
+    if (line) line.textContent = 'Sending your answers. Please keep this page open.';
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;
     finished = true;
