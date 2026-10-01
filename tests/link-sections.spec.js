@@ -21,7 +21,9 @@
 //       all three buttons disabled; each button's accessible name begins
 //       with its visible text. Checked for 1, 2 and 3 rows and groups as
 //       added, and again after a move, a removal, a prefill from a study
-//       link and a questions file load
+//       link and a questions file load. With `disabled` removed, a press on
+//       the first Move up or the last Move down moves nothing and focuses
+//       the row's other move button
 //   S7: after a build, a region headed "Your study link" (the heading
 //       focused) shows the link in a box that scrolls, "Copy the link"
 //       beside the box, and below it one next-step sentence for the site
@@ -360,6 +362,7 @@ const ONE_FIELD = [
   { name: 'participant', patch: { participant: 'p1' }, id: 'secParticipants', labels: 'Participant' },
   { name: 'prolific', patch: { prolific: true }, id: 'secParticipants', labels: 'Recruiting site' },
   { name: 'participantParam of SONA', patch: { participantParam: 'id' }, id: 'secParticipants', labels: 'Recruiting site' },
+  { name: 'participantParam of CloudResearch Connect', patch: { participantParam: 'participantId' }, id: 'secParticipants', labels: 'Recruiting site', site: 'connect' },
   { name: 'participantParam of another site', patch: { participantParam: 'workerId' }, id: 'secParticipants', labels: 'Recruiting site, Address parameter' },
   { name: 'module', patch: 'module', id: 'secOrder', labels: 'Module file' },
   { name: 'shuffle', patch: { shuffle: true }, id: 'secOrder', labels: 'Show the items in a random order' },
@@ -385,6 +388,7 @@ for (const one of ONE_FIELD) {
     await page.goto(`${base()}link.html${query}`);
     await expect(page.locator('#err')).toHaveText('');
     await expect(state(page, one.id)).toHaveText(one.labels);
+    if (one.site) await expect(page.locator('select[name="site"]')).toHaveValue(one.site);
     for (const s of SECTIONS) {
       expect(await isOpen(page, s.id), `${s.id} open`).toBe(s.id === one.id);
       if (s.id !== one.id) await expect(state(page, s.id)).toHaveText('Not used');
@@ -481,6 +485,50 @@ test('question groups: button states as groups are added, moved, removed, prefil
     await expectButtons(page, 'question', n);
   }
 });
+
+// S6: the guards inside Move up and Move down. The first Move up and the
+// last Move down are disabled, so no press reaches them. With `disabled`
+// removed, a press on either leaves the order as it was, and focus goes to
+// the other move button of that row, as after any move that leaves the
+// pressed button disabled.
+const ORDERS = {
+  instrument: {
+    fill: async (page) => {
+      for (let k = 1; k < 3; k++) await page.getByRole('button', { name: 'Add an instrument' }).click();
+      for (const [k, stem] of ['hitopsr', 'hitopbr', 'pid5bf'].entries()) await page.locator('#instrumentList select').nth(k).selectOption(stem);
+    },
+    order: (page) => page.locator('#instrumentList select').evaluateAll((ss) => ss.map((s) => s.value)),
+    expected: ['hitopsr', 'hitopbr', 'pid5bf'],
+  },
+  question: {
+    fill: async (page) => {
+      await openSection(page, 'secQuestions');
+      for (let k = 1; k <= 3; k++) {
+        await page.getByRole('button', { name: 'Add a question' }).click();
+        await page.locator('input[name="qName"]').nth(k - 1).fill(`q${k}`);
+      }
+    },
+    order: (page) => page.locator('input[name="qName"]').evaluateAll((ns) => ns.map((n) => n.value)),
+    expected: ['q1', 'q2', 'q3'],
+  },
+};
+
+for (const [kind, o] of Object.entries(ORDERS)) {
+  test(`${kind} rows: a forced press on the first Move up or the last Move down moves nothing`, async ({ page }) => {
+    await page.goto(`${base()}link.html`);
+    await o.fill(page);
+    expect(await o.order(page)).toEqual(o.expected);
+    for (const [pressed, other] of [[`Move up ${kind} 1`, `Move down ${kind} 1`], [`Move down ${kind} 3`, `Move up ${kind} 3`]]) {
+      const b = page.getByRole('button', { name: pressed, exact: true });
+      await expect(b).toBeDisabled();
+      await b.evaluate((n) => { n.disabled = false; });
+      await b.click();
+      expect(await o.order(page), `after ${pressed}`).toEqual(o.expected);
+      await expect(page.getByRole('button', { name: other, exact: true })).toBeFocused();
+      await expectButtons(page, kind, 3);
+    }
+  });
+}
 
 // S7: the recruiting-site and where-responses-go choices, and the sentence
 // each pair gets, written out in full here rather than built, so a test
