@@ -44,7 +44,7 @@
 //   LF9: a setup-file link counting 8,192 characters after its origin is
 //        made, and one counting 8,193 is refused naming its length, with no
 //        advice to host a file; with Prolific chosen, each placeholder
-//        counts as the 24-character ID Prolific puts in its place
+//        counts as 24 characters
 //
 // Every refusal checked here holds none of the retired terms.
 

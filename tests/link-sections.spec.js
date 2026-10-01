@@ -75,8 +75,8 @@
 //       at run time is fired once per control: the instrument row at fault
 //       (a repeat and a second PID-5 form, each at rows 2 and 3), each
 //       question field in the page's control map, and the four store
-//       fields. The fetch failure, a Supabase table of 1,601 columns, the
-//       encode failure and the four stale-build refusals are among them, and so
+//       fields. The fetch failure, a Supabase table of 1,601 columns, a
+//       link longer than the online form's host accepts, the encode failure and the four stale-build refusals are among them, and so
 //       are the setup file's: no address, an http:// address, no
 //       crypto.subtle, a failed fetch, a field changed while it fails and
 //       while it succeeds, a file that does not match, and a download over

@@ -1406,8 +1406,8 @@ test('L37: the warning goes when a shorter link is made', async ({ page }) => {
 // L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
 // and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
 // and refused 8,193. The count here is made apart from the builder: the link
-// after its origin, with each Prolific placeholder as the 24-character ID
-// Prolific puts in its place. Which lengths a ?c= link can reach depends on
+// after its origin, with each Prolific placeholder as 24 characters, the
+// length Prolific's help gives for the participant ID. Which lengths a ?c= link can reach depends on
 // the page's address and the site's ending (L37), so each length is tried
 // with no ending, SONA's and Prolific's, and each must be reached by one.
 const HOST_AT = 8_192;
