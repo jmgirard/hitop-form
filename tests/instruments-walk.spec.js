@@ -27,7 +27,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, readDescriptor, chosenIndexFor, PAGE_SIZE,
+  useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, readDescriptor, chosenIndexFor, PAGE_SIZE, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -93,7 +93,7 @@ test('the page fetches every export of the list before it shows its first screen
 test('a missing export in a list is refused naming its instrument', async ({ page }) => {
   await page.route(exportUrl('pid5bf'), (route) => route.fulfill({ status: 404, body: 'not here' }));
   await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 404).`);
+  await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 404).`);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -103,7 +103,7 @@ test('an export of another format in a list is refused naming its instrument', a
     status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
   }));
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopbr'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText('HiTOP-BR: The online form reads format "1.0" of the instrument export and found format "2.0".');
+  await expect(refusalText(page)).toHaveText('HiTOP-BR: The online form reads format "1.0" of the instrument export and found format "2.0".');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -112,7 +112,7 @@ test('with two exports refused, the first in the list is named', async ({ page }
     await page.route(exportUrl(stem), (route) => route.fulfill({ status: 500, body: 'down' }));
   }
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopsr', 'hitopbr'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 500).`);
+  await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 500).`);
 });
 
 // W3, W4

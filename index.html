@@ -65,7 +65,18 @@
   h1 { font-size: var(--t-h1); line-height: 1.2; margin: 0 0 var(--s2); }
   p { margin: 0 0 var(--s4); }
   .muted { color: var(--muted); font-size: var(--t-small); }
-  .version { font-family: var(--mono); font-size: var(--t-small); color: var(--muted); }
+  .version { font-family: var(--mono); font-size: var(--t-small); color: var(--muted); margin: 0 0 var(--s2); }
+
+  /* The closed section that ends every screen: what the study team needs
+     and the participant can skip. */
+  details.study-team {
+    margin-top: var(--s7);
+    color: var(--muted);
+    font-size: var(--t-small);
+  }
+  details.study-team summary { cursor: pointer; padding: var(--s1) 0; }
+  details.study-team[open] summary { margin-bottom: var(--s2); }
+  details.study-team .fault { overflow-wrap: anywhere; }
 
   .instructions {
     background: var(--surface);
@@ -151,7 +162,7 @@
     cursor: pointer;
   }
   button.secondary { background: var(--bg); color: var(--accent); }
-  button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
   [role="alert"] {
     background: var(--error-bg); color: var(--error);

@@ -70,7 +70,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useTarget, openForm, begin, walkAll, awaitDownload, fetchExport, readDescriptor, JWT_SHAPED_KEY,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, refusalText,
 } from './helpers.mjs';
 
 // A JWT-shaped key whose payload is {"role":"service_role"}: not a real
@@ -111,7 +111,7 @@ for (const probe of PROBES) {
       exportJson: served,
     });
     // G2, G3, G4
-    const alert = page.locator('[role=alert]');
+    const alert = refusalText(page);
     await expect(alert).toContainText('The online form reads format "1.0"');
     await expect(alert).toContainText(probe.names);
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -125,7 +125,7 @@ test('an export whose stem does not match the link is refused', async ({ page })
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g5' }, {
     exportJson: { ...exp, stem: 'hitopsr' },
   });
-  await expect(page.locator('[role=alert]')).toContainText('its stem is "hitopsr" and the link asked for "hitopbr"');
+  await expect(refusalText(page)).toContainText('its stem is "hitopsr" and the link asked for "hitopbr"');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -136,7 +136,7 @@ test('an export with no buildDate is refused', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g5' }, {
     exportJson: served,
   });
-  await expect(page.locator('[role=alert]')).toContainText('its buildDate field is missing or not text');
+  await expect(refusalText(page)).toContainText('its buildDate field is missing or not text');
 });
 
 // G6: the link's own guards. A descriptor of another format is refused by
@@ -144,7 +144,7 @@ test('an export with no buildDate is refused', async ({ page }) => {
 test('a descriptor whose format is not "1.0" is refused', async ({ page }) => {
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
   await openForm(page, base(), { instrument: module.instrument, study: 'guard', module });
-  await expect(page.locator('[role=alert]')).toContainText('the online form reads format "1.0" and found format "2.0"');
+  await expect(refusalText(page)).toContainText('the online form reads format "1.0" and found format "2.0"');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -164,7 +164,7 @@ for (const entry of NOT_ASCENDING) {
   test(`a descriptor whose items are ${entry.name} is refused`, async ({ page }) => {
     const module = await notAscendingDescriptor(entry);
     await openForm(page, base(), { instrument: module.instrument, study: 'guard', module });
-    await expect(page.locator('[role=alert]')).toHaveText(NOT_ASCENDING_MESSAGE);
+    await expect(refusalText(page)).toHaveText(NOT_ASCENDING_MESSAGE);
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   });
 }
@@ -255,7 +255,7 @@ const REFUSED_STORES = [
 for (const probe of REFUSED_STORES) {
   test(`a store that is ${probe.name} is refused, naming the fault`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g7', store: probe.store });
-    const alert = page.locator('[role=alert]');
+    const alert = refusalText(page);
     await expect(alert).toContainText("Where responses go could not be used: ");
     await expect(alert).toContainText(probe.names);
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -309,7 +309,7 @@ test('a supabase store whose key is an anon JWT is accepted', async ({ page }) =
 for (const shuffle of ['true', 1, null]) {
   test(`a shuffle field of ${JSON.stringify(shuffle)} is refused, naming the field and the value`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g9', shuffle });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       `The study link's shuffle field must be true or false, and it is ${JSON.stringify(shuffle)}.`,
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -322,7 +322,7 @@ for (const shuffle of ['true', 1, null]) {
 for (const prolific of ['true', 1, null]) {
   test(`a prolific field of ${JSON.stringify(prolific)} is refused, naming the field and the value`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', prolific });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       `The study link's prolific field must be true or false, and it is ${JSON.stringify(prolific)}.`,
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -332,7 +332,7 @@ for (const prolific of ['true', 1, null]) {
 
 test('prolific: true beside a participant identifier is refused, naming both', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g10', prolific: true });
-  await expect(page.locator('[role=alert]')).toHaveText(
+  await expect(refusalText(page)).toHaveText(
     "The study link names a participant and asks for the Prolific ID as well. Under prolific: true the participant identifier comes from the page's address, so the link must carry no participant.",
   );
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -364,7 +364,7 @@ const REFUSED_COMPLETE = [
 for (const probe of REFUSED_COMPLETE) {
   test(`a complete field of ${JSON.stringify(probe.complete)} is refused, naming the fault`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g11', complete: probe.complete });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       `The study link's complete field could not be used: ${probe.names}`,
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -398,7 +398,7 @@ for (const probe of REFUSED_COMPLETE_SAVED) {
     await openForm(page, base(), {
       instrument: 'hitopbr', study: 'guard', participant: 'g12', complete: COMPLETE_OK, completeSaved: probe.completeSaved,
     });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       `The study link's completeSaved field could not be used: ${probe.names}`,
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -409,7 +409,7 @@ test('a completeSaved field with no complete field is refused, naming the field'
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'guard', participant: 'g12', completeSaved: 'https://app.prolific.com/submissions/complete?cc=SAVED123',
   });
-  await expect(page.locator('[role=alert]')).toHaveText(
+  await expect(refusalText(page)).toHaveText(
     'The study link\'s completeSaved field could not be used: it needs a complete field beside it, and the link carries none; it is "https://app.prolific.com/submissions/complete?cc=SAVED123".',
   );
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -448,7 +448,7 @@ const REFUSED_PARAM = [
 for (const probe of REFUSED_PARAM) {
   test(`a participantParam field of ${JSON.stringify(probe.participantParam).slice(0, 40)} is refused, naming the field and the value`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participantParam: probe.participantParam });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       `The study link's participantParam field could not be used: ${probe.names}`,
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -458,7 +458,7 @@ for (const probe of REFUSED_PARAM) {
 
 test('participantParam beside a participant identifier is refused, naming both and the parameter', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g14', participantParam: 'id' });
-  await expect(page.locator('[role=alert]')).toHaveText(
+  await expect(refusalText(page)).toHaveText(
     'The study link names a participant and takes the identifier from the address parameter "id" as well. Under participantParam the participant identifier comes from the page\'s address, so the link must carry no participant.',
   );
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -466,7 +466,7 @@ test('participantParam beside a participant identifier is refused, naming both a
 
 test('participantParam beside prolific: true is refused, naming both and the parameter', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', prolific: true, participantParam: 'participantId' });
-  await expect(page.locator('[role=alert]')).toHaveText(
+  await expect(refusalText(page)).toHaveText(
     'The study link carries prolific: true and takes the identifier from the address parameter "participantId" as well. Keep one: prolific: true for a Prolific study, participantParam for another site.',
   );
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -507,7 +507,7 @@ for (const field of ['complete', 'completeSaved']) {
     test(`a ${field} address with the token in the host or the path, ${address}, is refused naming the token`, async ({ page }) => {
       const config = { instrument: 'hitopbr', study: 'guard', participant: 'g15', complete: COMPLETE_OK, [field]: address };
       await openForm(page, base(), config);
-      await expect(page.locator('[role=alert]')).toHaveText(
+      await expect(refusalText(page)).toHaveText(
         `The study link's ${field} field could not be used: the {participant} token must stand after the ? or the #, not in the host or the path, and it is ${JSON.stringify(address)}.`,
       );
       await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -540,7 +540,7 @@ for (const field of ['complete', 'completeSaved']) {
   for (const { address, spelling } of TOKEN_VARIANTS) {
     test(`a ${field} address holding ${spelling} after the ? or #, ${address.slice(8, 60)}…, is refused naming that spelling`, async ({ page }) => {
       await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g16', complete: COMPLETE_OK, [field]: address });
-      await expect(page.locator('[role=alert]')).toHaveText(
+      await expect(refusalText(page)).toHaveText(
         `The study link's ${field} field could not be used: the {participant} token must be written exactly so, in lower case with one typed brace on each side and no space, and ${JSON.stringify(spelling)} is another spelling of it. The address is ${JSON.stringify(address)}.`,
       );
       await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -564,7 +564,7 @@ for (const participant of BROKEN_IDS) {
   const shown = [...participant].map((ch) => (ch.length === 1 && /[\ud800-\udfff]/.test(ch) ? `\\u${ch.charCodeAt(0).toString(16)}` : ch)).join('');
   test(`a participant of "${shown}" is refused, and no form starts`, async ({ page }) => {
     await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant, complete: COMPLETE_OK });
-    await expect(page.locator('[role=alert]')).toHaveText(
+    await expect(refusalText(page)).toHaveText(
       'The study link carries a participant identifier with a character that cannot be written.',
     );
     await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -574,7 +574,7 @@ for (const participant of BROKEN_IDS) {
 
 test('a participant holding a lone surrogate is refused with no completion address in the link', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: `ab${HIGH}c` });
-  await expect(page.locator('[role=alert]')).toHaveText(
+  await expect(refusalText(page)).toHaveText(
     'The study link carries a participant identifier with a character that cannot be written.',
   );
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);

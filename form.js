@@ -247,7 +247,10 @@ export async function decodeLink(search) {
   let config;
   if (z) {
     if (!canInflate()) {
-      throw new Error('This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.');
+      throw Object.assign(
+        new Error('This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.'),
+        { kind: 'browser' },
+      );
     }
     config = await inflateConfig(z, (why) => new Error(`The study link could not be read: it ${why}. Ask the study team for a new link.`));
   } else if (c) {
@@ -1177,7 +1180,10 @@ export async function fetchExport(instrument) {
   try {
     res = await fetch(url, { cache: 'no-store' });
   } catch {
-    throw new Error(`The instrument could not be fetched from ${url}. Check the connection and reload.`);
+    throw Object.assign(
+      new Error(`The instrument could not be fetched from ${url}. Check the connection and reload.`),
+      { kind: 'connection' },
+    );
   }
   if (!res.ok) {
     throw new Error(`The instrument could not be fetched from ${url} (HTTP ${res.status}).`);
@@ -1194,13 +1200,14 @@ export async function fetchExport(instrument) {
 // The exports of `stems`, fetched together, in the order of `stems`. When
 // one or more are refused, the refusal of the first in that order is
 // thrown. Under a list of two or more, its message opens with the
-// instrument's name, as "PID-5-BF: The instrument could not be fetched…".
+// instrument's name, as "PID-5-BF: The instrument could not be fetched…",
+// and keeps the refusal's `kind`.
 export async function fetchExports(stems) {
   const settled = await Promise.allSettled(stems.map((stem) => fetchExport(stem)));
   const failed = settled.findIndex((s) => s.status === 'rejected');
   if (failed >= 0) {
     const e = settled[failed].reason;
-    throw stems.length === 1 ? e : new Error(`${INSTRUMENTS[stems[failed]]}: ${e.message}`);
+    throw stems.length === 1 ? e : Object.assign(new Error(`${INSTRUMENTS[stems[failed]]}: ${e.message}`), { kind: e.kind });
   }
   return settled.map((s) => s.value);
 }
@@ -1481,11 +1488,26 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-function showError(root, message) {
+// The one sentence an error screen gives the participant, by the refusal's
+// `kind`: a failed fetch of an export can pass on a reload, and a browser
+// that cannot unpack a `z` link can be swapped for another. Any other
+// refusal is the study team's to fix.
+const NEXT_STEP = {
+  connection: 'Please check your internet connection, then reload this page.',
+  browser: 'Please open the study link in another browser, such as a current version of Chrome, Edge, Firefox or Safari.',
+};
+const CONTACT_STUDY_TEAM = 'Please contact the study team, and show them the details below.';
+
+// The error screen: the heading, the participant's sentence, and the
+// refusal's own text in the closed study-team section. `footer`, given
+// once the exports are loaded, follows the refusal there.
+function showError(root, e, footer = []) {
   root.replaceChildren(
-    el('h1', { text: 'This form cannot be shown' }),
-    el('p', { role: 'alert', text: message }),
+    heading('This form cannot be shown'),
+    el('p', { role: 'alert', text: NEXT_STEP[e.kind] ?? CONTACT_STUDY_TEAM }),
+    studyTeam([el('p', { class: 'fault', text: e.message }), ...footer]),
   );
+  focusHeading(root);
 }
 
 // Every screen is a full replacement of `root`, which drops keyboard focus
@@ -1500,6 +1522,13 @@ function focusHeading(root) {
   if (h) h.focus({ preventScroll: true });
 }
 
+// The closed section that ends a screen, for the study team rather than
+// the participant: a refusal's or a failed send's own text, and the version
+// lines.
+function studyTeam(children) {
+  return el('details', { class: 'study-team' }, [el('summary', { text: 'Details for the study team' }), ...children]);
+}
+
 // An export's version line. `title`, when given, opens it with the
 // instrument's name, for a screen that shows the lines of several exports.
 function versionLine(exp, title) {
@@ -1509,26 +1538,35 @@ function versionLine(exp, title) {
   });
 }
 
+// The version lines of a link's exports in a footer: the one export's
+// line, or under a list one line per export, each opening with its
+// instrument's name.
+function versionFooter(exps, stems) {
+  return el('footer', {}, exps.length > 1
+    ? exps.map((exp, k) => versionLine(exp, INSTRUMENTS[stems[k]]))
+    : [versionLine(exps[0])]);
+}
+
 export async function boot(root, search) {
   let config;
   try {
     config = await parseLink(search);
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e);
     return;
   }
   let exps;
   try {
     exps = await fetchExports(linkStems(config));
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e);
     return;
   }
   let plans;
   try {
     plans = planStems(config, exps);
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e, [versionFooter(exps, linkStems(config))]);
     return;
   }
   // The three Prolific parameters are read from the address only under

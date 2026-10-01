@@ -229,6 +229,12 @@ export async function openForm(page, base, config, { exportBody, exportJson, ext
   await page.goto(formUrl(base, config, extra, param));
 }
 
+// The refusal's own text on an error screen, which sits in the screen's
+// closed "Details for the study team" section.
+export function refusalText(page) {
+  return page.locator('details.study-team .fault');
+}
+
 // Presses Begin on the start screen, entering a participant identifier first
 // when the screen asks for one.
 export async function begin(page, participant) {

@@ -47,7 +47,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
-  leadColumns,
+  leadColumns, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -59,7 +59,7 @@ const LINK = { instrument: 'hitopbr', study: 'consent', participant: 'c1' };
 const PROLIFIC_DECLINED = 'https://app.prolific.com/submissions/complete?cc=NOCONSENT';
 
 async function expectRefused(page, message) {
-  await expect(page.locator('[role=alert]')).toHaveText(message);
+  await expect(refusalText(page)).toHaveText(message);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'I agree' })).toHaveCount(0);
   await expect(page.locator('fieldset.item')).toHaveCount(0);
