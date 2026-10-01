@@ -301,8 +301,9 @@ export function checkSetupAddress(url, bad) {
 // `fault` is one of `connection` (the fetch threw: no connection, or a host
 // that does not let other sites read the file), `status` (an answer
 // outside 200 to 299), `size` (more than SETUP_FILE_MAX bytes), `timeout`
-// (the whole file had not arrived after SETUP_TIMEOUT_MS), `utf8`, `json`
-// and `object` (JSON that is not an object). The fetch sends no
+// (the whole file had not arrived after SETUP_TIMEOUT_MS), `utf8`, `json`,
+// `object` (JSON that is not an object) and `depth` (nested too deeply for
+// JSON.stringify(), which the fingerprint uses). The fetch sends no
 // credentials and no referrer, and skips the browser's cache.
 export async function fetchSetup(address, bad) {
   // A host that never answers would otherwise leave the online form on its
@@ -364,6 +365,14 @@ export async function fetchSetup(address, bad) {
   }
   if (setup === null || typeof setup !== 'object' || Array.isArray(setup)) {
     throw bad('does not hold a setup: its JSON is not an object', 'object');
+  }
+  // The fingerprint writes the setup back out with JSON.stringify(), which a
+  // browser stops with a RangeError past the nesting depth it allows.
+  // Chromium allows the deepest file that fits in SETUP_FILE_MAX bytes.
+  try {
+    JSON.stringify(setup);
+  } catch {
+    throw bad('is nested too deeply for this browser to read', 'depth');
   }
   return setup;
 }

@@ -20,9 +20,10 @@
 //        arrived after 30 seconds (kind connection, the page's clock
 //        advanced), a status outside 200 to 299, a body over 100,000
 //        bytes, bytes that are not
-//        UTF-8, text that is not JSON, JSON that is not an object, a
-//        fingerprint that differs, and a browser without crypto.subtle
-//        (kind browser)
+//        UTF-8, text that is not JSON, JSON that is not an object, JSON
+//        nested too deeply to fingerprint (JSON.stringify() made to throw,
+//        since Chromium writes any file that fits), a fingerprint that
+//        differs, and a browser without crypto.subtle (kind browser)
 //   SF4: participantParam "setup" and "sha256" are refused as "c" is
 
 import { test, expect } from '@playwright/test';
@@ -244,6 +245,25 @@ test('without crypto.subtle, a setup-file link is refused naming the browser, be
   );
   expect(await page.evaluate(() => crypto.subtle)).toBeUndefined();
   expect(requests).toEqual([]);
+});
+
+// A setup file this browser cannot write back out as JSON. Chromium writes
+// the deepest file that fits in 100,000 bytes, so JSON.stringify() is made
+// to throw RangeError for a file holding the key "tooDeep", as a browser
+// with a lower limit does.
+test('a setup file nested too deeply to fingerprint is refused, naming the fault', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = JSON.stringify;
+    JSON.stringify = function (value, ...rest) {
+      if (value !== null && typeof value === 'object' && Object.hasOwn(value, 'tooDeep')) {
+        throw new RangeError('Maximum call stack size exceeded');
+      }
+      return real.call(this, value, ...rest);
+    };
+  });
+  await serveSetup(page, JSON.stringify({ ...SETUP, tooDeep: [[[]]] }));
+  await page.goto(`${base()}?${setupQuery({ sha256: SHA })}`);
+  await expectRefused(page, fileFault('is nested too deeply for this browser to read'));
 });
 
 // SF4

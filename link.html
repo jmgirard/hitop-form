@@ -1187,9 +1187,12 @@
 
   async function build() {
     // Once "Make the link" is pressed the fields are the researcher's own,
-    // so the notice of what the opened link filled goes.
+    // so the notice of what the opened link filled goes. So does the offer
+    // to fill the form from a changed setup file, which would empty them.
     notice.hidden = true;
     noticeList.replaceChildren();
+    changedOffer.hidden = true;
+    changedOffer.replaceChildren();
     err.textContent = '';
     result.hidden = true;
     out.textContent = '';

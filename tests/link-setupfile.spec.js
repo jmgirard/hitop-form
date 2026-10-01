@@ -31,7 +31,10 @@
 //   LF7: a file that changed since the link was made leaves the form empty
 //        and offers "Fill in the form from the current file"; pressing it
 //        fills the form, and the next link carries the file's current
-//        fingerprint
+//        fingerprint; making a link of the researcher's own hides the
+//        offer; a file nested too deeply to fingerprint is refused by
+//        name, opened and at "Make the link" (JSON.stringify() made to
+//        throw, since Chromium writes any file that fits)
 //   LF8: an opened link whose fetch throws, is answered 404, or is over
 //        100,000 bytes is refused in the builder's refusal pattern; one
 //        whose file has not arrived after 30 seconds is refused at the
@@ -351,6 +354,57 @@ test('a changed file is offered, and pressing the offer fills the form for a new
   await expect(err(page)).toHaveText('');
   const href = await page.locator('#out').textContent();
   expect(new URL(href).searchParams.get('sha256')).toBe(setupFingerprint(now));
+});
+
+// LF7: the offer goes once the researcher makes a link of their own, so a
+// later press cannot empty the form they filled.
+test('making a link hides the offer to fill the form from a changed file', async ({ page }) => {
+  await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  const offer = page.locator('#setupChanged');
+  await expect(offer).toBeVisible();
+  await fillPlain(page);
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  await expect(offer).toBeHidden();
+  await expect(offer.getByRole('button', { name: 'Fill in the form from the current file' })).toHaveCount(0);
+  await expect(page.locator('input[name="study"]')).toHaveValue('hosted');
+});
+
+// A setup file this browser cannot write back out as JSON, such as one
+// nested deeper than its JSON.stringify() goes. Chromium writes the
+// deepest file that fits in 100,000 bytes, so JSON.stringify() is made to
+// throw RangeError for a file holding the key "tooDeep", as such a browser's
+// does.
+async function stringifyFailsOnTooDeep(page) {
+  await page.addInitScript(() => {
+    const real = JSON.stringify;
+    JSON.stringify = function (value, ...rest) {
+      if (value !== null && typeof value === 'object' && Object.hasOwn(value, 'tooDeep')) {
+        throw new RangeError('Maximum call stack size exceeded');
+      }
+      return real.call(this, value, ...rest);
+    };
+  });
+}
+
+test('an opened link whose file is nested too deeply to fingerprint is refused, naming the fault', async ({ page }) => {
+  await stringifyFailsOnTooDeep(page);
+  await serveSetup(page, JSON.stringify({ ...FILLED, tooDeep: [[[]]] }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  await expectRefused(page, refusal(`names the setup file ${SETUP_URL}, which is nested too deeply for this browser to read.`));
+  await expect(page.locator('input[name="study"]')).toHaveValue('');
+});
+
+test('"Make the link" refuses a file nested too deeply to fingerprint, naming the fault', async ({ page }) => {
+  await stringifyFailsOnTooDeep(page);
+  await serveSetup(page, JSON.stringify({ ...PLAIN, tooDeep: [[[]]] }));
+  await openBuilder(page);
+  await fillPlain(page);
+  await chooseFile(page, SETUP_URL);
+  await make(page).click();
+  await expectRefused(page, `The setup file at ${SETUP_URL} could not be used: it is nested too deeply for this browser to read.`);
+  await expect(addressField(page)).toBeFocused();
 });
 
 // LF8
