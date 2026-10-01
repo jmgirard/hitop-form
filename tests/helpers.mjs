@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { serveDir, serveStore } from './serve.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -82,6 +83,48 @@ export function decodeLinkParam(href) {
   const params = new URL(href).searchParams;
   if (params.has('z')) return JSON.parse(inflateRawSync(Buffer.from(params.get('z'), 'base64url')).toString('utf8'));
   return JSON.parse(Buffer.from(params.get('c'), 'base64url').toString('utf8'));
+}
+
+// The fingerprint a setup file's link carries, computed here with Node's
+// crypto rather than the browser's crypto.subtle that form.js uses: the
+// SHA-256 of the UTF-8 bytes of JSON.stringify of the parsed setup, as
+// base64url without padding.
+export function setupFingerprint(setup) {
+  return createHash('sha256').update(JSON.stringify(setup), 'utf8').digest('base64url');
+}
+
+// The address the setup-file tests name. Nothing is served there: the
+// tests answer it through a route, inside the browser.
+export const SETUP_URL = 'https://setup.example.org/study/setup.json';
+
+// Answers `url` through a route with `body` (a string or bytes) and
+// `status`, letting other sites read it, or aborts the request when
+// `abort` is true, as a fetch that gets no answer. Returns the requests
+// that reached the route, each as its method and address, with its
+// headers as a property that toEqual() does not compare.
+export async function serveSetup(page, body, { url = SETUP_URL, status = 200, abort = false } = {}) {
+  const requests = [];
+  await page.route(url, (route) => {
+    const request = { method: route.request().method(), url: route.request().url() };
+    Object.defineProperty(request, 'headers', { value: route.request().headers() });
+    requests.push(request);
+    if (abort) return route.abort('connectionrefused');
+    return route.fulfill({
+      status,
+      headers: { 'access-control-allow-origin': '*', 'content-type': 'text/plain; charset=utf-8' },
+      body: typeof body === 'string' ? body : Buffer.from(body),
+    });
+  });
+  return requests;
+}
+
+// The query of a setup-file link, written by URLSearchParams. A field given
+// as null is left out.
+export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
+  const q = new URLSearchParams();
+  if (setup !== null) q.set('setup', setup);
+  if (sha256 !== null && sha256 !== undefined) q.set('sha256', sha256);
+  return q.toString();
 }
 
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
