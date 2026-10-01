@@ -1489,7 +1489,8 @@ function el(tag, attrs = {}, children = []) {
 }
 
 // The one sentence an error screen gives the participant, by the refusal's
-// `kind`: a failed fetch of an export can pass on a reload, and a browser
+// `kind`: a fetch of an export that gets no answer can pass on a reload
+// (one the site answers with an error status cannot), and a browser
 // that cannot unpack a `z` link can be swapped for another. Any other
 // refusal is the study team's to fix.
 const NEXT_STEP = {

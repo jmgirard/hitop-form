@@ -77,9 +77,9 @@
 //       each save the file again with the Finish download's suggested file
 //       name and its bytes; without a complete address the screen's order is
 //       the heading, the lead, the file name, the trail, the button, the
-//       closed study-team section, and with one (the T16 walk) the screen's
-//       order is the heading, the lead, the file name, the trail, the
-//       button, the completion link, the study-team section
+//       status region, the closed study-team section, and with one (the T16
+//       walk) the completion link sits between the status region and the
+//       study-team section
 //  T20: the sent screen has no "Save the file" button: asserted in T5's
 //       walks and the supabase walks after the screen shows, and in T15's
 //       document at the held request

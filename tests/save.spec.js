@@ -65,9 +65,9 @@
 //       file" button follows it, and a first and a second click on it each
 //       save the file again with the Finish download's suggested file name
 //       and its bytes; the screen's order is the heading, the lead, the file name,
-//       the trail, the button, the closed study-team section, and with a
-//       complete address (the S16 walk) the completion link sits between the
-//       button and that section
+//       the trail, the button, the status region, the closed study-team
+//       section, and with a complete address (the S16 walk) the completion
+//       link sits between the status region and that section
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and

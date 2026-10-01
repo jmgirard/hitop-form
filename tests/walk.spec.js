@@ -20,8 +20,8 @@ import {
 
 const base = useTarget();
 
-// A refusal of the blank items at places `ks` on the page: the count above
-// the first, and the mark inside each of them and no other item.
+// A refusal of the blank items at places `ks` on the page: the count's
+// text, and the mark inside each of them and no other item.
 async function expectRefused(page, ks) {
   await expect(page.locator('[role=alert]')).toHaveText(
     ks.length === 1 ? '1 item on this page has no answer yet.' : `${ks.length} items on this page have no answer yet.`,

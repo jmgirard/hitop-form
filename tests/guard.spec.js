@@ -84,7 +84,7 @@ test('the start and done screens show the export build and package version', asy
   const exp = await fetchExport('hitopbr');
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g1' });
   // G1
-  const version = page.locator('.version');
+  const version = page.locator('main > details.study-team:not([open]) > footer > .version');
   await expect(version).toContainText(exp.buildDate);
   await expect(version).toContainText(exp.packageVersion);
   await begin(page);
