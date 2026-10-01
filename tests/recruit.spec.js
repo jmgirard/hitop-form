@@ -314,7 +314,7 @@ test('an unconfirmed send links to complete filled with the identifier from the 
   await walkAll(page);
   await downloading;
   await expect(page.locator('h1')).toHaveText('Your answers were not sent');
-  await expect(page.locator('.done')).toContainText('Your answers could not be sent to the study team.');
+  await expect(page.locator('.done')).toContainText('This page got no confirmation that your answers reached the study team.');
   await expect(page.locator('p.complete a')).toHaveAttribute('href', SONA_FILLED_ABC);
   await page.waitForTimeout(2000);
   expect(requests, 'nothing requested of the completion address').toEqual([]);

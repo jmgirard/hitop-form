@@ -518,7 +518,11 @@ async function probeMissed(page) {
   const blank = [Math.ceil(n / 2), n - 2, n];
   await answerPage(page, { skip: blank });
   await expectMissed(page, blank);
-  for (const i of blank.slice(0, 2)) await page.locator('fieldset.item').nth(i - 1).locator('input[type=radio]').first().check();
+  // Each answer lowers the count at once, before any press.
+  for (const [k, i] of blank.slice(0, 2).entries()) {
+    await page.locator('fieldset.item').nth(i - 1).locator('input[type=radio]').first().check();
+    await expect(page.locator('.missed-count'), 'the count after an answer').toHaveText(missedCount(blank.length - k - 1));
+  }
   await expectMissed(page, blank.slice(2));
   await page.locator('fieldset.item').nth(n - 1).locator('input[type=radio]').first().check();
   await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveCount(0);
@@ -642,6 +646,56 @@ test('"Yes, I do not agree" with a completeDeclined address goes there', async (
   expect(reached).toEqual([DECLINED_URL]);
 });
 
+const SENDING = 'Sending your answers. Please keep this page open.';
+
+// The status line on a screen whose Finish sends: drawn with the screen,
+// empty, directly above the buttons, so a screen reader reads the text the
+// press writes into it. Marked, so the test can tell the press filled this
+// line rather than adding a new one.
+async function markSendingLine(page) {
+  const line = page.locator('p.sending');
+  await expect(line, 'the sending line is drawn with the screen').toHaveCount(1);
+  await expect(line).toHaveAttribute('role', 'status');
+  await expect(line).toHaveText('');
+  expect(await line.evaluate((n) => n.nextElementSibling.classList.contains('nav')), 'directly above the buttons').toBe(true);
+  await line.evaluate((n) => { n.dataset.drawn = '1'; });
+}
+
+test('the "Before you finish" screen of a link with a store draws the sending line empty, and Finish fills it', async ({ page }) => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route(STORE_URL, async (route) => {
+    await held;
+    return route.fulfill({ status: 500, headers: CORS, body: 'down' });
+  });
+  await openForm(page, base(), {
+    instrument: 'pid5bf', study: 'screens', participant: 'p6', store: { kind: 'webhook', url: STORE_URL }, questions: { after: [NOTE] },
+  });
+  const downloading = awaitDownload(page);
+  await forward(page);
+  await answerAll(page);
+  await forward(page);
+  await answerAll(page);
+  await expect(page.locator('p.sending'), 'no sending line on an item page with Next').toHaveCount(0);
+  await forward(page);
+  await expect(page.locator('main > h1')).toHaveText('Before you finish');
+  await markSendingLine(page);
+  await page.getByRole('button', { name: 'Finish' }).click();
+  await expect(page.locator('p.sending[data-drawn]')).toHaveText(SENDING);
+  release();
+  await downloading;
+  await expect(page.locator('main > h1')).toHaveText('Your answers were not sent');
+});
+
+test('a link without a store draws no sending line', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'pid5bf', study: 'screens', participant: 'p6' });
+  await forward(page);
+  await answerAll(page);
+  await forward(page);
+  await expect(nextButton(page)).toHaveText('Finish');
+  await expect(page.locator('p.sending')).toHaveCount(0);
+});
+
 for (const outcome of [
   { name: 'answered HTTP 500', answer: (route) => route.fulfill({ status: 500, headers: CORS, body: 'down' }), fault: 'The send was not confirmed: the server answered HTTP 500.' },
   { name: 'a failed connection', answer: (route) => route.abort('connectionrefused'), fault: 'The send was not confirmed: the connection failed.' },
@@ -659,13 +713,17 @@ for (const outcome of [
     await answerAll(page);
     await forward(page);
     await answerAll(page);
+    await markSendingLine(page);
     await nextButton(page).click();
-    await expect(page.locator('p.sending')).toHaveText('Sending your answers. Please keep this page open.');
+    await expect(page.locator('p.sending[data-drawn]')).toHaveText(SENDING);
     await expect(nextButton(page)).toBeDisabled();
     release();
     const download = await downloading;
 
     await expect(page.locator('main > h1')).toHaveText('Your answers were not sent');
+    await expect(page.locator('.done')).toContainText(
+      'This page got no confirmation that your answers reached the study team. They were saved on this device instead',
+    );
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
     await expect(page.locator('main > p').nth(2)).toHaveText(
       'This file holds your answers. Please send it to the study team the way they asked. If the file did not appear, press Save the file.',

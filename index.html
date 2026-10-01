@@ -203,8 +203,10 @@
   .confirm { margin-top: var(--s5); }
   .confirm .confirm-question { font-weight: 600; margin: 0; }
   .confirm .nav { margin-top: var(--s3); }
-  /* The line above the buttons while a send runs. */
+  /* The line above the buttons while a send runs. It is drawn empty with
+     the screen, so it takes no room until the send. */
   .sending { font-weight: 600; margin: var(--s4) 0 0; }
+  .sending:empty { margin: 0; }
 
   /* The "Please answer this item" mark inside an item left unanswered at
      Next or Finish. The count above the first is styled as an alert. */

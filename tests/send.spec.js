@@ -104,8 +104,8 @@ const store = useStore();
 const LEAD = leadColumns();
 
 // The first sentence of the saved-file screen after a send that was not
-// confirmed.
-const NOT_SENT_LEAD = 'Your answers could not be sent to the study team.';
+// confirmed: what the page knows, since the row may still have arrived.
+const NOT_SENT_LEAD = 'This page got no confirmation that your answers reached the study team.';
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));
 

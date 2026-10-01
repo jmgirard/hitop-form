@@ -1894,7 +1894,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
             },
           }),
         ]);
-    root.replaceChildren(heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, nav, foot());
+    root.replaceChildren(
+      heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, ...sendingLine(list === 'after'), nav, foot(),
+    );
     window.scrollTo(0, 0);
     focusHeading(root);
   }
@@ -1952,8 +1954,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // Next or Finish with items unanswered marks each one with "Please answer
   // this item", inside it and named by its aria-describedby, and puts the
   // count of them in an alert directly above the first, which the page
-  // scrolls to. Answering an item takes its mark away, and the count goes
-  // once no mark is left.
+  // scrolls to. Answering an item takes its mark away and lowers the count,
+  // and the count goes once no mark is left.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
@@ -1970,9 +1972,15 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       node.querySelector('.missed')?.remove();
       node.removeAttribute('aria-describedby');
     };
+    const countText = (n) => (n === 1
+      ? '1 item on this page has no answer yet.'
+      : `${n} items on this page have no answer yet.`);
+    // itemNode's own handler has already taken `unanswered` off the item.
     nodes.forEach((node) => node.addEventListener('change', () => {
       unmark(node);
-      if (!nodes.some((n) => n.classList.contains('unanswered'))) count.remove();
+      const left = nodes.filter((n) => n.classList.contains('unanswered')).length;
+      if (left === 0) count.remove();
+      else if (count.isConnected) count.textContent = countText(left);
     }));
 
     const advance = () => {
@@ -1988,9 +1996,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           n.querySelector('legend').after(el('p', { class: 'missed', id, text: 'Please answer this item' }));
           n.setAttribute('aria-describedby', id);
         }
-        count.textContent = missed.length === 1
-          ? '1 item on this page has no answer yet.'
-          : `${missed.length} items on this page have no answer yet.`;
+        count.textContent = countText(missed.length);
         missed[0].before(count);
         count.scrollIntoView({ block: 'start' });
         missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });
@@ -2031,11 +2037,19 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
         el('p', { text: p.exp.instructions.start }),
       ]),
       ...nodes,
+      ...sendingLine(last && lastPart && after.length === 0),
       nav,
       foot(),
     );
     window.scrollTo(0, 0);
     focusHeading(root);
+  }
+
+  // The status line drawn empty above the buttons of a screen whose Finish
+  // sends, which finish() fills while the send runs; nothing on a screen
+  // without Finish or without a store.
+  function sendingLine(hasFinish) {
+    return hasFinish && store ? [el('p', { class: 'sending', role: 'status' })] : [];
   }
 
   // Finish is pressed. With no store: the file, then the saved screen. With
@@ -2084,9 +2098,11 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const finishButton = [...nav.querySelectorAll('button')].at(-1);
     for (const b of nav.querySelectorAll('button')) b.disabled = true;
     finishButton.textContent = 'Sending…';
-    // A line above the buttons for the length of the send, which can take
-    // up to SEND_TIMEOUT_MS.
-    nav.before(el('p', { class: 'sending', role: 'status', text: 'Sending your answers. Please keep this page open.' }));
+    // The empty status line sendingLine() put above the buttons gets its
+    // text for the length of the send, which can take up to
+    // SEND_TIMEOUT_MS. A screen reader reads a status region when its text
+    // changes, and often not when it arrives with its text already in it.
+    nav.previousElementSibling.textContent = 'Sending your answers. Please keep this page open.';
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;
     finished = true;
@@ -2110,9 +2126,11 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       if (complete !== undefined) window.location.assign(complete);
       return;
     }
+    // The send may still have reached the store, after the wait or with an
+    // answer that was no confirmation, so the lead says what the page knows.
     showSaved(saveCsv(record), {
       title: 'Your answers were not sent',
-      lead: 'Your answers could not be sent to the study team. They were saved on this device instead, as one file in the folder your browser uses for downloads:',
+      lead: 'This page got no confirmation that your answers reached the study team. They were saved on this device instead, as one file in the folder your browser uses for downloads:',
       trail: 'This file holds your answers. Please send it to the study team the way they asked.',
       fault: `The send was not confirmed: ${outcome.why}.`,
     });
