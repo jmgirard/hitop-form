@@ -267,6 +267,7 @@
     </div>
     <p id="next"></p>
     <p id="open" class="muted"></p>
+    <p id="long" hidden></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
       <span class="hint">Run this in the project's SQL editor. Its table has a column per item and question. The key can only add rows. After changing instruments, module, random order, Prolific or questions, make a new table. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
@@ -306,6 +307,11 @@
   const err = document.getElementById('err');
   const out = document.getElementById('out');
   const open = document.getElementById('open');
+  const long = document.getElementById('long');
+  // RFC 9110, section 4.1, recommends that senders and recipients support
+  // URIs of at least 8,000 octets. A study link is ASCII, so its length in
+  // characters is its length in octets. A longer link gets a warning.
+  const LINK_WARN_LENGTH = 8_000;
   const result = document.getElementById('result');
   // How many times hideResult() ran: a build reads it before and after
   // each wait.
@@ -1200,6 +1206,8 @@
     result.hidden = true;
     out.textContent = '';
     open.textContent = '';
+    long.hidden = true;
+    long.textContent = '';
     next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
@@ -1310,6 +1318,10 @@
     a.target = '_blank';
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${href.length} characters)`);
+    if (href.length > LINK_WARN_LENGTH) {
+      long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.`;
+      long.hidden = false;
+    }
     next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;

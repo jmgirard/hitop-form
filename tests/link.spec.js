@@ -140,12 +140,16 @@
 //       bytes, bytes that are not UTF-8, text that is not JSON, and JSON
 //       that holds no form. The form's elements, the instrument rows and
 //       the question list equal those of a load with no link
+//  L37: a link of exactly 8,000 characters shows no long-link warning, and
+//       one of 8,001 shows it naming the length; the study name and the
+//       participant-parameter name are padded at run time to reach each
+//       length
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1317,4 +1321,52 @@ test('the form.js messages the builder shows name the online form', async ({ pag
   }));
   const { err: exportErr } = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });
   expect(exportErr).toBe('The online form reads format "1.0" of the instrument export and found format "2.0".');
+});
+
+// L37: RFC 9110, section 4.1, recommends support for URIs of at least 8,000
+// octets, and a study link is ASCII. The link is ?c=, the base64url of the
+// setup's JSON with no padding, so `n` bytes take the length below; a
+// length of 4k + 1 has no `n`. The address the page sits at sets the rest.
+const LONG_AT = 8_000;
+const b64Length = (n) => Math.floor(n / 3) * 4 + [0, 2, 3][n % 3];
+const PARAM = `p${'x'.repeat(63)}`;
+
+async function buildPadded(page, study) {
+  await page.locator('input[name="study"]').fill(study);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out')).not.toHaveText('');
+  return page.locator('#out').textContent();
+}
+
+for (const length of [LONG_AT, LONG_AT + 1]) {
+  test(`L37: a link of ${length.toLocaleString('en-US')} characters ${length > LONG_AT ? 'shows' : 'shows no'} long-link warning`, async ({ page }) => {
+    await openBuilder(page);
+    await openSectionOf(page, 'site');
+    await page.locator('select[name="site"]').selectOption('other');
+    await page.locator('input[name="participantParam"]').fill(PARAM);
+    const first = await buildPadded(page, 's');
+    const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
+    const rest = first.length - b64Length(bytes);
+    const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => rest + b64Length(k) === length);
+    expect(n, `a setup of some size makes a link of ${length} characters`).not.toBeUndefined();
+    const href = await buildPadded(page, `s${'x'.repeat(n - bytes)}`);
+    expect(href.length).toBe(length);
+    expect(decodeLinkParam(href).participantParam).toBe(PARAM);
+    if (length > LONG_AT) {
+      await expect(page.locator('#long')).toBeVisible();
+      await expect(page.locator('#long')).toHaveText('This link is 8,001 characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.');
+    } else {
+      await expect(page.locator('#long')).toBeHidden();
+      await expect(page.locator('#long')).toHaveText('');
+    }
+  });
+}
+
+test('L37: the warning goes when a shorter link is made', async ({ page }) => {
+  await openBuilder(page);
+  await buildPadded(page, 'x'.repeat(7_000));
+  await expect(page.locator('#long')).toBeVisible();
+  await buildPadded(page, 's');
+  await expect(page.locator('#long')).toBeHidden();
+  await expect(page.locator('#long')).toHaveText('');
 });
