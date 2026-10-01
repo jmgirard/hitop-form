@@ -122,7 +122,7 @@ for (const c of CASES) {
       const from = store().requests.length;
       await page.goto(formUrl(base(), { instruments: c.stems, study: 'list', ...c.config, store: w.make() }, c.extra));
       await walk(page, c);
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
       expect(sent.map((r) => r.path)).toEqual([w.path]);
       const columns = await sqlColumns(c.fixture);

@@ -178,7 +178,7 @@ for (const shuffle of [false, true]) {
       }, { extra });
       await begin(page);
       await walkAll(page);
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
       expect(sent.length).toBe(1);
       rows.push(JSON.parse(sent[0].body));
@@ -313,7 +313,8 @@ test('an unconfirmed send links to complete filled with the identifier from the 
   const downloading = awaitDownload(page);
   await walkAll(page);
   await downloading;
-  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('h1')).toHaveText('Your answers were not sent');
+  await expect(page.locator('.done')).toContainText('Your answers could not be sent to the study team.');
   await expect(page.locator('p.complete a')).toHaveAttribute('href', SONA_FILLED_ABC);
   await page.waitForTimeout(2000);
   expect(requests, 'nothing requested of the completion address').toEqual([]);

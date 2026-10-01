@@ -34,6 +34,15 @@
 //   P5: the first and the last page of each of the five instruments hold a
 //       closed "Instructions" section above the items, whose body text is
 //       the export's instructions.start
+//   P6: "I do not agree" asks first, with the consent text still shown and
+//       focus on the question; "Go back" draws the consent screen again
+//       with both buttons, and no request or file follows; "Yes, I do not
+//       agree" reaches the declined screen, and with completeDeclined the
+//       page then goes there. While a send runs, a line says the answers
+//       are sending; after a send answered HTTP 500 and after a failed
+//       connection, the saved-file screen is headed "Your answers were not
+//       sent", says the file holds the answers, and shows no HTTP detail
+//       outside the closed study-team section
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -310,7 +319,7 @@ test('a walk from the identifier screen to the sent screen, with a complete addr
   expect(headings).toEqual(['PID-5-BF', 'PID-5-BF', 'PID-5-BF', 'Thank you']);
   expect(posts, 'one send').toEqual(['POST']);
   await expect.poll(() => navigations, 'the page asked for the completion address').toEqual([COMPLETE_URL]);
-  await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+  await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
   await expect(page.locator('p.complete a')).toHaveText(CONTINUE);
 });
 
@@ -332,7 +341,7 @@ test('a walk whose send is answered HTTP 500, with a completeSaved address, show
     await expectOwnText(page, { exps, stems: ['pid5bf'], hosts, researcher: ['screens', 'p2c', ...(fileName ? [fileName] : [])] });
   });
   await downloading;
-  expect(headings).toEqual(['PID-5-BF', 'PID-5-BF', 'PID-5-BF', 'Thank you']);
+  expect(headings).toEqual(['PID-5-BF', 'PID-5-BF', 'PID-5-BF', 'Your answers were not sent']);
   await expect(page.locator('p.complete a')).toHaveAttribute('href', COMPLETE_SAVED_URL);
   await expect(refusalText(page)).toHaveText('The send was not confirmed: the server answered HTTP 500.');
 });
@@ -548,5 +557,103 @@ for (const stem of ['hitopsr', 'hitopbr', 'pid5', 'pid5sf', 'pid5bf']) {
     }
     await expect(page.locator('.progress')).toHaveText(`Page ${n} of ${n}`);
     await expectReminder(page, exp.instructions.start, `${TITLES[stem]} page ${n}`);
+  });
+}
+
+// ---- P6 ---------------------------------------------------------------
+
+const QUESTION = 'Are you sure you do not agree to take part?';
+const DECLINED_URL = 'https://app.prolific.com/submissions/complete?cc=NOCONSENT';
+
+// The consent screen as first drawn: the text and the two buttons.
+async function expectConsentScreen(page) {
+  await expect(page.locator('main > h1')).toHaveText('Consent to take part');
+  await expect(page.locator('.consent p')).toHaveText(CONSENT.split('\n\n'));
+  await expect(page.locator('main button')).toHaveText(['I agree', 'I do not agree']);
+  await expect(page.locator('.confirm')).toHaveCount(0);
+}
+
+test('"I do not agree" asks first, and "Go back" draws the consent screen again with nothing sent or saved', async ({ page }) => {
+  await openForm(page, base(), { instrument: 'pid5bf', study: 'screens', participant: 'p6', consent: { text: CONSENT } }, { param: 'z' });
+  await expectConsentScreen(page);
+  const requests = [];
+  let downloads = 0;
+  page.on('request', (r) => requests.push(r.url()));
+  page.on('download', () => { downloads += 1; });
+
+  await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
+  await expect(page.locator('.consent p'), 'the consent text stays').toHaveText(CONSENT.split('\n\n'));
+  await expect(page.locator('.confirm-question')).toHaveText(QUESTION);
+  await expect(page.locator('.confirm-question')).toBeFocused();
+  await expect(page.getByRole('group', { name: QUESTION })).toHaveCount(1);
+  await expect(page.locator('main button')).toHaveText(['Yes, I do not agree', 'Go back']);
+
+  await page.getByRole('button', { name: 'Go back' }).click();
+  await expectConsentScreen(page);
+  await expect(page.locator('main > h1')).toBeFocused();
+  await page.waitForTimeout(1000);
+  expect(requests, 'requests after the presses').toEqual([]);
+  expect(downloads, 'files saved').toBe(0);
+
+  // The question again, then the decline.
+  await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
+  await page.getByRole('button', { name: 'Yes, I do not agree' }).click();
+  await expect(page.locator('main > h1')).toHaveText('Thank you');
+  await expect(page.locator('.declined')).toHaveText('You chose not to take part. You can close this page.');
+  expect(requests, 'requests after the decline').toEqual([]);
+  expect(downloads, 'files saved').toBe(0);
+});
+
+test('"Yes, I do not agree" with a completeDeclined address goes there', async ({ page }) => {
+  const reached = [];
+  await page.route(DECLINED_URL, (route) => {
+    reached.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Declined</title><h1>Declined</h1>' });
+  });
+  await openForm(page, base(), {
+    instrument: 'pid5bf', study: 'screens', participant: 'p6', consent: { text: CONSENT }, completeDeclined: DECLINED_URL,
+  }, { param: 'z' });
+  await expectConsentScreen(page);
+  await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
+  expect(reached, 'nothing before the confirming press').toEqual([]);
+  await page.getByRole('button', { name: 'Yes, I do not agree' }).click();
+  await expect(page).toHaveURL(DECLINED_URL);
+  expect(reached).toEqual([DECLINED_URL]);
+});
+
+for (const outcome of [
+  { name: 'answered HTTP 500', answer: (route) => route.fulfill({ status: 500, headers: CORS, body: 'down' }), fault: 'The send was not confirmed: the server answered HTTP 500.' },
+  { name: 'a failed connection', answer: (route) => route.abort('connectionrefused'), fault: 'The send was not confirmed: the connection failed.' },
+]) {
+  test(`a send ${outcome.name} says it is sending, then that the answers were not sent`, async ({ page }) => {
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await page.route(STORE_URL, async (route) => {
+      await held;
+      return outcome.answer(route);
+    });
+    await openForm(page, base(), { instrument: 'pid5bf', study: 'screens', participant: 'p6', store: { kind: 'webhook', url: STORE_URL } });
+    const downloading = awaitDownload(page);
+    await forward(page);
+    await answerAll(page);
+    await forward(page);
+    await answerAll(page);
+    await nextButton(page).click();
+    await expect(page.locator('p.sending')).toHaveText('Sending your answers. Please keep this page open.');
+    await expect(nextButton(page)).toBeDisabled();
+    release();
+    const download = await downloading;
+
+    await expect(page.locator('main > h1')).toHaveText('Your answers were not sent');
+    await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
+    await expect(page.locator('main > p').nth(2)).toHaveText(
+      'This file holds your answers. Please send it to the study team the way they asked. If the file did not appear, press Save the file.',
+    );
+    await expect(refusalText(page)).toHaveText(outcome.fault);
+    const details = page.locator('main > details.study-team');
+    await expect(details).toHaveJSProperty('open', false);
+    await expect(details.locator('> summary')).toHaveText(SUMMARY);
+    const shown = await page.locator('main').innerText();
+    expect(shown, 'the shown text').not.toMatch(/\bHTTP\b|\b500\b|connection/i);
   });
 }

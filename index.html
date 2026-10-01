@@ -199,6 +199,13 @@
   details.reminder[open] summary { margin-bottom: var(--s2); }
   details.reminder p { margin: 0; }
 
+  /* The question "I do not agree" asks, in place of the consent buttons. */
+  .confirm { margin-top: var(--s5); }
+  .confirm .confirm-question { font-weight: 600; margin: 0; }
+  .confirm .nav { margin-top: var(--s3); }
+  /* The line above the buttons while a send runs. */
+  .sending { font-weight: 600; margin: var(--s4) 0 0; }
+
   /* An item left unanswered at Next or Finish, and the count above the
      first of them. */
   fieldset .missed { clear: both; color: var(--error); font-weight: 600; margin: 0 0 var(--s2); }

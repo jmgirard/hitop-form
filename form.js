@@ -1716,17 +1716,35 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // The consent screen, before the start screen under a link with
   // `consent`. It holds the researcher's text and the two buttons, and no
   // item, option or instruction of the instrument.
+  //
+  // "I do not agree" asks once before it declines: the two buttons give
+  // way to a question with "Yes, I do not agree" and "Go back", the consent
+  // text staying above it, and focus moves to the question. "Go back"
+  // draws the consent screen again.
   function showConsent() {
+    const nav = el('div', { class: 'nav' }, [
+      el('button', { type: 'button', text: 'I agree', onclick: proceed }),
+      el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: () => confirmDecline(nav) }),
+    ]);
     root.replaceChildren(
       heading('Consent to take part'),
       el('div', { class: 'consent' }, textNodes(config.consent.text)),
-      el('div', { class: 'nav' }, [
-        el('button', { type: 'button', text: 'I agree', onclick: proceed }),
-        el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: decline }),
-      ]),
+      nav,
       foot(),
     );
     focusHeading(root);
+  }
+
+  function confirmDecline(nav) {
+    const question = el('p', { class: 'confirm-question', id: 'confirm-question', tabindex: '-1', text: 'Are you sure you do not agree to take part?' });
+    nav.replaceWith(el('div', { class: 'confirm', role: 'group', 'aria-labelledby': 'confirm-question' }, [
+      question,
+      el('div', { class: 'nav' }, [
+        el('button', { type: 'button', class: 'secondary', text: 'Yes, I do not agree', onclick: decline }),
+        el('button', { type: 'button', text: 'Go back', onclick: showConsent }),
+      ]),
+    ]));
+    question.focus();
   }
 
   // "I do not agree": the declined screen, with nothing sent or saved and no
@@ -2048,7 +2066,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     if (!store) {
       finished = true;
       showSaved(saveCsv(record), {
-        lead: 'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
+        lead: 'Your answers were saved to this device as one file, in the folder your browser uses for downloads:',
         trail: 'Please send that file to the study team the way they asked. No answer was sent from this page.',
       });
       return;
@@ -2057,6 +2075,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const finishButton = [...nav.querySelectorAll('button')].at(-1);
     for (const b of nav.querySelectorAll('button')) b.disabled = true;
     finishButton.textContent = 'Sending…';
+    // A line above the buttons for the length of the send, which can take
+    // up to SEND_TIMEOUT_MS.
+    nav.before(el('p', { class: 'sending', role: 'status', text: 'Sending your answers. Please keep this page open.' }));
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;
     finished = true;
@@ -2070,7 +2091,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       // the sent screen rather than a disabled form.
       root.replaceChildren(
         heading('Thank you'),
-        el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
+        el('p', { class: 'done', text: 'Your answers were sent to the study team.' }),
         complete === undefined
           ? el('p', { text: 'You can close this page.' })
           : el('p', { class: 'complete' }, [completeLink(complete)]),
@@ -2081,8 +2102,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       return;
     }
     showSaved(saveCsv(record), {
-      lead: 'The send to the study team could not be confirmed. Your responses were saved instead as one file, in the folder your browser uses for downloads:',
-      trail: 'Please send that file to the study team the way they asked.',
+      title: 'Your answers were not sent',
+      lead: 'Your answers could not be sent to the study team. They were saved on this device instead, as one file in the folder your browser uses for downloads:',
+      trail: 'This file holds your answers. Please send it to the study team the way they asked.',
       fault: `The send was not confirmed: ${outcome.why}.`,
     });
   }
@@ -2107,9 +2129,10 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // the first press; each press rewrites it with the same sentence, and
   // `role="status"` marks the write for a screen reader to announce. Focus
   // is not moved, so after a keyboard press it stays on the button.
-  // `fault`, after a send that was not confirmed, is the send's own fault,
-  // shown only in the closed study-team section.
-  function showSaved({ name, text }, { lead, trail, fault }) {
+  // `title` is the heading, "Thank you" unless given. `fault`, after a send
+  // that was not confirmed, is the send's own fault, shown only in the
+  // closed study-team section.
+  function showSaved({ name, text }, { title = 'Thank you', lead, trail, fault }) {
     const given = config.completeSaved ?? config.complete;
     const address = given === undefined ? undefined : fillParticipant(given, participant);
     const complete = address === undefined
@@ -2121,7 +2144,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       status.textContent = 'The file was saved again.';
     };
     root.replaceChildren(
-      heading('Thank you'),
+      heading(title),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
       el('p', { text: `${trail} If the file did not appear, press Save the file.` }),

@@ -118,7 +118,7 @@ for (const [label, storePath, extra, make] of [
     expect([...urls].sort(), 'before Finish').toEqual([...ownFiles('hitopbr')].sort());
     await nextButton(page).click();
     await expect(page.locator('h1')).toHaveText('Thank you');
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, ...extra()].sort());
   });
 }

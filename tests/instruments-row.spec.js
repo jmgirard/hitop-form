@@ -154,7 +154,7 @@ for (const mode of MODES) {
     const from = store().requests.length;
     await page.goto(formUrl(base(), { instruments: TWO, study: 'rows', ...mode.config, store: webhook(store()) }, mode.extra));
     const shown = await walk(page, TWO, { questions: mode.questions });
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
     expect(sent).toHaveLength(1);
     const row = JSON.parse(sent[0].body);
@@ -186,7 +186,7 @@ for (const target of ['file', 'row']) {
     if (target === 'file') {
       [header, values] = parseCsv(await readFile(await (await download).path(), 'utf8'));
     } else {
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       const row = JSON.parse(store().requests.slice(from).filter((r) => r.method === 'POST')[0].body);
       header = Object.keys(row);
       values = header.map((k) => String(row[k]));

@@ -13,14 +13,15 @@
 //       and the body is recorded at the first address
 //   T4: Finish pressed twice in one gesture (a double click) sends one POST
 //   T5: a 200 with {"ok":true} is confirmed: no file is saved, and the final
-//       screen says the responses were sent to the study team
+//       screen says the answers were sent to the study team
 //   T6: a 200 with an HTML body, a 404, a 500, a refused connection and an
 //       endpoint that never answers (the page's 30-second limit) are each
-//       unconfirmed: the CSV is saved to the device, the final screen says
-//       the send could not be confirmed and names the saved file, and that
-//       final screen does not say that no answer was sent
+//       unconfirmed: the CSV is saved to the device, the final screen is
+//       headed "Your answers were not sent", says the answers could not be
+//       sent and names the saved file, holds the send's fault only in its
+//       closed study-team section, and does not say that no answer was sent
 //   T7: every nav button is disabled from Finish's first press until the
-//       outcome screen
+//       outcome screen, and a line above them says the answers are sending
 //   T8: the committed Google Sheet download (tests/fixtures/sheet-hitopbr.csv,
 //       from the hand run the fixture README describes) has the HiTOP-BR
 //       fixture's header, and two rows whose participant codes are the text
@@ -102,6 +103,10 @@ const base = useTarget();
 const store = useStore();
 const LEAD = leadColumns();
 
+// The first sentence of the saved-file screen after a send that was not
+// confirmed.
+const NOT_SENT_LEAD = 'Your answers could not be sent to the study team.';
+
 test.beforeEach(async ({ context }) => allowLocalStore(context));
 
 // Header names the browser sets on its own, which the page cannot add or
@@ -145,7 +150,7 @@ for (const w of WALKS) {
       await expect(page.locator('h1')).toHaveText('Thank you');
       const t1 = Date.now();
       // T5
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       // Without a complete field the sent screen keeps its closing line and offers no link.
       await expect(page.locator('main')).toContainText('You can close this page.');
       await expect(page.locator('p.complete')).toHaveCount(0);
@@ -235,7 +240,7 @@ for (const w of SUPABASE_WALKS) {
     const seen = await walkAll(page);
     await expect(page.locator('h1')).toHaveText('Thank you');
     const t1 = Date.now();
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     // T20
     await expect(page.getByRole('button', { name: 'Save the file' })).toHaveCount(0);
     expect(downloads, 'no file is saved on a confirmed send').toEqual([]);
@@ -281,7 +286,7 @@ for (const w of [
     await openForm(page, base(), { instrument: 'hitopbr', study: 'send', participant: 's12', shuffle: true, store: w.make() });
     await begin(page);
     const seen = await walkAll(page);
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
 
     const sent = since(from).filter((r) => r.method === 'POST');
     expect(sent.map((r) => r.path)).toEqual([w.path]);
@@ -333,7 +338,7 @@ for (const shuffle of [false, true]) {
       await expect(page.locator('input[name="participant"]')).toHaveCount(0);
       await begin(page);
       const seen = await walkAll(page);
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       const t1 = Date.now();
 
       const sent = since(from).filter((r) => r.method === 'POST');
@@ -372,7 +377,7 @@ for (const shuffle of [false, true]) {
     }, { extra: prolificQuery() });
     await begin(page);
     const seen = await walkAll(page);
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     const t1 = Date.now();
 
     const sent = since(from).filter((r) => r.method === 'POST');
@@ -455,7 +460,7 @@ for (const w of [
     expect(states.some((s) => s.navButtons > 0), 'the observer saw nav buttons on the form').toBe(true);
     const sentScreen = {
       h1: 'Thank you',
-      done: 'Your responses were sent to the study team.',
+      done: 'Your answers were sent to the study team.',
       cont: CONTINUE,
       href: COMPLETE_URL,
       close: false,
@@ -512,8 +517,8 @@ test('with complete and completeSaved, an unconfirmed send links to completeSave
   await walkAll(page);
   const download = await downloading;
 
-  await expect(page.locator('h1')).toHaveText('Thank you');
-  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('h1')).toHaveText('Your answers were not sent');
+  await expect(page.locator('.done')).toContainText(NOT_SENT_LEAD);
   await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
   const link = page.locator('p.complete a');
   await expect(link).toHaveCount(1);
@@ -540,8 +545,8 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   await walkAll(page);
   const download = await downloading;
 
-  await expect(page.locator('h1')).toHaveText('Thank you');
-  await expect(page.locator('.done')).toContainText('The send to the study team could not be confirmed');
+  await expect(page.locator('h1')).toHaveText('Your answers were not sent');
+  await expect(page.locator('.done')).toContainText(NOT_SENT_LEAD);
   await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
   const link = page.locator('p.complete a');
   await expect(link).toHaveAttribute('href', COMPLETE_URL);
@@ -551,7 +556,7 @@ test('with a complete address, an unconfirmed send shows the saved screen with a
   expect(order).toEqual(['CODE', 'A']);
   // T19: the trail sentence, and the whole screen's order, the button and
   // the empty status region between the trail and the link.
-  await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
+  await expect(page.locator('main > p').nth(2)).toHaveText(`This file holds your answers. Please send it to the study team the way they asked. ${SAVE_AGAIN}`);
   expect(await screenOrder(page)).toEqual(savedScreenOrder({ complete: true }));
   await expectStatusEmpty(page);
   await page.waitForTimeout(5000);
@@ -581,10 +586,11 @@ for (const u of UNCONFIRMED) {
     const seen = await walkAll(page);
     if (u.hang) {
       // T7: every nav button, Back included, is disabled while the send is
-      // pending, and Finish reads Sending….
+      // pending, Finish reads Sending…, and the line above says so.
       const finish = nextButton(page);
       await expect(finish).toBeDisabled();
       await expect(finish).toHaveText('Sending…');
+      await expect(page.locator('p.sending')).toHaveText('Sending your answers. Please keep this page open.');
       const buttons = page.locator('.nav button');
       expect(await buttons.count()).toBeGreaterThan(1);
       for (const b of await buttons.all()) await expect(b).toBeDisabled();
@@ -592,9 +598,9 @@ for (const u of UNCONFIRMED) {
     const download = await downloading;
     if (u.hang) expect(Date.now() - t0, 'the outcome waited for the limit').toBeGreaterThanOrEqual(SEND_TIMEOUT_MS);
 
-    await expect(page.locator('h1')).toHaveText('Thank you');
+    await expect(page.locator('h1')).toHaveText('Your answers were not sent');
     const done = page.locator('.done');
-    await expect(done).toContainText('The send to the study team could not be confirmed');
+    await expect(done).toContainText(NOT_SENT_LEAD);
     // The send's own fault sits in the closed study-team section, and the
     // screen shows none of it.
     await expect(page.locator('details.study-team .fault')).toContainText(u.why);
@@ -613,7 +619,7 @@ for (const u of UNCONFIRMED) {
     // T19: the trail paragraph names the button, the screen's order with
     // the empty status region, and two presses each save the file again
     // and write the status.
-    await expect(page.locator('main > p').nth(2)).toHaveText(`Please send that file to the study team the way they asked. ${SAVE_AGAIN}`);
+    await expect(page.locator('main > p').nth(2)).toHaveText(`This file holds your answers. Please send it to the study team the way they asked. ${SAVE_AGAIN}`);
     expect(await screenOrder(page)).toEqual(savedScreenOrder());
     await expectStatusEmpty(page);
     await expectSaveAgain(page, download);
@@ -644,9 +650,9 @@ for (const u of SUPABASE_UNCONFIRMED) {
     const seen = await walkAll(page);
     const download = await downloading;
 
-    await expect(page.locator('h1')).toHaveText('Thank you');
+    await expect(page.locator('h1')).toHaveText('Your answers were not sent');
     const done = page.locator('.done');
-    await expect(done).toContainText('The send to the study team could not be confirmed');
+    await expect(done).toContainText(NOT_SENT_LEAD);
     await expect(page.locator('details.study-team .fault')).toContainText(u.why);
     expect(await page.locator('main').innerText(), 'the shown text').not.toContain(u.why);
     await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
