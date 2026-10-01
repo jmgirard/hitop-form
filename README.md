@@ -198,6 +198,65 @@ too. A browser without `DecompressionStream`, or without its `deflate-raw`
 format, cannot read a `z` link, and the online form then names the browser
 as the cause.
 
+### Keep the setup in a file you host
+
+A link that carries consent text, many questions or a module can grow long,
+and some sites and mail programs cut long links. You can keep the setup in
+a JSON file that you host, and give a short link that names it. A link that
+carries the whole setup stays the default.
+
+Under "Where the setup is kept", choose "In a file I host". Press "Download
+the setup file" to save `setup.json`. The builder checks the form first, as
+"Make the link" does. The file holds the setup as JSON, two spaces to a
+level, with a final newline. It can be at most 100,000 bytes as saved.
+Put the file in a public GitHub repository, then give its raw-file address
+under "Address of the setup file", for example:
+
+```
+https://raw.githubusercontent.com/your-name/your-study/main/setup.json
+```
+
+Press "Make the link". The builder fetches the file. If the file matches
+the form, the builder makes the link. The link is the online form's address
+with two parameters:
+
+- `setup`, the absolute `https://` address of the file.
+- `sha256`, the file's fingerprint: the SHA-256 of the UTF-8 bytes of
+  `JSON.stringify()` of the parsed file, written as base64url with no
+  padding, 43 characters.
+
+The fingerprint is taken over the parsed file, so a change of spaces or
+line endings keeps the link working. A change of any value, or of the
+order of the keys, gives another fingerprint. The online form fetches the
+file on each visit. If its fingerprint differs from `sha256`, the online
+form refuses it. So no participant gets a setup the link was not made for.
+A changed file needs a new link: download the setup file again, replace the
+hosted copy and make the link again.
+
+The repository must be public, because the online form sends no sign-in.
+The host must also let other sites read the file. GitHub raw-file
+addresses do: GitHub answers them with `Access-Control-Allow-Origin: *`.
+After an edit, GitHub can serve the old copy of the file for the time its
+`Cache-Control` header states. On 2026-10-01 that header was
+`max-age=300`, five minutes. In that time the builder can find that the
+file does not match. Wait, then make the link again.
+
+The online form names each of these refusals under "Details for the study
+team":
+
+- A link that names a setup file and also carries `c` or `z`.
+- A link with `setup` and no `sha256`, or `sha256` and no `setup`.
+- A `sha256` that is not 43 base64url characters.
+- A `setup` that is not an absolute `https://` address, or that holds a
+  user name or password.
+- A fetch that fails, or an answer outside HTTP 200 to 299.
+- A file over 100,000 bytes, bytes that are not UTF-8, text that is not
+  JSON, or JSON that is not an object.
+- A file whose fingerprint differs from `sha256`.
+
+The setup in the file then takes the same checks as a setup carried in the
+link.
+
 ### Edit a study link
 
 Open a study link on the Study Link Builder to edit it: put its `c=…` or
@@ -215,6 +274,15 @@ only `instrument` and `module` fills those two fields and leaves the rest
 for you. The builder refuses a link it cannot read, one that does not hold
 a form, or one naming an instrument it does not offer, and fills no field
 from it.
+
+A link that names a setup file opens the same way, as
+`link.html?setup=…&sha256=…`. The builder fetches the file. When it
+matches the link, the builder fills the form from it, chooses "In a file I
+host" and fills the file's address. When the file changed after the link
+was made, the form stays empty and a message offers "Fill in the form from
+the current file". Press it to fill the form from the file as it is now,
+then make a new link. The builder refuses each fault the online form names
+in the link's two parameters, and a file it cannot fetch or read.
 
 Anyone can send a link, so an opened link can fill in addresses you did not
 choose. When it puts a non-empty address in the web address, the Supabase
@@ -241,6 +309,13 @@ Opening a link on the Study Link Builder to edit it (`link.html?c=…` or
 `link.html?z=…`) sends the same setup to the host in that page's address.
 The setup, a Supabase key included, then reaches the host's request logs
 from that request too.
+
+A link that names a setup file puts only the file's address and
+fingerprint in the page's address. The host of the setup file sees each
+participant's request for the file, with the participant's IP address and
+browser. For a raw-file address that host is GitHub. The online form sends no
+referrer with that request, so the file's host does not get the page's
+address from it.
 
 ## Recruit through SONA or CloudResearch Connect
 
@@ -299,7 +374,8 @@ IDs, `assignmentId` and `projectId`, are not recorded.
 **Another site.** Choose "Another site" and type the parameter's name into
 the "Address parameter" field: letters `A-Z` and `a-z`, digits, `_`, `.`
 and `-`, up to 64 of them. The names `c` and `z` are refused, because they
-carry the link itself, and so are the three Prolific names, which the
+carry the link itself. So are `setup` and `sha256`, which name a hosted
+setup file, and the three Prolific names, which the
 Prolific choice reads. The builder also refuses `id` and `participantId`, the names the
 SONA and Connect choices write, and names the choice to use instead. The
 builder reads a link with either name back as SONA or Connect, so every
@@ -936,6 +1012,8 @@ npx playwright test
 | `tests/recruit.spec.js` | Under `participantParam`, the identifier taken from the named address parameter, and the start screen's question when the value is blank, absent, `%…%` or `{{…}}`; the first filled value of a doubled parameter; a name holding `.` and `-`; no address parameter read without the field. The saved file's header and the posted row's keys the same with and without the field, with and without the random order. The `{participant}` token filled in a SONA-shaped completion address in each place the page uses it (the navigation after a confirmed send, the sent screen's link, the saved screens' link under `complete` and under `completeSaved`), with the identifier from the address, the start screen, the link's participant and `PROLIFIC_PID`. An address without the token used as the link check parses it: in the navigation and the sent screen's link after a confirmed send, and in the link on the saved screen after a walk with no web address or table, under `complete` and `completeSaved`, two of the addresses given with an uppercase host the parse lowercases. The start screen's refusal of a typed identifier holding a lone surrogate half (high, low, or low before high), and an address value `%ED%A0%80` arriving as three U+FFFD characters and filled into the sent screen's link |
 | `tests/consent.spec.js` | The refusals of a `consent` field that is not an object, has a key other than `text` and `declined`, has no text, or has a text or declined text that is not a string, blank, over its limit or holding a lone surrogate half, and of `completeDeclined` without `consent` or as an `http://` address; a text and a declined text at their limits accepted. The consent screen of a hand-made link with CR LF and a lone CR: each paragraph's text, a single line break kept, no `b` element from `<b>x</b>`, the two buttons, focus on the heading, and "I agree" leading to the start screen the link without consent shows. "I do not agree" and then "Yes, I do not agree" with no web address or table, a web address and a Supabase table, each with `complete`: the declined text or the fixed sentence, no button and no link, and for 2 seconds no request, no download and the same address. With `completeDeclined`, a Prolific-shaped and a SONA-shaped address, the latter with and without an identifier: the declined screen and its link at the moment of the navigation, then the address reached, with no request to the web address or table and no download. The saved file's header, the posted row's keys and the builder's Supabase SQL the same with and without consent, with and without the random order |
 | `tests/zlink.spec.js` | A `z` link without consent opens the form, and one that unpacks to exactly 100,000 bytes is read. The refusal, naming the fault, of a `z` with a character outside base64url, a length base64 does not have, bytes that are no stream, a truncated stream, bytes after the end of the stream, 100,001 bytes unpacked, bytes that are not UTF-8, text that is not JSON, and JSON that is not an object; of a link with both `c` and `z`, in either order; of a `z` link in a browser without `DecompressionStream`, where a `c` link still opens; and of `participantParam` `"z"` |
+| `tests/setupfile.spec.js` | A link that names a setup file. The file is served through a route, and the fingerprint is computed in Node. A file with consent text and a question runs the form to a saved file. It is served with two-space indents and CR LF line endings. It is fetched once, with `cache: 'no-store'`, `credentials: 'omit'` and `referrerPolicy: 'no-referrer'`, and with no `Referer` header. A file of exactly 100,000 bytes is read. A file naming an unknown instrument gets the message its `c` link gets. Each fault is refused by name in "Details for the study team", and no form starts. The faults in the link are `setup` beside `c` or `z`, either parameter alone, and a bad `sha256`. A relative, an `http:` and a credentialed `setup` are refused too. The faults in the file are a failed fetch, HTTP 404 and 500, and 100,001 bytes. Bytes that are not UTF-8, text that is not JSON and JSON that is not an object follow. A fingerprint that differs is refused, and so is a browser without `crypto.subtle`, before any fetch. `participantParam` `"setup"` and `"sha256"` are refused |
+| `tests/link-setupfile.spec.js` | The builder's "Where the setup is kept" fieldset sits before "Make the link", with "In the study link" chosen. "In a file I host" shows the download and the address field. The download saves `setup.json` with two-space indents and a final newline. It saves a file of exactly 100,000 bytes and refuses one byte more, naming the size. It refuses a form "Make the link" refuses, and saves nothing then. "Make the link" refuses an empty, a relative, an `http:` and a credentialed address before any fetch. Naming the address, it refuses a failed fetch, HTTP 404 and 100,001 bytes. It also refuses bytes that are not UTF-8, text that is not JSON and JSON that is not an object. A file that does not match is refused too. A downloaded file served back makes the link, written by `URLSearchParams`. An address holding `&` and Prolific's ending are covered, and the online form opens the link. `link.html?setup=…&sha256=…` fills the form from a matching file and lists the address. It refuses each fault in the two parameters and fetches nothing. It refuses a file that fails to fetch, answers 404 or is over 100,000 bytes. A changed file leaves the form empty with an offer, and its button fills the form. No refusal holds a retired term |
 | `tests/link-consent.spec.js` | A link built with consent text opens a consent screen with the text's paragraphs. Consent text with CR LF, blank lines, a tab and non-ASCII text makes a `z` link carrying the box's text, which the page writes back line for line. With the consent fields empty the builder writes a `c` link, and with consent text a `z` link. `link.html?z=…` fills the consent boxes and the decline address, lists the address in the notice, and round-trips. The builder's refusals: a Consent or Declined box of white space, a Declined box or decline address beside an empty Consent box, a box over its limit or holding a lone surrogate half, and an `http://` decline address, with boxes at their limits building a link. `"z"` refused under "Another site", and `link.html` opened with both `c` and `z` or with a `z` that does not unpack refused by name |
 | `tests/questions.spec.js` | The refusal, naming the question's list and place, of each fault in a `questions` field: its shape, the 50-question limit, a question's keys, name, text, type and `required`, its options and their labels, and its `min` and `max`. The limits themselves are accepted |
 | `tests/question-screens.spec.js` | The before and after screens on the PID-5-BF: headings, numbers, "(required)", the buttons each screen carries, the order after consent, Back keeping both screens' answers, question text and option labels written as text and trimmed, the refusal of each required type left unanswered, the whole-number probes and range lines, a text holding a lone surrogate half, the unload guard counting a question's answer, and the numeric keypad asked for only when a number question's `min` is 0 or more |
@@ -948,7 +1026,7 @@ npx playwright test
 | `tests/instruments-row.spec.js` | The saved file and the webhook row of the HiTOP-BR then the PID-5-BF, each answered by its own pattern, with shuffle off and on, under Prolific and with questions: the space-joined `instrument` and `form_build` cells, one group of item columns per instrument in link order, each instrument's pages showing only its own items, one `item_order` group per instrument under shuffle, and the `q_` columns last. The same for three instruments under shuffle. The capture of `responses-multi-page-shuffled.csv` |
 | `tests/instruments-supabase.spec.js` | The builder's Supabase SQL for two instruments, byte for byte, against `supabase-hitopbr-pid5bf.sql` and `supabase-pid5bf-hitopbr-prolific-shuffle-questions.sql`. The keys of the rows posted to a web address and to a Supabase table under those two links, against the fixtures' columns |
 | `tests/link-instruments.spec.js` | The builder's instrument rows: one row at load, "Add an instrument" up to three rows, and Move up, Move down and Remove. One row writes `instrument`, and two or three write `instruments` in row order. The refusal of a repeated instrument, of two and of three PID-5 forms, and of a module against the list. Links of two and of three instruments built, opened at "Part 1 of N", and reloaded on the builder through `c` and `z` with the same rows. An opened link refused by name for each list fault the online form refuses, with the rows back at one HiTOP-SR row. Move up, Move down and Remove named from their visible text, and Remove disabled on a single row |
-| `tests/network.spec.js` | Without a web address or table, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle |
+| `tests/network.spec.js` | Without a web address or table, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle. A link that names a setup file, walked to a saved file, requests the page, `form.js`, the export and the setup file, each once |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
