@@ -44,8 +44,9 @@
 //   S15: the committed prolific capture (responses-hitopbr-prolific-shuffled.csv)
 //       has the S11 shape and agrees with its own item_order cell
 //   S16: with a complete address in the link and no store, the saved screen
-//       shows a link to the address after the file name, labelled by its
-//       host, and no request reaches the address within five seconds
+//       shows a link to the address after the file name, labelled "Continue
+//       to the next step of the study", and no request reaches the address
+//       within five seconds
 //   S17: without a prolific field, a real PROLIFIC_PID in the address of a
 //       link with no participant leaves the identifier field shown and empty
 //   S18: under prolific: true, an address carrying PROLIFIC_PID twice, once
@@ -56,16 +57,17 @@
 //       and filled-then-blank give the filled value, two filled values give
 //       the first
 //   S20: with complete and completeSaved in the link and no store, the saved
-//       screen's link after the file name is completeSaved, labelled by its
-//       host, and no request reaches either address within five seconds
+//       screen's link after the file name is completeSaved, with the same
+//       label as S16, and no request reaches either address within five
+//       seconds
 //   S21: on the HiTOP-BR walk's saved screen, the trail paragraph ends with
 //       "If the file did not appear, press Save the file.", one "Save the
 //       file" button follows it, and a first and a second click on it each
 //       save the file again with the Finish download's suggested file name
 //       and its bytes; the screen's order is the heading, the lead, the file name,
-//       the trail, the button, the version line, and with a complete address
-//       (the S16 walk) the completion link sits between the button and the
-//       version line
+//       the trail, the button, the status region, the closed study-team
+//       section, and with a complete address (the S16 walk) the completion
+//       link sits between the status region and that section
 //
 // Run with WRITE_FIXTURES=1 to rewrite the fixtures from a capture.
 // Walked for the full HiTOP-BR, the full HiTOP-SR, the shuffled module and
@@ -78,7 +80,7 @@ import path from 'node:path';
 import {
   useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
   expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
-  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder,
+  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder, CONTINUE,
 } from './helpers.mjs';
 import { readProlific } from '../form.js';
 
@@ -290,7 +292,7 @@ test('with a complete address and no store, the saved screen links to it after t
   await expect(page.locator('code.filename')).toHaveText(download.suggestedFilename());
   const link = page.locator('p.complete a');
   await expect(link).toHaveAttribute('href', COMPLETE_URL);
-  await expect(link).toHaveText('app.prolific.com');
+  await expect(link).toHaveText(CONTINUE);
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
   // S21: the trail sentence, and the whole screen's order, the button and
@@ -427,7 +429,7 @@ test('with complete and completeSaved and no store, the saved screen links to co
   const link = page.locator('p.complete a');
   await expect(link).toHaveCount(1);
   await expect(link).toHaveAttribute('href', COMPLETE_SAVED_URL);
-  await expect(link).toHaveText(new URL(COMPLETE_SAVED_URL).host);
+  await expect(link).toHaveText(CONTINUE);
   const order = await page.$$eval('code.filename, p.complete a', (nodes) => nodes.map((n) => n.tagName));
   expect(order).toEqual(['CODE', 'A']);
   // S21: the whole screen's order and the empty status region, as on the

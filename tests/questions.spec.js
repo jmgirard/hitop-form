@@ -26,7 +26,7 @@
 //       and a no-break space, which are not line breaks
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openForm } from './helpers.mjs';
+import { useTarget, openForm, refusalText } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -36,7 +36,7 @@ const CHOICE_Q = { name: 'colour', text: 'Pick one', type: 'choice', options: ['
 const NUMBER_Q = { name: 'age', text: 'Your age', type: 'number' };
 
 async function expectRefused(page, message) {
-  await expect(page.locator('[role=alert]')).toHaveText(message);
+  await expect(refusalText(page)).toHaveText(message);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Next' })).toHaveCount(0);
   await expect(page.locator('fieldset.item')).toHaveCount(0);

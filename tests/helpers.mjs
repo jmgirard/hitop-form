@@ -229,6 +229,15 @@ export async function openForm(page, base, config, { exportBody, exportJson, ext
   await page.goto(formUrl(base, config, extra, param));
 }
 
+// The words of every link to a completion address, which name no host.
+export const CONTINUE = 'Continue to the next step of the study';
+
+// The refusal's own text on an error screen, which sits in the screen's
+// closed "Details for the study team" section.
+export function refusalText(page) {
+  return page.locator('details.study-team .fault');
+}
+
 // Presses Begin on the start screen, entering a participant identifier first
 // when the screen asks for one.
 export async function begin(page, participant) {
@@ -388,9 +397,9 @@ export async function expectSaveAgain(page, download) {
 // the trail paragraph is seen: the heading, the lead paragraph, the file
 // name's paragraph, the trail paragraph, the button, the status region, the
 // completion link's paragraph when the link carries an address, then the
-// version line.
+// closed study-team section that holds the version line.
 export function savedScreenOrder({ complete = false } = {}) {
-  return ['H1', 'P.done', 'P>CODE.filename', 'P', 'BUTTON', 'P.saved-again', ...(complete ? ['P.complete'] : []), 'P.version'];
+  return ['H1', 'P.done', 'P>CODE.filename', 'P', 'BUTTON', 'P.saved-again', ...(complete ? ['P.complete'] : []), 'DETAILS.study-team'];
 }
 
 export function screenOrder(page) {

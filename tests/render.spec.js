@@ -15,8 +15,8 @@
 //       items order
 //   R6: the start screen's disclosure: without a store it says the answers
 //       are saved to this device and none is sent anywhere; with a store it
-//       names the store address's host as where the answers go and says the
-//       file is saved instead when the send cannot be confirmed
+//       says the answers are sent to the study team, names no host, and says
+//       the file is saved instead when the page gets no confirmation
 //   R7: a HiTOP-BR link with shuffle: true renders a rearrangement of the
 //       export's items, numbered 1 to 45 in the shown order, and two loads
 //       of the link render different orders
@@ -160,12 +160,13 @@ test('the start screen without a store says the answers are saved here and none 
   );
 });
 
-test('the start screen with a store names its host and the fallback', async ({ page }) => {
+test('the start screen with a store says the answers are sent, names no host, and states the fallback', async ({ page }) => {
   await openForm(page, base(), {
     instrument: 'hitopbr', study: 'render', participant: 'r6',
     store: { kind: 'webhook', url: 'https://script.google.com/macros/s/AKfycbxyz/exec' },
   });
   await expect(page.locator('p.muted')).toHaveText(
-    '45 items over 3 pages. When you finish, your answers are sent to the study team at script.google.com. If the send cannot be confirmed, they are saved as one file in this browser\'s downloads folder instead.',
+    '45 items over 3 pages. When you finish, your answers are sent to the study team. If the page gets no confirmation that they arrived, they are saved as one file on this device instead.',
   );
+  expect(await page.locator('main').innerText(), 'the shown text').not.toContain('script.google.com');
 });

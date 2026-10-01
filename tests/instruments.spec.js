@@ -21,7 +21,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, EXPORT_BASE,
+  useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, EXPORT_BASE, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -29,7 +29,7 @@ const base = useTarget();
 const LINK = { study: 'instruments', participant: 'i1' };
 
 async function expectRefused(page, message) {
-  await expect(page.locator('[role=alert]')).toHaveText(message);
+  await expect(refusalText(page)).toHaveText(message);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   await expect(page.locator('fieldset.item')).toHaveCount(0);
 }

@@ -40,7 +40,7 @@
 import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
-  exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig,
+  exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -118,7 +118,7 @@ for (const [label, storePath, extra, make] of [
     expect([...urls].sort(), 'before Finish').toEqual([...ownFiles('hitopbr')].sort());
     await nextButton(page).click();
     await expect(page.locator('h1')).toHaveText('Thank you');
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     expect([...urls].sort(), 'after Finish').toEqual([...ownFiles('hitopbr'), sent, ...extra()].sort());
   });
 }
@@ -201,6 +201,6 @@ test('N3: the altered-format refusal requests only its files and the export', as
   await openForm(page, base(), { instrument: 'hitopbr', study: 'net', participant: 'n3' }, {
     exportJson: { ...exp, format: '2.0' },
   });
-  await expect(page.locator('[role=alert]')).toContainText('format "2.0"');
+  await expect(refusalText(page)).toContainText('format "2.0"');
   expect([...urls].sort()).toEqual([...ownFiles('hitopbr')].sort());
 });

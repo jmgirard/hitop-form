@@ -21,8 +21,9 @@
 //
 // A link's `consent` field holds the researcher's consent text, which the
 // page shows on a screen of its own before the start screen, as plain text.
-// "I agree" goes on to the start screen. "I do not agree" shows a closing
-// screen and sends and saves nothing; `completeDeclined`, allowed only
+// "I agree" goes on to the start screen. "I do not agree" first asks once,
+// with "Yes, I do not agree" and "Go back". The confirming press shows a
+// closing screen and sends and saves nothing; `completeDeclined`, allowed only
 // beside `consent`, is an https:// address that screen then goes to, such as
 // a recruiting site's code for a participant who did not consent.
 //
@@ -183,9 +184,17 @@ export async function encodeLink(config) {
 // there, so a small link cannot make it inflate without end.
 export const MAX_LINK_BYTES = 100_000;
 
-// Whether this browser can read a `z` parameter.
+// Whether this browser can read a `z` parameter. Some older Chromium
+// releases have DecompressionStream without its deflate-raw format, so the
+// check builds one, and a constructor that throws means no.
 export function canInflate() {
-  return typeof DecompressionStream === 'function';
+  if (typeof DecompressionStream !== 'function') return false;
+  try {
+    new DecompressionStream('deflate-raw');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // A `z` parameter's config, or a throw through `bad` naming the fault: the
@@ -247,7 +256,10 @@ export async function decodeLink(search) {
   let config;
   if (z) {
     if (!canInflate()) {
-      throw new Error('This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.');
+      throw Object.assign(
+        new Error('This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.'),
+        { kind: 'browser' },
+      );
     }
     config = await inflateConfig(z, (why) => new Error(`The study link could not be read: it ${why}. Ask the study team for a new link.`));
   } else if (c) {
@@ -1177,7 +1189,10 @@ export async function fetchExport(instrument) {
   try {
     res = await fetch(url, { cache: 'no-store' });
   } catch {
-    throw new Error(`The instrument could not be fetched from ${url}. Check the connection and reload.`);
+    throw Object.assign(
+      new Error(`The instrument could not be fetched from ${url}. Check the connection and reload.`),
+      { kind: 'connection' },
+    );
   }
   if (!res.ok) {
     throw new Error(`The instrument could not be fetched from ${url} (HTTP ${res.status}).`);
@@ -1194,13 +1209,14 @@ export async function fetchExport(instrument) {
 // The exports of `stems`, fetched together, in the order of `stems`. When
 // one or more are refused, the refusal of the first in that order is
 // thrown. Under a list of two or more, its message opens with the
-// instrument's name, as "PID-5-BF: The instrument could not be fetched…".
+// instrument's name, as "PID-5-BF: The instrument could not be fetched…",
+// and keeps the refusal's `kind`.
 export async function fetchExports(stems) {
   const settled = await Promise.allSettled(stems.map((stem) => fetchExport(stem)));
   const failed = settled.findIndex((s) => s.status === 'rejected');
   if (failed >= 0) {
     const e = settled[failed].reason;
-    throw stems.length === 1 ? e : new Error(`${INSTRUMENTS[stems[failed]]}: ${e.message}`);
+    throw stems.length === 1 ? e : Object.assign(new Error(`${INSTRUMENTS[stems[failed]]}: ${e.message}`), { kind: e.kind });
   }
   return settled.map((s) => s.value);
 }
@@ -1481,11 +1497,27 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-function showError(root, message) {
+// The one sentence an error screen gives the participant, by the refusal's
+// `kind`: a fetch of an export that gets no answer can pass on a reload
+// (one the site answers with an error status cannot), and a browser
+// that cannot unpack a `z` link can be swapped for another. Any other
+// refusal is the study team's to fix.
+const NEXT_STEP = {
+  connection: 'Please check your internet connection, then reload this page.',
+  browser: 'Please open the study link in another browser, such as a current version of Chrome, Edge, Firefox or Safari.',
+};
+const CONTACT_STUDY_TEAM = 'Please contact the study team, and show them the details below.';
+
+// The error screen: the heading, the participant's sentence, and the
+// refusal's own text in the closed study-team section. `footer`, given
+// once the exports are loaded, follows the refusal there.
+function showError(root, e, footer = []) {
   root.replaceChildren(
-    el('h1', { text: 'This form cannot be shown' }),
-    el('p', { role: 'alert', text: message }),
+    heading('This form cannot be shown'),
+    el('p', { role: 'alert', text: NEXT_STEP[e.kind] ?? CONTACT_STUDY_TEAM }),
+    studyTeam([el('p', { class: 'fault', text: e.message }), ...footer]),
   );
+  focusHeading(root);
 }
 
 // Every screen is a full replacement of `root`, which drops keyboard focus
@@ -1500,6 +1532,13 @@ function focusHeading(root) {
   if (h) h.focus({ preventScroll: true });
 }
 
+// The closed section that ends a screen, for the study team rather than
+// the participant: a refusal's or a failed send's own text, and the version
+// lines.
+function studyTeam(children) {
+  return el('details', { class: 'study-team' }, [el('summary', { text: 'Details for the study team' }), ...children]);
+}
+
 // An export's version line. `title`, when given, opens it with the
 // instrument's name, for a screen that shows the lines of several exports.
 function versionLine(exp, title) {
@@ -1509,26 +1548,35 @@ function versionLine(exp, title) {
   });
 }
 
+// The version lines of a link's exports in a footer: the one export's
+// line, or under a list one line per export, each opening with its
+// instrument's name.
+function versionFooter(exps, stems) {
+  return el('footer', {}, exps.length > 1
+    ? exps.map((exp, k) => versionLine(exp, INSTRUMENTS[stems[k]]))
+    : [versionLine(exps[0])]);
+}
+
 export async function boot(root, search) {
   let config;
   try {
     config = await parseLink(search);
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e);
     return;
   }
   let exps;
   try {
     exps = await fetchExports(linkStems(config));
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e);
     return;
   }
   let plans;
   try {
     plans = planStems(config, exps);
   } catch (e) {
-    showError(root, e.message);
+    showError(root, e, [versionFooter(exps, linkStems(config))]);
     return;
   }
   // The three Prolific parameters are read from the address only under
@@ -1572,13 +1620,21 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   let finished = false;
   let sending = false;
   const store = config.store;
-  const storeHost = store ? new URL(store.url).host : null;
   const before = config.questions?.before ?? [];
   const after = config.questions?.after ?? [];
   // The answers to the researcher's questions, by name, as the screens hold
   // them: the typed string for `text` and `number`, the chosen position for
   // `choice` and the set of chosen positions for `multi`, each counted from 1.
   const questionAnswers = new Map();
+
+  // The closed study-team section that ends each screen: `first`, when
+  // given, then the version lines of every export of the link.
+  const foot = (...first) => studyTeam([...first, versionFooter(exps, linkStems(config))]);
+
+  // A link to a completion address, with the same words whichever address
+  // it is, so no screen shows a host name outside its closed study-team
+  // section.
+  const completeLink = (address) => el('a', { href: address, text: 'Continue to the next step of the study' });
 
   // A reload or a back gesture would lose every answer, since they live only
   // in memory until Finish writes the file. The browser asks first.
@@ -1595,8 +1651,29 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const { exp, plan, title, pageCount } = parts[k];
     const alert = el('p', { role: 'alert' });
     const askParticipant = k === 0 && participant === undefined;
+    // A phone keyboard would capitalize, correct or underline an
+    // identifier, which is a code and not a word, so the input asks it
+    // not to. Enter in the input runs Begin's checks.
     const input = askParticipant
-      ? el('input', { type: 'text', name: 'participant', autocomplete: 'off', required: '' })
+      ? el('input', {
+          type: 'text',
+          id: 'participant',
+          name: 'participant',
+          autocomplete: 'off',
+          autocapitalize: 'off',
+          autocorrect: 'off',
+          spellcheck: 'false',
+          'aria-describedby': 'participant-hint',
+          required: '',
+          onkeydown: (ev) => {
+            // Only isComposing is read. Some phone keyboards send keyCode
+            // 229 for a plain Enter, so that code is not a sign of composing.
+            if (ev.key === 'Enter' && !ev.isComposing) {
+              ev.preventDefault();
+              begin();
+            }
+          },
+        })
       : null;
     const begin = () => {
       if (askParticipant) {
@@ -1619,19 +1696,23 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     };
     const counts = `${plan.shown.length} items over ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}.`;
     const where = store
-      ? `When you finish, your answers are sent to the study team at ${storeHost}. If the send cannot be confirmed, they are saved as one file in this browser's downloads folder instead.`
+      ? 'When you finish, your answers are sent to the study team. If the page gets no confirmation that they arrived, they are saved as one file on this device instead.'
       : 'Your answers are saved to this device as one file when you finish. No answer is sent anywhere.';
     root.replaceChildren(
       heading(title),
-      versionLine(exp),
       ...(multi ? [el('p', { class: 'part', text: `Part ${k + 1} of ${parts.length}` })] : []),
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
       el('p', { class: 'muted', text: k === 0 ? `${counts} ${where}` : counts }),
       ...(askParticipant
-        ? [el('label', { class: 'field' }, ['Participant identifier', input])]
+        ? [el('div', { class: 'field' }, [
+            el('label', { for: 'participant', text: 'Participant identifier' }),
+            el('p', { class: 'hint', id: 'participant-hint', text: 'Type your participant identifier exactly as you received it.' }),
+            input,
+          ])]
         : []),
       alert,
       el('div', { class: 'nav' }, [el('button', { type: 'button', text: 'Begin', onclick: begin })]),
+      foot(),
     );
     window.scrollTo(0, 0);
     if (input) input.focus();
@@ -1646,18 +1727,38 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   }
 
   // The consent screen, before the start screen under a link with
-  // `consent`. It holds the researcher's text and the two buttons, and no
-  // item, option or instruction of the instrument.
+  // `consent`. It holds the researcher's text, the two buttons and the
+  // closed study-team section with the version lines, and no item, option
+  // or instruction of the instrument.
+  //
+  // "I do not agree" asks once before it declines: the two buttons give
+  // way to a question with "Yes, I do not agree" and "Go back", the consent
+  // text staying above it, and focus moves to the question. "Go back"
+  // draws the consent screen again.
   function showConsent() {
+    const nav = el('div', { class: 'nav' }, [
+      el('button', { type: 'button', text: 'I agree', onclick: proceed }),
+      el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: () => confirmDecline(nav) }),
+    ]);
     root.replaceChildren(
       heading('Consent to take part'),
       el('div', { class: 'consent' }, textNodes(config.consent.text)),
-      el('div', { class: 'nav' }, [
-        el('button', { type: 'button', text: 'I agree', onclick: proceed }),
-        el('button', { type: 'button', class: 'secondary', text: 'I do not agree', onclick: decline }),
-      ]),
+      nav,
+      foot(),
     );
     focusHeading(root);
+  }
+
+  function confirmDecline(nav) {
+    const question = el('p', { class: 'confirm-question', id: 'confirm-question', tabindex: '-1', text: 'Are you sure you do not agree to take part?' });
+    nav.replaceWith(el('div', { class: 'confirm', role: 'group', 'aria-labelledby': 'confirm-question' }, [
+      question,
+      el('div', { class: 'nav' }, [
+        el('button', { type: 'button', class: 'secondary', text: 'Yes, I do not agree', onclick: decline }),
+        el('button', { type: 'button', text: 'Go back', onclick: showConsent }),
+      ]),
+    ]));
+    question.focus();
   }
 
   // "I do not agree": the declined screen, with nothing sent or saved and no
@@ -1677,9 +1778,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     root.replaceChildren(
       heading('Thank you'),
       el('div', { class: 'declined' }, text),
-      ...(address === undefined
-        ? []
-        : [el('p', { class: 'complete' }, ['Continue to ', el('a', { href: address, text: new URL(address).host }), '.'])]),
+      ...(address === undefined ? [] : [el('p', { class: 'complete' }, [completeLink(address)])]),
+      foot(),
     );
     focusHeading(root);
     if (address !== undefined) window.location.assign(address);
@@ -1799,7 +1899,9 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
             },
           }),
         ]);
-    root.replaceChildren(heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, nav);
+    root.replaceChildren(
+      heading(list === 'before' ? 'Before you begin' : 'Before you finish'), ...nodes, alert, ...sendingLine(list === 'after'), nav, foot(),
+    );
     window.scrollTo(0, 0);
     focusHeading(root);
   }
@@ -1850,27 +1952,80 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // Page `page` of part `part`. Its first page carries no Back. Past its
   // last page come the next part's start screen, then the after screen when
   // the link has one, and Finish on the last page of the last part
-  // otherwise.
+  // otherwise. The page and, under a list, the part are stated above the
+  // items and again beside the forward button; the instrument's
+  // instructions sit in a closed section above the items.
+  //
+  // Next or Finish with items unanswered marks each one with "Please answer
+  // this item", inside it and named by its aria-describedby, and puts the
+  // count of them in an alert directly above the first, which the page
+  // scrolls to. Answering an item takes its mark away and lowers the count,
+  // and the alert is emptied once no mark is left. The alert is drawn empty
+  // above the items. A press empties and moves it, and writes its text two
+  // frames later, so a frame is drawn with the empty alert in its new place
+  // before the text arrives. An answer writes it only when the number
+  // changes, so the alert's text changes for a new count and not for each
+  // choice.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
     const first = page * PAGE_SIZE;
     const slice = p.plan.shown.slice(first, first + PAGE_SIZE);
-    const alert = el('p', { role: 'alert' });
+    const count = el('p', { role: 'alert', class: 'missed-count' });
     const nodes = slice.map((it, i) => itemNode(p, it, first + i + 1));
     const last = page === pageCount - 1;
     const lastPart = part === parts.length - 1;
+    const partText = `Part ${part + 1} of ${parts.length}`;
+    const pageText = `Page ${page + 1} of ${pageCount}`;
+
+    const unmark = (node) => {
+      node.querySelector('.missed')?.remove();
+      node.removeAttribute('aria-describedby');
+    };
+    const countText = (n) => {
+      if (n === 0) return '';
+      return n === 1 ? '1 item on this page has no answer yet.' : `${n} items on this page have no answer yet.`;
+    };
+    const writeCount = (n) => {
+      if (count.textContent !== countText(n)) count.textContent = countText(n);
+    };
+    const missedNow = () => nodes.filter((n) => n.classList.contains('unanswered')).length;
+    // A press's text, written after the frames below; a later press or an
+    // answer in between replaces it.
+    let pendingWrite = 0;
+    // itemNode's own handler has already taken `unanswered` off the item.
+    nodes.forEach((node) => node.addEventListener('change', () => {
+      unmark(node);
+      pendingWrite += 1;
+      writeCount(missedNow());
+    }));
 
     const advance = () => {
       if (sending) return;
-      const missing = slice.findIndex((it) => !answers.has(it.number));
-      if (missing >= 0) {
-        nodes.forEach((n, i) => n.classList.toggle('unanswered', !answers.has(slice[i].number)));
-        // Both numbers: the one printed beside the item, and its place on
-        // this page.
-        alert.textContent = `Please answer item ${first + missing + 1} (item ${missing + 1} on this page) before continuing.`;
-        nodes[missing].scrollIntoView({ block: 'center' });
-        nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
+      const missed = nodes.filter((n, i) => !answers.has(slice[i].number));
+      if (missed.length > 0) {
+        nodes.forEach((n, i) => {
+          unmark(n);
+          n.classList.toggle('unanswered', !answers.has(slice[i].number));
+        });
+        for (const n of missed) {
+          const id = `missed-${n.dataset.number}`;
+          n.querySelector('legend').after(el('p', { class: 'missed', id, text: 'Please answer this item' }));
+          n.setAttribute('aria-describedby', id);
+        }
+        // Emptied before it moves. Its text is written in the second frame
+        // after the press, since a callback of the first runs before that
+        // frame is drawn. The number is counted then, so an answer in
+        // between is not undone.
+        count.textContent = '';
+        missed[0].before(count);
+        count.scrollIntoView({ block: 'start' });
+        missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });
+        pendingWrite += 1;
+        const write = pendingWrite;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (write === pendingWrite && count.isConnected) writeCount(missedNow());
+        }));
         return;
       }
       if (last && !lastPart) start(part + 1);
@@ -1889,18 +2044,39 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const nav = el('div', { class: 'nav' }, [
       ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
       el('span', { class: 'spacer' }),
-      el('button', { type: 'button', text: last && lastPart && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
+      // One group, so a narrow screen that wraps the row keeps the line
+      // beside the button.
+      el('div', { class: 'forward' }, [
+        el('span', { class: 'step', text: multi ? `${partText} · ${pageText}` : pageText }),
+        el('button', { type: 'button', text: last && lastPart && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
+      ]),
     ]);
 
     root.replaceChildren(
       heading(p.title),
-      el('p', { class: 'progress', text: `Page ${page + 1} of ${pageCount}` }),
+      el('p', { class: 'where' }, [
+        ...(multi ? [el('span', { class: 'part-of', text: partText }), ' · '] : []),
+        el('span', { class: 'progress', text: pageText }),
+      ]),
+      el('details', { class: 'reminder' }, [
+        el('summary', { text: 'Instructions' }),
+        el('p', { text: p.exp.instructions.start }),
+      ]),
+      count,
       ...nodes,
-      alert,
+      ...sendingLine(last && lastPart && after.length === 0),
       nav,
+      foot(),
     );
     window.scrollTo(0, 0);
     focusHeading(root);
+  }
+
+  // The status line drawn empty above the buttons of a screen whose Finish
+  // sends, which finish() fills while the send runs; nothing on a screen
+  // without Finish or without a store.
+  function sendingLine(hasFinish) {
+    return hasFinish && store ? [el('p', { class: 'sending', role: 'status' })] : [];
   }
 
   // Finish is pressed. With no store: the file, then the saved screen. With
@@ -1939,17 +2115,26 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     };
     if (!store) {
       finished = true;
-      showSaved(
-        saveCsv(record),
-        'Your responses were saved to this device as one file, in the folder your browser uses for downloads:',
-        'Please send that file to the study team the way they asked. No answer was sent from this page.',
-      );
+      showSaved(saveCsv(record), {
+        lead: 'Your answers were saved to this device as one file, in the folder your browser uses for downloads:',
+        trail: 'Please send that file to the study team the way they asked. No answer was sent from this page.',
+      });
       return;
     }
     sending = true;
-    const finishButton = nav.querySelector('button:last-of-type');
-    for (const b of nav.querySelectorAll('button')) b.disabled = true;
+    // Finish is the nav's last button, on an item page (inside its forward
+    // group) and on "Before you finish" alike.
+    const buttons = nav.querySelectorAll('button');
+    const finishButton = buttons[buttons.length - 1];
+    for (const b of buttons) b.disabled = true;
     finishButton.textContent = 'Sending…';
+    // The empty status line sendingLine() put above the buttons gets its
+    // text for the length of the send, which can take up to
+    // SEND_TIMEOUT_MS. Screen readers generally announce a status region
+    // when its text changes, and not always when it arrives with its text.
+    // A screen without the line still sends.
+    const line = root.querySelector('p.sending');
+    if (line) line.textContent = 'Sending your answers. Please keep this page open.';
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;
     finished = true;
@@ -1963,25 +2148,24 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       // the sent screen rather than a disabled form.
       root.replaceChildren(
         heading('Thank you'),
-        el('p', { class: 'done', text: 'Your responses were sent to the study team.' }),
+        el('p', { class: 'done', text: 'Your answers were sent to the study team.' }),
         complete === undefined
           ? el('p', { text: 'You can close this page.' })
-          : el('p', { class: 'complete' }, [
-              'Continue to ',
-              el('a', { href: complete, text: new URL(complete).host }),
-              '.',
-            ]),
-        ...versionLines(),
+          : el('p', { class: 'complete' }, [completeLink(complete)]),
+        foot(),
       );
       focusHeading(root);
       if (complete !== undefined) window.location.assign(complete);
       return;
     }
-    showSaved(
-      saveCsv(record),
-      `The send to the study team could not be confirmed (${outcome.why}). Your responses were saved instead as one file, in the folder your browser uses for downloads:`,
-      'Please send that file to the study team the way they asked.',
-    );
+    // The send may still have reached the store, after the wait or with an
+    // answer that was no confirmation, so the lead says what the page knows.
+    showSaved(saveCsv(record), {
+      title: 'Your answers were not sent',
+      lead: 'This page got no confirmation that your answers reached the study team. They were saved on this device instead, as one file in the folder your browser uses for downloads:',
+      trail: 'This file holds your answers. Please send it to the study team the way they asked.',
+      fault: `The send was not confirmed: ${outcome.why}.`,
+    });
   }
 
   // Saves the file and returns its name and text, so the saved screen's
@@ -1995,7 +2179,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
 
   // A saved file must be seen before the participant leaves, so with a
   // completion address the saved screens offer it as a link after the file
-  // name, labelled by its host, and navigate nowhere on their own. The
+  // name, and navigate nowhere on their own. The
   // address is `completeSaved` when the link carries one, else `complete`,
   // each `{participant}` in it filled with the identifier.
   // The trail paragraph ends by naming the "Save the file" button below it,
@@ -2004,38 +2188,31 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // the first press; each press rewrites it with the same sentence, and
   // `role="status"` marks the write for a screen reader to announce. Focus
   // is not moved, so after a keyboard press it stays on the button.
-  function showSaved({ name, text }, lead, trail) {
+  // `title` is the heading, "Thank you" unless given. `fault`, after a send
+  // that was not confirmed, is the send's own fault, shown only in the
+  // closed study-team section.
+  function showSaved({ name, text }, { title = 'Thank you', lead, trail, fault }) {
     const given = config.completeSaved ?? config.complete;
     const address = given === undefined ? undefined : fillParticipant(given, participant);
     const complete = address === undefined
       ? []
-      : [el('p', { class: 'complete' }, [
-          'Then continue to ',
-          el('a', { href: address, text: new URL(address).host }),
-          '.',
-        ])];
+      : [el('p', { class: 'complete' }, [completeLink(address), ' once you have the file.'])];
     const status = el('p', { class: 'saved-again', role: 'status' });
     const saveAgain = () => {
       saveFile(name, text);
       status.textContent = 'The file was saved again.';
     };
     root.replaceChildren(
-      heading('Thank you'),
+      heading(title),
       el('p', { class: 'done', text: lead }),
       el('p', {}, [el('code', { class: 'filename', text: name })]),
       el('p', { text: `${trail} If the file did not appear, press Save the file.` }),
       el('button', { type: 'button', text: 'Save the file', onclick: saveAgain }),
       status,
       ...complete,
-      ...versionLines(),
+      fault === undefined ? foot() : foot(el('p', { class: 'fault', text: fault })),
     );
     focusHeading(root);
-  }
-
-  // The version lines of the closing screens: the one export's line, or
-  // under a list one line per export, each opening with its instrument.
-  function versionLines() {
-    return multi ? parts.map((p) => versionLine(p.exp, p.title)) : [versionLine(parts[0].exp)];
   }
 
   if (config.consent !== undefined) showConsent();

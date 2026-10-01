@@ -536,10 +536,10 @@ test('a link built with the address set opens a form whose Finish posts to it', 
 
   const from = store().requests.length;
   await page.goto(href);
-  await expect(page.locator('p.muted')).toContainText(`sent to the study team at ${new URL(address).host}.`);
+  await expect(page.locator('p.muted')).toContainText('When you finish, your answers are sent to the study team.');
   await begin(page);
   const seen = await walkAll(page);
-  await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+  await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
   const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
   expect(sent.map((r) => r.path)).toEqual(['/record']);
   const row = JSON.parse(sent[0].body);

@@ -8,7 +8,8 @@
 //       in the list's order is named
 //   W3: a walk of two instruments (HiTOP-BR, PID-5-BF) and of three
 //       (PID-5-BF, a HiTOP-SR module, HiTOP-BR): each instrument has its own
-//       start screen with its title, its version line, "Part n of N", its
+//       start screen with its title, the version lines of every instrument
+//       in its study-team section, "Part n of N", its
 //       instructions and its own item and page counts, then its item pages.
 //       Positions and page labels count within each instrument, and the
 //       first page of each carries no Back. With no participant in the link,
@@ -27,7 +28,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, readDescriptor, chosenIndexFor, PAGE_SIZE,
+  useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, readDescriptor, chosenIndexFor, PAGE_SIZE, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -50,7 +51,9 @@ async function walkPart(page, { k, stems, exps, module, participant }) {
   const count = shownNumbers(exp, module).length;
   const pages = Math.ceil(count / PAGE_SIZE);
   await expect(page.locator('h1')).toHaveText(TITLES[stems[k]]);
-  await expect(page.locator('.version')).toHaveText(`Form build ${exp.buildDate} · ${exp.package} ${exp.packageVersion}`);
+  await expect(page.locator('details.study-team > footer .version')).toHaveText(
+    exps.map((e, j) => `${TITLES[stems[j]]} form build ${e.buildDate} · ${e.package} ${e.packageVersion}`),
+  );
   await expect(page.locator('.part')).toHaveText(`Part ${k + 1} of ${stems.length}`);
   await expect(page.locator('.start')).toHaveText(exp.instructions.start);
   const counts = `${count} items over ${pages} ${pages === 1 ? 'page' : 'pages'}.`;
@@ -93,7 +96,7 @@ test('the page fetches every export of the list before it shows its first screen
 test('a missing export in a list is refused naming its instrument', async ({ page }) => {
   await page.route(exportUrl('pid5bf'), (route) => route.fulfill({ status: 404, body: 'not here' }));
   await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 404).`);
+  await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 404).`);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -103,7 +106,7 @@ test('an export of another format in a list is refused naming its instrument', a
     status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
   }));
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopbr'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText('HiTOP-BR: The online form reads format "1.0" of the instrument export and found format "2.0".');
+  await expect(refusalText(page)).toHaveText('HiTOP-BR: The online form reads format "1.0" of the instrument export and found format "2.0".');
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
 });
 
@@ -112,7 +115,7 @@ test('with two exports refused, the first in the list is named', async ({ page }
     await page.route(exportUrl(stem), (route) => route.fulfill({ status: 500, body: 'down' }));
   }
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopsr', 'hitopbr'], study: 'walk', participant: 'w2' }));
-  await expect(page.locator('[role=alert]')).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 500).`);
+  await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 500).`);
 });
 
 // W3, W4

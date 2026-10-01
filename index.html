@@ -65,7 +65,18 @@
   h1 { font-size: var(--t-h1); line-height: 1.2; margin: 0 0 var(--s2); }
   p { margin: 0 0 var(--s4); }
   .muted { color: var(--muted); font-size: var(--t-small); }
-  .version { font-family: var(--mono); font-size: var(--t-small); color: var(--muted); }
+  .version { font-family: var(--mono); font-size: var(--t-small); color: var(--muted); margin: 0 0 var(--s2); }
+
+  /* The closed section that ends every screen: what the study team needs
+     and the participant can skip. */
+  details.study-team {
+    margin-top: var(--s7);
+    color: var(--muted);
+    font-size: var(--t-small);
+  }
+  details.study-team summary { cursor: pointer; padding: var(--s1) 0; }
+  details.study-team[open] summary { margin-bottom: var(--s2); }
+  details.study-team .fault { overflow-wrap: anywhere; }
 
   .instructions {
     background: var(--surface);
@@ -99,8 +110,11 @@
   fieldset.item .options { clear: both; }
   fieldset.item legend .pos { color: var(--muted); font-weight: 400; margin-right: var(--s2); }
   .options { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-top: var(--s2); }
+  /* Each option's label, which holds its radio and its text, is the
+     target a finger presses: at least 44px high. */
   .options label {
     display: inline-flex; align-items: center; gap: var(--s2);
+    min-height: 44px;
     padding: var(--s1) var(--s2);
     border-radius: var(--r1);
     cursor: pointer;
@@ -132,8 +146,10 @@
     background: var(--bg); color: var(--fg);
   }
 
-  label.field { display: block; margin: 0 0 var(--s4); font-weight: 600; }
-  label.field input {
+  .field { margin: 0 0 var(--s4); }
+  .field label { display: block; font-weight: 600; }
+  .field .hint { color: var(--muted); font-size: var(--t-small); margin: var(--s1) 0 0; }
+  .field input {
     display: block; width: 100%; margin-top: var(--s1);
     font: inherit; padding: var(--s2) var(--s3);
     border: 1px solid var(--line-strong); border-radius: var(--r1);
@@ -151,7 +167,7 @@
     cursor: pointer;
   }
   button.secondary { background: var(--bg); color: var(--accent); }
-  button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
   [role="alert"] {
     background: var(--error-bg); color: var(--error);
@@ -164,7 +180,42 @@
   /* The status region under "Save the file" stays in the accessibility tree
      while empty (never display: none), but adds no space before a press. */
   .saved-again:empty { margin: 0; }
-  .progress { color: var(--muted); font-size: var(--t-small); margin: 0 0 var(--s4); }
+  /* "Part k of m · Page p of n" above the items, and again beside the
+     forward button. */
+  .where { color: var(--muted); font-size: var(--t-small); margin: 0 0 var(--s3); }
+  .nav { flex-wrap: wrap; }
+  .nav .forward { display: flex; align-items: center; gap: var(--s3); margin-left: auto; }
+  .nav .step { color: var(--muted); font-size: var(--t-small); white-space: nowrap; }
+
+  /* The instrument's instructions, closed above the items. */
+  details.reminder {
+    border: 1px solid var(--line);
+    border-radius: var(--r1);
+    background: var(--surface);
+    padding: var(--s2) var(--s4);
+    margin: 0 0 var(--s4);
+  }
+  details.reminder summary { cursor: pointer; font-weight: 600; }
+  details.reminder[open] summary { margin-bottom: var(--s2); }
+  details.reminder p { margin: 0; }
+
+  /* The question "I do not agree" asks, in place of the consent buttons. */
+  .confirm { margin-top: var(--s5); }
+  .confirm .confirm-question { font-weight: 600; margin: 0; }
+  .confirm .nav { margin-top: var(--s3); }
+  /* The line above the buttons while a send runs. It is drawn empty with
+     the screen, so it takes no room until the send. */
+  .sending { font-weight: 600; margin: var(--s4) 0 0; }
+  .sending:empty { margin: 0; }
+
+  /* The "Please answer this item" mark inside an item left unanswered at
+     Next or Finish. The count above the first is styled as an alert. It is
+     drawn empty with the page and, like the status region above, stays in
+     the accessibility tree while empty (never display: none) but takes no
+     room. The role in its selector makes it outrank the general empty
+     alert rule above, wherever the two sit. */
+  fieldset .missed { clear: both; color: var(--error); font-weight: 600; margin: 0 0 var(--s2); }
+  [role="alert"].missed-count:empty { display: block; padding: 0; border: 0; margin: 0; }
   /* "Part 2 of 3" on a start screen under a link with several instruments. */
   .part { font-weight: 600; margin: 0 0 var(--s4); }
   code { font-family: var(--mono); font-size: .95em; }

@@ -26,6 +26,8 @@
 // "I do not agree", under no store, a webhook store and a Supabase store,
 // each with `complete` set:
 //
+//   (each decline is "I do not agree", then "Yes, I do not agree"; P6 in
+//   screens.spec.js covers the question between them)
 //   C5: the declined screen shows the link's declined text split as C4
 //       splits, or the fixed sentence when there is none; it holds no
 //       button and no link; for 2 seconds after the press the store logs no
@@ -47,7 +49,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
-  leadColumns,
+  leadColumns, refusalText, CONTINUE,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -59,7 +61,7 @@ const LINK = { instrument: 'hitopbr', study: 'consent', participant: 'c1' };
 const PROLIFIC_DECLINED = 'https://app.prolific.com/submissions/complete?cc=NOCONSENT';
 
 async function expectRefused(page, message) {
-  await expect(page.locator('[role=alert]')).toHaveText(message);
+  await expect(refusalText(page)).toHaveText(message);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'I agree' })).toHaveCount(0);
   await expect(page.locator('fieldset.item')).toHaveCount(0);
@@ -172,8 +174,9 @@ const STORES = {
   'a Supabase store': () => ({ store: supabase(store()) }),
 };
 
-// Presses "I do not agree" and watches for 2 seconds: the requests the page
-// makes, the store's log, downloads and the address. Returns what was seen.
+// Presses "I do not agree", then "Yes, I do not agree", and watches for 2
+// seconds: the requests the page makes, the store's log, downloads and the
+// address. Returns what was seen.
 async function declineAndWatch(page) {
   const requests = [];
   let downloads = 0;
@@ -181,7 +184,8 @@ async function declineAndWatch(page) {
   page.on('download', () => { downloads += 1; });
   const logged = store().requests.length;
   const before = page.url();
-  await page.getByRole('button', { name: 'I do not agree' }).click();
+  await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
+  await page.getByRole('button', { name: 'Yes, I do not agree' }).click();
   await page.waitForTimeout(2000);
   return { requests, downloads, logged: store().requests.length - logged, before };
 }
@@ -254,17 +258,17 @@ const DECLINED_CASES = [
   {
     name: 'a Prolific-shaped address with its cc code',
     fields: { ...LINK, completeDeclined: PROLIFIC_NO_CONSENT },
-    extra: '', reached: PROLIFIC_NO_CONSENT, host: 'app.prolific.com',
+    extra: '', reached: PROLIFIC_NO_CONSENT,
   },
   {
     name: 'a SONA-shaped address, the identifier from the address',
     fields: { instrument: 'hitopbr', study: 'consent', participantParam: 'id', completeDeclined: SONA_DECLINED },
-    extra: '&id=a%26b%20c', reached: SONA_FILLED_ABC, host: 'yourschool.sona-systems.com',
+    extra: '&id=a%26b%20c', reached: SONA_FILLED_ABC,
   },
   {
     name: 'a SONA-shaped address, with no identifier',
     fields: { instrument: 'hitopbr', study: 'consent', participantParam: 'id', completeDeclined: SONA_DECLINED },
-    extra: '', reached: SONA_FILLED_EMPTY, host: 'yourschool.sona-systems.com',
+    extra: '', reached: SONA_FILLED_EMPTY,
   },
 ];
 
@@ -281,14 +285,15 @@ for (const c of DECLINED_CASES) {
         let downloads = 0;
         page.on('download', () => { downloads += 1; });
         const logged = store().requests.length;
-        // The press navigates at once, and the navigation is held, so the
-        // click does not wait for it.
-        await page.getByRole('button', { name: 'I do not agree' }).click({ noWaitAfter: true });
+        // The confirming press navigates at once, and the navigation is
+        // held, so the click does not wait for it.
+        await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
+        await page.getByRole('button', { name: 'Yes, I do not agree' }).click({ noWaitAfter: true });
         await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
         expect(states.at(-1), 'the declined screen at the request').toEqual({
           h1: 'Thank you',
           declined: declined ? DECLINED_PARAGRAPHS : ['You chose not to take part.'],
-          links: [[c.reached, c.host]],
+          links: [[c.reached, CONTINUE]],
         });
         release();
         await expect(page).toHaveURL(c.reached);
@@ -333,7 +338,7 @@ for (const shuffle of [false, true]) {
     for (const consent of [{ consent: { text: TEXT } }, {}]) {
       const from = store().requests.length;
       await walkLink(page, { ...LINK, ...extra, ...consent, store: webhook(store()) });
-      await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+      await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
       const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
       expect(sent.length).toBe(1);
       rows.push(JSON.parse(sent[0].body));

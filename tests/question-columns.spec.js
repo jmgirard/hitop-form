@@ -112,7 +112,7 @@ for (const w of [
     await begin(page);
     await walkAll(page);
     await page.getByRole('button', { name: 'Finish', exact: true }).click();
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
     expect(sent.map((r) => r.path)).toEqual([w.path]);
     const row = JSON.parse(sent[0].body);
@@ -144,7 +144,7 @@ for (const mode of MODES) {
       { extra: mode.extra },
     );
     await walk(page);
-    await expect(page.locator('.done')).toHaveText('Your responses were sent to the study team.');
+    await expect(page.locator('.done')).toHaveText('Your answers were sent to the study team.');
     const sent = store().requests.slice(from).filter((r) => r.method === 'POST');
     expect(sent).toHaveLength(1);
     const row = JSON.parse(sent[0].body);
