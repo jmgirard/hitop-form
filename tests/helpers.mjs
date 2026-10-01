@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { serveDir, serveStore } from './serve.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -82,6 +83,68 @@ export function decodeLinkParam(href) {
   const params = new URL(href).searchParams;
   if (params.has('z')) return JSON.parse(inflateRawSync(Buffer.from(params.get('z'), 'base64url')).toString('utf8'));
   return JSON.parse(Buffer.from(params.get('c'), 'base64url').toString('utf8'));
+}
+
+// The retired terms, stated here as the naming decision lists them: six
+// case-insensitive patterns, four more, and two fixed strings. The Study
+// Link Builder's text and its refusals hold none of them.
+export const RETIRED = [
+  /\bdescriptor\b/i, /\bscoring file\b/i, /\bbundle\b/i, /\bendpoint\b/i, /\bstores?\b/i, /\bcompressed\b/i,
+  /\b(hitop-form )?form page\b/i, /(?<!study )\blink builder\b/i, /\b[cz] parameter\b/i, /\$\{[^}]*\} parameter/i,
+  '?c=', '?z=',
+];
+
+// The terms of RETIRED that `s` holds.
+export function retiredIn(s) {
+  return RETIRED.filter((term) => (typeof term === 'string' ? s.includes(term) : term.test(s)));
+}
+
+// The fingerprint a setup file's link carries, computed here with Node's
+// crypto rather than the browser's crypto.subtle that form.js uses: the
+// SHA-256 of the UTF-8 bytes of JSON.stringify of the parsed setup, as
+// base64url without padding.
+export function setupFingerprint(setup) {
+  return createHash('sha256').update(JSON.stringify(setup), 'utf8').digest('base64url');
+}
+
+// The address the setup-file tests name. Nothing is served there: the
+// tests answer it through a route, inside the browser.
+export const SETUP_URL = 'https://setup.example.org/study/setup.json';
+
+// The page's limit on fetching a setup file, stated here rather than read
+// from form.js.
+export const SETUP_TIMEOUT_MS = 30 * 1000;
+
+// Answers `url` through a route with `body` (a string or bytes) and
+// `status`, letting other sites read it. It aborts the request when
+// `abort` is true, as a fetch that gets no answer, and never answers it
+// when `hang` is true, as a host that keeps the request open. Returns the
+// requests that reached the route, each as its method and address, with
+// its headers as a property that toEqual() does not compare.
+export async function serveSetup(page, body, { url = SETUP_URL, status = 200, abort = false, hang = false } = {}) {
+  const requests = [];
+  await page.route(url, (route) => {
+    const request = { method: route.request().method(), url: route.request().url() };
+    Object.defineProperty(request, 'headers', { value: route.request().headers() });
+    requests.push(request);
+    if (hang) return undefined;
+    if (abort) return route.abort('connectionrefused');
+    return route.fulfill({
+      status,
+      headers: { 'access-control-allow-origin': '*', 'content-type': 'text/plain; charset=utf-8' },
+      body: typeof body === 'string' ? body : Buffer.from(body),
+    });
+  });
+  return requests;
+}
+
+// The query of a setup-file link, written by URLSearchParams. A field given
+// as null is left out.
+export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
+  const q = new URLSearchParams();
+  if (setup !== null) q.set('setup', setup);
+  if (sha256 !== null && sha256 !== undefined) q.set('sha256', sha256);
+  return q.toString();
 }
 
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a

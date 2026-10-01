@@ -10,14 +10,23 @@
 // posts the responses as one JSON row to the store the link names or, with
 // no store, saves them as one CSV to the participant's device. With no
 // store, no answer is transmitted: the only network requests after the
-// page's own files are the export fetches, besides the move to a
-// completion address when the link names one. With a store, the requests
+// page's own files are the setup file's fetch when the link names one and
+// the export fetches, besides the move to a completion address when the
+// link names one. With a store, the requests
 // after Finish are the POST to its address, any redirect a webhook answers
 // with, and the OPTIONS preflight the browser sends before a supabase
 // insert; the CSV is saved only when that send is
 // not confirmed. (The link's own contents, study, participant, module, store
 // and consent text, are in the page's address, which the host serving the
 // page sees.)
+//
+// A link can instead name a setup file: `setup`, the https:// address of a
+// JSON file holding those contents, and `sha256`, their fingerprint. The
+// page then makes one more request, for that file, before the export
+// fetches, and its host sees that request. The page's address then holds
+// the file's address and fingerprint in place of the contents, and anyone
+// can read the contents in the file on a public host. See "A setup file"
+// below.
 //
 // A link's `consent` field holds the researcher's consent text, which the
 // page shows on a screen of its own before the start screen, as plain text.
@@ -243,11 +252,176 @@ export async function inflateConfig(z, bad) {
   }
 }
 
-// Reads the link's `c` or `z` parameter into the object it encodes, or
-// throws with a message the participant can pass on to the study team. A
-// link with both is refused, since the two could hold different forms.
+// ---- A setup file ---------------------------------------------------------
+
+// A link can name its setup in place of carrying it: `setup` is the
+// absolute https:// address of a JSON file holding the setup, and `sha256`
+// is the setup's fingerprint. The page fetches the file and runs it only
+// when the fingerprint of what it fetched equals `sha256`, so an edited
+// file needs a new link. link.html fetches the file through the same
+// functions before it makes such a link, and when it opens one.
+
+// The most bytes a setup file may hold. The page stops reading there.
+export const SETUP_FILE_MAX = 100_000;
+
+// How long the page waits for the whole setup file, in milliseconds, as
+// long as it waits for a send to be confirmed.
+export const SETUP_TIMEOUT_MS = 30_000;
+
+// A fingerprint as a link carries it: 32 bytes as base64url, no padding.
+export const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
+
+// Whether this browser can compute a fingerprint. crypto.subtle exists
+// only on a secure page (https://, or this machine for the tests).
+export function canFingerprint() {
+  return typeof globalThis.crypto?.subtle?.digest === 'function';
+}
+
+// The fingerprint of a setup: the SHA-256 of the UTF-8 bytes of
+// JSON.stringify(setup), as base64url without padding. The parsed value is
+// hashed, not the file's bytes, so a change of white space or line endings
+// by an editor or by git keeps the link working.
+export async function setupFingerprint(setup) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(setup)));
+  return bytesToBase64url(new Uint8Array(digest));
+}
+
+// The address of a setup file: absolute, https:, and with no user name or
+// password. Returns the parsed address's string form, or throws through
+// `bad` naming the fault with the value shown.
+export function checkSetupAddress(url, bad) {
+  const u = parseAddress(url, bad, 'it');
+  if (u.protocol !== 'https:') throw bad(`it must start with https://, and it is ${JSON.stringify(url)}.`);
+  refuseCredentials(u, url, bad, 'it');
+  return u.href;
+}
+
+// The setup at `address`, a checked address, or a throw through
+// `bad(why, fault)`. `why` reads after "it" and ends with no full stop.
+// `fault` is one of `connection` (the fetch threw: no connection, or a host
+// that does not let other sites read the file), `status` (an answer
+// outside 200 to 299), `size` (more than SETUP_FILE_MAX bytes), `timeout`
+// (the whole file had not arrived after SETUP_TIMEOUT_MS), `utf8`, `json`,
+// `object` (JSON that is not an object) and `depth` (nested too deeply for
+// JSON.stringify(), which the fingerprint uses). The fetch sends no
+// credentials and no referrer, and skips the browser's cache.
+export async function fetchSetup(address, bad) {
+  // A host that never answers would otherwise leave the online form on its
+  // loading screen, and the Study Link Builder waiting with "Make the link"
+  // disabled. Aborting ends the fetch and the body read alike.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), SETUP_TIMEOUT_MS);
+  const failed = () => (ctl.signal.aborted
+    ? bad(`did not arrive within ${SETUP_TIMEOUT_MS / 1000} seconds`, 'timeout')
+    : bad('could not be fetched', 'connection'));
+  const chunks = [];
+  let total = 0;
+  try {
+    let res;
+    try {
+      res = await fetch(address, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl.signal });
+    } catch {
+      throw failed();
+    }
+    if (!res.ok) throw bad(`was answered with HTTP ${res.status}`, 'status');
+    if (res.body !== null) {
+      const reader = res.body.getReader();
+      for (;;) {
+        let step;
+        try {
+          step = await reader.read();
+        } catch {
+          throw failed();
+        }
+        if (step.done) break;
+        total += step.value.length;
+        if (total > SETUP_FILE_MAX) {
+          reader.cancel().catch(() => {});
+          throw bad('is larger than 100,000 bytes', 'size');
+        }
+        chunks.push(step.value);
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.length;
+  }
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw bad('is not UTF-8 text', 'utf8');
+  }
+  let setup;
+  try {
+    setup = JSON.parse(text);
+  } catch {
+    throw bad('is not JSON', 'json');
+  }
+  if (setup === null || typeof setup !== 'object' || Array.isArray(setup)) {
+    throw bad('does not hold a setup: its JSON is not an object', 'object');
+  }
+  // The fingerprint writes the setup back out with JSON.stringify(), which a
+  // browser stops with a RangeError past the nesting depth it allows.
+  // Chromium allows the deepest file that fits in SETUP_FILE_MAX bytes.
+  try {
+    JSON.stringify(setup);
+  } catch {
+    throw bad('is nested too deeply for this browser to read', 'depth');
+  }
+  return setup;
+}
+
+// A link's `setup` and `sha256` read into the setup the file holds, or a
+// throw naming the fault. A link with either also carrying `c` or `z` is
+// refused, as is one with only one of the two.
+async function readSetupFile(params) {
+  if (params.has('setup') && (params.has('c') || params.has('z'))) {
+    throw new Error('The study link names a setup file and also holds a setup of its own, and a study link does one or the other. Ask the study team for a new link.');
+  }
+  if (!params.has('sha256')) {
+    throw new Error('The study link names a setup file and gives no fingerprint for it (sha256), and the online form needs both. Ask the study team for a new link.');
+  }
+  if (!params.has('setup')) {
+    throw new Error('The study link gives a fingerprint (sha256) and names no setup file (setup), and the online form needs both. Ask the study team for a new link.');
+  }
+  const sha256 = params.get('sha256');
+  if (!FINGERPRINT.test(sha256)) {
+    throw new Error(`The study link's sha256 field could not be used: it must be 43 characters of A-Z, a-z, 0-9, "-" and "_", and it is ${JSON.stringify(sha256)}.`);
+  }
+  const address = checkSetupAddress(
+    params.get('setup'),
+    (why) => new Error(`The study link's setup field could not be used: ${why}`),
+  );
+  if (!canFingerprint()) {
+    throw Object.assign(
+      new Error('This browser cannot check the study link\'s setup file, because it cannot compute a fingerprint. Open the link in a current version of Chrome, Edge, Firefox or Safari.'),
+      { kind: 'browser' },
+    );
+  }
+  const setup = await fetchSetup(address, (why, fault) => Object.assign(
+    new Error(`The setup file at ${address} could not be used: it ${why}.`),
+    fault === 'connection' || fault === 'timeout' ? { kind: 'connection' } : {},
+  ));
+  const found = await setupFingerprint(setup);
+  if (found !== sha256) {
+    throw new Error(`The setup file at ${address} does not match the study link: its fingerprint is ${found}, and the link gives ${sha256}. The file changed after the link was made. Ask the study team for a new link.`);
+  }
+  return setup;
+}
+
+// Reads the link's `c` or `z` parameter, or the setup file its `setup` and
+// `sha256` name, into the object it holds, or throws with a message the
+// participant can pass on to the study team. A link with both `c` and `z`
+// is refused, since the two could hold different forms.
 export async function decodeLink(search) {
   const params = new URLSearchParams(search);
+  if (params.has('setup') || params.has('sha256')) return readSetupFile(params);
   if (params.has('c') && params.has('z')) {
     throw new Error('The study link holds its setup twice, in two forms, and a study link holds it once. Ask the study team for a new link.');
   }
@@ -709,8 +883,9 @@ export function questionValue(q, a) {
   return [...a].sort((x, y) => x - y).join(' ');
 }
 
-// Reads the link's `c` or `z` parameter into a config, or throws with a
-// message the participant can pass on to the study team.
+// Reads the link's `c` or `z` parameter, or its setup file, into a config,
+// or throws with a message the participant can pass on to the study team.
+// A setup file's config takes the same checks as a `c` or `z` config.
 export async function parseLink(search) {
   const config = await decodeLink(search);
   if (config.instruments !== undefined) {
@@ -839,8 +1014,9 @@ export function readProlific(search) {
 // names, for a site that fills the participant's identifier into the study
 // URL under a name of its own or the researcher's choosing (SONA's
 // `%SURVEY_CODE%` placeholder, CloudResearch Connect's `participantId`). It
-// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c` or `z`,
-// which carry the link itself, nor one of the three Prolific names, which
+// is 1 to 64 of A-Z, a-z, 0-9, `_`, `.` and `-`. It must not be `c`, `z`,
+// `setup` or `sha256`, which carry the link itself or name its setup file,
+// nor one of the three Prolific names, which
 // `prolific: true` reads together with the two columns it writes. Returns
 // the name or throws naming the fault with the value shown. link.html runs
 // the same check on the builder's field, with `prolificAdvice` naming its
@@ -858,6 +1034,8 @@ export function checkParticipantParam(
   }
   if (name === 'c') throw bad('it is "c", the parameter that carries the study link itself.');
   if (name === 'z') throw bad('it is "z", which also carries the study link itself.');
+  if (name === 'setup') throw bad('it is "setup", the parameter that names the study link\'s setup file.');
+  if (name === 'sha256') throw bad('it is "sha256", the parameter that holds the fingerprint of the study link\'s setup file.');
   if (PROLIFIC_PARAMS.includes(name)) {
     throw bad(`it is ${JSON.stringify(name)}, one of Prolific's parameters. ${prolificAdvice}, which also keeps STUDY_ID and SESSION_ID.`);
   }
@@ -1469,8 +1647,10 @@ export async function sendResponses(store, row, { timeoutMs = SEND_TIMEOUT_MS, f
   }
 }
 
-export function saveFile(name, text) {
-  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+// Saves `text` to the device as a file named `name`, of media type `type`:
+// a CSV unless the caller names another, as link.html does for setup.json.
+export function saveFile(name, text, type = 'text/csv;charset=utf-8') {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

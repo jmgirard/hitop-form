@@ -70,6 +70,10 @@
                padding: var(--s3) var(--s4); margin: 0 0 var(--s5); word-break: break-all; }
   #prefilled p { margin: 0 0 var(--s2); word-break: normal; }
   #prefilled ul { margin: 0; padding-left: 1.25rem; }
+  #setupChanged { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r1);
+                  padding: var(--s3) var(--s4); margin: 0 0 var(--s5); overflow-wrap: anywhere; }
+  #setupChanged p:last-child { margin: 0; }
+  #setupChanged button.secondary { margin-left: 0; }
   .site-hint { color: var(--muted); font-size: .875rem; margin-top: calc(-1 * var(--s2)); }
   fieldset { border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4); }
   legend { font-weight: 600; padding: 0 var(--s1); }
@@ -103,11 +107,12 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Study Link Builder</h1>
-  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps and sends nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
+  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps nothing you type. Opening a study link on either page puts its setup, or its setup file's address, in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
     <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
   </div>
+  <div id="setupChanged" role="status" tabindex="-1" hidden></div>
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
@@ -139,7 +144,7 @@
           <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
         </label>
         <label>Publishable key
-          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key. Opening a study link on the Study Link Builder or the online form puts the key in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>.</span>
+          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link or setup file, so use no other key. A study link holding it, opened on either page, puts it in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>.</span>
           <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
         </label>
         <label>Table name
@@ -169,7 +174,7 @@
     <p class="site-hint" id="connectHint" hidden>The online form reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
-        <span class="hint">The name of the parameter the site adds to the address with the identifier. Letters, digits, "_", "." and "-", up to 64. Not <code>c</code>, <code>z</code> or a Prolific name.</span>
+        <span class="hint">The name of the parameter the site adds to the address with the identifier. Letters, digits, "_", "." and "-", up to 64. Not <code>c</code>, <code>z</code>, <code>setup</code>, <code>sha256</code> or a Prolific name.</span>
         <input name="participantParam" type="text" autocomplete="off" spellcheck="false" placeholder="participantId">
       </label>
     </div>
@@ -237,6 +242,20 @@
       <p role="status" id="questionsStatus" class="muted"></p>
     </div>
     </details>
+    <fieldset id="setupBlock">
+      <legend>Where the setup is kept</legend>
+      <p class="hint">The study link can carry the whole setup, or name a JSON file you host, such as a file in a public GitHub repository. A file keeps the link short. <a href="https://github.com/jmgirard/hitop-form#keep-the-setup-in-a-file-you-host">How a setup file works</a>.</p>
+      <label class="check"><input type="radio" name="setupWhere" value="link" checked> In the study link</label>
+      <label class="check"><input type="radio" name="setupWhere" value="file"> In a file I host</label>
+      <div id="setupFileFields" hidden>
+        <p class="hint">Download the setup file and put it on a public https:// host that lets other sites read it. Anyone can then read where responses go. After any change to the form, replace the hosted copy and make a new link.</p>
+        <p class="file-buttons"><button type="button" class="secondary" id="downloadSetup">Download the setup file</button></p>
+        <label>Address of the setup file
+          <span class="hint">The https:// address of the file itself, such as a GitHub raw-file address. Up to 100,000 bytes. The Study Link Builder fetches it to check that it matches the form.</span>
+          <input name="setupAddress" type="text" autocomplete="off" spellcheck="false" placeholder="https://raw.githubusercontent.com/…/setup.json">
+        </label>
+      </div>
+    </fieldset>
     <p role="alert" id="err" tabindex="-1"></p>
     <p><button type="submit" disabled autocomplete="off">Make the link</button></p>
   </form>
@@ -262,7 +281,8 @@
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
     consentTextFault, fetchExports, planStems, linkStems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
     CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv, writeQuestionsCsv, saveFile,
-    checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX,
+    checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
+    SETUP_FILE_MAX, FINGERPRINT,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -320,6 +340,13 @@
     else siteSelect.removeAttribute('aria-describedby');
   }
   siteSelect.addEventListener('change', showSite);
+
+  // "In a file I host" shows the download and the address field.
+  const setupFileFields = document.getElementById('setupFileFields');
+  function showWhere() {
+    setupFileFields.hidden = f.elements.setupWhere.value !== 'file';
+  }
+  for (const radio of f.elements.setupWhere) radio.addEventListener('change', showWhere);
 
   // The instrument list: one row per instrument, in the order the page gives
   // them, each a menu of the five instruments with Move up, Move down and
@@ -840,7 +867,17 @@
   // `instrument` or refused by the form page's check. A list fills one row
   // per entry. A field of a type its control does not take
   // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched. A throw past these
+  // such a link when it is opened. Nothing is fetched for a `c` or a `z`.
+  //
+  // A link's `setup` and `sha256` are refused by name for each fault the
+  // form page names in their shape. The file is then fetched as the form
+  // page fetches it, and a fetch fault is refused by name. When its
+  // fingerprint equals `sha256`, the form is filled from it as from a `z`,
+  // with "In a file I host" chosen and the address filled and listed. When
+  // it differs, the form stays empty and a message offers to fill it from
+  // the file as it is now, after which a new link must be made.
+  //
+  // A throw past these
   // checks (a module nested deep enough to stop JSON.stringify), or in the
   // setup steps that follow the prefill, is the first refusal with the form
   // reset, so the script reaches its submit handler and no field keeps a
@@ -859,6 +896,15 @@
   // form's order, the label named as the form shows it.
   async function prefill() {
     const filled = [];
+    if (opened.has('setup') || opened.has('sha256')) {
+      const hosted = await openSetupFile();
+      if (hosted === undefined) return filled;
+      if (hosted.found !== hosted.sha256) {
+        offerCurrent(hosted);
+        return filled;
+      }
+      return fillFromFile(hosted, filled);
+    }
     if (opened.has('c') && opened.has('z')) {
       err.textContent = 'The study link you opened holds its setup twice, in two forms, and a study link holds it once. Fill in the form above to make a new link.';
       return filled;
@@ -889,6 +935,84 @@
       refuse('does not hold a form.');
       return filled;
     }
+    return fill(config, filled);
+  }
+
+  // The opened link's setup file: its config, its checked address, the
+  // link's `sha256` and the fingerprint `found` of what was fetched. A fault
+  // is refused and returns nothing.
+  async function openSetupFile() {
+    if (opened.has('setup') && (opened.has('c') || opened.has('z'))) {
+      refuse('names a setup file and also holds a setup of its own, and a study link does one or the other.');
+      return undefined;
+    }
+    if (!opened.has('sha256')) {
+      refuse('names a setup file and gives no fingerprint for it (sha256).');
+      return undefined;
+    }
+    if (!opened.has('setup')) {
+      refuse('gives a fingerprint (sha256) and names no setup file (setup).');
+      return undefined;
+    }
+    const sha256 = opened.get('sha256');
+    if (!FINGERPRINT.test(sha256)) {
+      refuse(`holds a sha256 field that could not be used: it must be 43 characters of A-Z, a-z, 0-9, "-" and "_", and it is ${JSON.stringify(sha256)}.`);
+      return undefined;
+    }
+    let address;
+    try {
+      address = checkSetupAddress(opened.get('setup'), (why) => new Error(why));
+    } catch (e) {
+      refuse(`holds a setup field that could not be used: ${e.message}`);
+      return undefined;
+    }
+    if (!canFingerprint()) {
+      refuse('names a setup file this browser cannot check, because it cannot compute a fingerprint.');
+      return undefined;
+    }
+    let config;
+    try {
+      // A fetch that throws says what "Make the link" says of it: the host
+      // must let other sites read the file.
+      config = await fetchSetup(address, (why, fault) => new Error(`names the setup file ${address}, which ${why}.${
+        fault === 'connection' ? ' The host must let other sites read the file, as GitHub does for a raw-file address.' : ''}`));
+    } catch (e) {
+      refuse(e.message);
+      return undefined;
+    }
+    return { config, address, sha256, found: await setupFingerprint(config) };
+  }
+
+  // Fills the form from a setup file's config as from a `z`, then, unless
+  // that was refused, chooses "In a file I host" and fills and lists the
+  // file's address.
+  function fillFromFile(hosted, filled) {
+    fill(hosted.config, filled);
+    if (err.textContent === '') {
+      f.elements.setupWhere.value = 'file';
+      f.elements.setupAddress.value = hosted.address;
+      filled.push(['Address of the setup file', hosted.address]);
+    }
+    return filled;
+  }
+
+  // A setup file whose fingerprint differs from the link's: the message and
+  // its button, which fills the form from the file as fetched. Both are
+  // written only when shown, so the empty offer adds no text above the form.
+  const changedOffer = document.getElementById('setupChanged');
+  function offerCurrent(hosted) {
+    const message = document.createElement('p');
+    message.textContent = `The setup file at ${hosted.address} changed after the study link you opened was made, so that link no longer opens the online form. Fill in the form from the file as it is now, then make a new link.`;
+    const fillButton = button('Fill in the form from the current file', () => fillFromCurrent(hosted));
+    const row = document.createElement('p');
+    row.append(fillButton);
+    changedOffer.replaceChildren(message, row);
+    changedOffer.hidden = false;
+  }
+
+  // Fills the controls from a config, or refuses it. Returns `filled` with
+  // each address it filled added.
+  function fill(config, filled) {
     // A list fills one row per entry, and takes the form page's own check,
     // since a row cannot hold an entry the menu does not offer and the list
     // holds at most INSTRUMENTS_MAX rows.
@@ -965,12 +1089,12 @@
     }
     return filled;
   }
-  // The setup steps that show the filled form run inside the same guard as
-  // the prefill, and the notice is written after them.
-  try {
-    const filled = await prefill();
+  // The setup steps that show the filled form, then the notice of the
+  // addresses filled.
+  function showFilled(filled) {
     showKind();
     showSite();
+    showWhere();
     // A section the opened link filled a field of opens; the rest stay closed.
     showHeld();
     for (const section of SECTIONS) if (heldLabels(section).length > 0) section.open = true;
@@ -980,15 +1104,18 @@
       noticeList.append(li);
     }
     notice.hidden = filled.length === 0;
-  } catch {
+  }
+  // The form emptied after a throw in the prefill or the setup steps.
+  function resetForm() {
     f.reset();
     questionList.replaceChildren();
     setInstruments([OFFERED[0][0]]);
     // The setup steps may have run in part. What they show is set here for
     // the emptied form by hand, since running them again could throw again:
-    // no site hint, other-site field or destination fields, every summary
-    // "Not used" and every section closed.
-    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'webhookFields', 'supabaseFields']) {
+    // no site hint, other-site field, destination fields or setup-file
+    // fields, every summary "Not used", every section closed, and no notice
+    // or offer.
+    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'webhookFields', 'supabaseFields', 'setupFileFields']) {
       document.getElementById(id).hidden = true;
     }
     siteSelect.removeAttribute('aria-describedby');
@@ -996,7 +1123,42 @@
       section.querySelector('.sec-state').textContent = 'Not used';
       section.open = false;
     }
+    noticeList.replaceChildren();
+    notice.hidden = true;
+    changedOffer.hidden = true;
+    changedOffer.replaceChildren();
+  }
+  // The setup steps run inside the same guard as the prefill.
+  try {
+    showFilled(await prefill());
+  } catch {
+    resetForm();
     refuse('could not be read.');
+  }
+  // "Fill in the form from the current file" empties the form, fills it
+  // from the file as fetched, and shows the notice. A built link goes, so
+  // the next one is made from the filled form. A module file read still
+  // running drops its text, as when the researcher types in the module box,
+  // and the file controls' messages go with the fields they described.
+  function fillFromCurrent(hosted) {
+    changedOffer.hidden = true;
+    changedOffer.replaceChildren();
+    err.textContent = '';
+    hideResult();
+    moduleReads += 1;
+    for (const p of [moduleFileErr, moduleFileStatus, questionsErr, questionsStatus]) p.textContent = '';
+    try {
+      f.reset();
+      questionList.replaceChildren();
+      setInstruments([OFFERED[0][0]]);
+      noticeList.replaceChildren();
+      showFilled(fillFromFile(hosted, []));
+    } catch {
+      resetForm();
+      refuse('could not be read.');
+    }
+    if (err.textContent !== '') err.focus();
+    else notice.focus();
   }
   // "Make the link" is disabled in the markup until here, so a press before
   // the submit handler below exists submits nothing. A disabled default
@@ -1008,9 +1170,11 @@
   makeButton.disabled = false;
   // Both messages are written before the page has loaded, so their live
   // regions' own announcement is not relied on. Focus goes to the refusal
-  // when it holds text, else to the notice when it shows.
+  // when it holds text, else to the notice when it shows, else to the offer
+  // to fill the form from a changed setup file.
   if (err.textContent !== '') err.focus();
   else if (!notice.hidden) notice.focus();
+  else if (!changedOffer.hidden) changedOffer.focus();
 
   f.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -1027,7 +1191,9 @@
 
   async function build() {
     // Once "Make the link" is pressed the fields are the researcher's own,
-    // so the notice of what the opened link filled goes.
+    // so the notice of what the opened link filled goes. The offer to fill
+    // the form from a changed setup file goes once a link is made, below, so
+    // a refused press leaves it to be pressed.
     notice.hidden = true;
     noticeList.replaceChildren();
     err.textContent = '';
@@ -1042,6 +1208,120 @@
     const at = changes;
     const stale = () => changes !== at;
     const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
+    const form = readForm();
+    if (form === undefined) return;
+    const { config, site, prolific, kind } = form;
+    // "In a file I host": the address takes the online form's own check,
+    // then the file is fetched as the online form fetches it, and its
+    // fingerprint must equal the fingerprint of the setup the form holds.
+    let setupQuery;
+    if (f.elements.setupWhere.value === 'file') {
+      const field = f.elements.setupAddress;
+      const typed = field.value.trim();
+      if (typed === '') {
+        refuseAt('Give the address of the setup file, or choose "In the study link".', field);
+        return;
+      }
+      let address;
+      try {
+        address = checkSetupAddress(typed, (why) => new Error(`The address of the setup file could not be used: ${why}`));
+      } catch (e) {
+        refuseAt(e.message, field);
+        return;
+      }
+      if (!canFingerprint()) {
+        refuseAt('This browser cannot check the setup file, because it cannot compute a fingerprint. Use a current version of Chrome, Edge, Firefox or Safari.', field);
+        return;
+      }
+      let hosted;
+      let found;
+      let wanted;
+      try {
+        hosted = await fetchSetup(address, (why, fault) => new Error(fault === 'connection'
+          ? `The setup file at ${address} could not be fetched. Check the address and the connection. The host must let other sites read the file, as GitHub does for a raw-file address.`
+          : `The setup file at ${address} could not be used: it ${why}.`));
+        [found, wanted] = await Promise.all([setupFingerprint(hosted), setupFingerprint(config)]);
+      } catch (e) {
+        refuseAt(stale() ? STALE : e.message, field);
+        return;
+      }
+      if (stale()) {
+        refuseAt(STALE);
+        return;
+      }
+      if (found !== wanted) {
+        refuseAt(`The file at ${address} does not match this setup. Download the setup file again and replace the hosted copy.`, field);
+        return;
+      }
+      setupQuery = new URLSearchParams({ setup: address, sha256: wanted }).toString();
+    }
+    if (kind === 'supabase') {
+      // The table's columns are the items the page will show, named as the
+      // exports name them, one group per instrument in the list's order, so
+      // the exports are read here as the page reads them.
+      let items;
+      try {
+        items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
+      } catch (e) {
+        refuseAt(stale() ? STALE : e.message);
+        return;
+      }
+      if (stale()) {
+        refuseAt(STALE);
+        return;
+      }
+      sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
+      sqlBlock.hidden = false;
+    }
+    // A link with consent text or questions is written as ?z=, compressed,
+    // and any other as ?c=. A link to a setup file carries only its address
+    // and fingerprint.
+    const url = new URL('./', window.location.href);
+    if (setupQuery !== undefined) {
+      url.search = `?${setupQuery}`;
+    } else {
+      try {
+        url.search = `?${await encodeLink(config)}`;
+      } catch (e) {
+        refuseAt(stale() ? STALE : e.message);
+        return;
+      }
+    }
+    if (stale()) {
+      sqlBlock.hidden = true;
+      sql.value = '';
+      refuseAt(STALE);
+      return;
+    }
+    // A Prolific link ends in the three placeholders and a SONA link in
+    // its one, appended as text so that the braces and percent signs reach
+    // the site as it expects them.
+    const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
+    const href = url.href + suffix;
+    out.textContent = href;
+    const a = document.createElement('a');
+    a.href = href;
+    a.textContent = 'Open the link';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    open.replaceChildren(a, ` (${href.length} characters)`);
+    next.textContent = nextStep(site, kind === 'supabase');
+    copy.hidden = !navigator.clipboard;
+    copySql.hidden = !navigator.clipboard;
+    // The link is made from the researcher's fields, and the offer would
+    // replace them with the file's setup.
+    changedOffer.hidden = true;
+    changedOffer.replaceChildren();
+    result.hidden = false;
+    resultHeading.focus();
+  }
+
+  // The setup the form holds, as a study link carries it, with the choices
+  // the link's ending and next step read: `{ config, site, prolific, kind }`.
+  // Each field takes the online form's own check, and a refusal is shown at
+  // its field and returns nothing. "Make the link" and "Download the setup
+  // file" both read the form through here. Nothing is fetched.
+  function readForm() {
     const data = new FormData(f);
     // One row makes an `instrument` link, as before the list. Two or three
     // make an `instruments` list, which takes the form page's own check with
@@ -1258,57 +1538,28 @@
         return;
       }
     }
-    if (kind === 'supabase') {
-      // The table's columns are the items the page will show, named as the
-      // exports name them, one group per instrument in the list's order, so
-      // the exports are read here as the page reads them.
-      let items;
-      try {
-        items = planStems(config, await fetchExports(linkStems(config))).flatMap((plan) => plan.items);
-      } catch (e) {
-        refuseAt(stale() ? STALE : e.message);
-        return;
-      }
-      if (stale()) {
-        refuseAt(STALE);
-        return;
-      }
-      sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
-      sqlBlock.hidden = false;
-    }
-    // A link with consent text or questions is written as ?z=, compressed,
-    // and any other as ?c=.
-    const url = new URL('./', window.location.href);
-    try {
-      url.search = `?${await encodeLink(config)}`;
-    } catch (e) {
-      refuseAt(stale() ? STALE : e.message);
-      return;
-    }
-    if (stale()) {
-      sqlBlock.hidden = true;
-      sql.value = '';
-      refuseAt(STALE);
-      return;
-    }
-    // A Prolific link ends in the three placeholders and a SONA link in
-    // its one, appended as text so that the braces and percent signs reach
-    // the site as it expects them.
-    const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
-    const href = url.href + suffix;
-    out.textContent = href;
-    const a = document.createElement('a');
-    a.href = href;
-    a.textContent = 'Open the link';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    open.replaceChildren(a, ` (${href.length} characters)`);
-    next.textContent = nextStep(site, kind === 'supabase');
-    copy.hidden = !navigator.clipboard;
-    copySql.hidden = !navigator.clipboard;
-    result.hidden = false;
-    resultHeading.focus();
+    return { config, site, prolific, kind };
   }
+
+  // "Download the setup file" saves the setup the form holds as setup.json,
+  // pretty-printed so it reads well when edited on GitHub, with a final
+  // newline. The form first takes the field checks "Make the link" runs on
+  // it (readForm()), and a file over the 100,000 bytes the online form
+  // reads is refused, naming its size. The instruments are not fetched
+  // here, so a module item an instrument file lacks shows at "Make the
+  // link" under a Supabase table, not here.
+  document.getElementById('downloadSetup').addEventListener('click', () => {
+    err.textContent = '';
+    const form = readForm();
+    if (form === undefined) return;
+    const text = `${JSON.stringify(form.config, null, 2)}\n`;
+    const bytes = new TextEncoder().encode(text).length;
+    if (bytes > SETUP_FILE_MAX) {
+      refuseAt(`The setup file would be ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.`);
+      return;
+    }
+    saveFile('setup.json', text, 'application/json');
+  });
 
   // The one next step for the choices made: paste the link into the
   // recruiting site's study page, run the SQL first for a Supabase table,
