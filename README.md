@@ -588,8 +588,8 @@ item". A line directly above the first of them counts them, such as "3
 items on this page have no answer yet." The page scrolls there, the cursor
 moves to that item, and the page waits. Each answer to a marked item takes
 its mark away and lowers the count, and the count goes with the last mark.
-The count is an alert for screen readers. It is on the page, empty and
-hidden, before any press. A press that finds a blank item writes its text
+The count is an alert for screen readers. It is on the page before any
+press, empty and taking no room, and it stays in the accessibility tree. A press that finds a blank item writes its text
 anew. An answer writes it only when the number changes, so an answer that
 leaves the number gives a screen reader no new text to read.
 
