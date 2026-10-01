@@ -18,6 +18,11 @@
 //       store, endpoint, JSON, descriptor and module. Every screen ends
 //       with the closed study-team section, whose footer holds one version
 //       line per instrument
+//   P3: the identifier screen: a hint under the "Participant identifier"
+//       label, named by the input's aria-describedby; the input turns off
+//       capitals, correction and spell check; Enter runs Begin's checks, so
+//       an empty value or one holding a lone surrogate gets Begin's alert
+//       and a filled value starts the form
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -320,3 +325,80 @@ test('a walk whose send is answered HTTP 500, with a completeSaved address, show
   await expect(page.locator('p.complete a')).toHaveAttribute('href', COMPLETE_SAVED_URL);
   await expect(refusalText(page)).toHaveText('The send was not confirmed: the server answered HTTP 500.');
 });
+
+// ---- P3 ---------------------------------------------------------------
+
+const EMPTY_ALERT = 'Please enter your participant identifier before starting.';
+const UNREADABLE_ALERT = 'Your participant identifier holds a character this page cannot read. Please type it again.';
+
+async function openIdentifierScreen(page) {
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'screens' });
+  const input = page.locator('input[name="participant"]');
+  await expect(input).toBeVisible();
+  return input;
+}
+
+test('the identifier screen shows a hint under the label, tied to the input', async ({ page }) => {
+  const input = await openIdentifierScreen(page);
+  const label = page.locator('label[for="participant"]');
+  await expect(label).toHaveText('Participant identifier');
+  const hintId = await input.getAttribute('aria-describedby');
+  expect(hintId, 'the input names a description').toBeTruthy();
+  const hint = page.locator(`[id="${hintId}"]`);
+  await expect(hint).toHaveCount(1);
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveText('Type the identifier the study team gave you, exactly as they gave it.');
+  // Under the label: the hint's top is at or below the label's bottom, and
+  // above the input.
+  const [l, h, i] = await Promise.all([label.boundingBox(), hint.boundingBox(), input.boundingBox()]);
+  expect(h.y, 'the hint starts below the label').toBeGreaterThanOrEqual(l.y + l.height - 1);
+  expect(i.y, 'the input starts below the hint').toBeGreaterThanOrEqual(h.y + h.height - 1);
+  // The label names the input, so the hint is its description and not its name.
+  await expect(page.getByRole('textbox', { name: 'Participant identifier', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('textbox', { name: 'Participant identifier' })).toHaveAccessibleDescription(
+    'Type the identifier the study team gave you, exactly as they gave it.',
+  );
+});
+
+test('the identifier input turns off capitals, correction and spell check', async ({ page }) => {
+  const input = await openIdentifierScreen(page);
+  await expect(input).toHaveAttribute('autocapitalize', 'off');
+  await expect(input).toHaveAttribute('autocorrect', 'off');
+  await expect(input).toHaveAttribute('spellcheck', 'false');
+  expect(await input.evaluate((n) => n.spellcheck), 'the spellcheck property').toBe(false);
+});
+
+// Enter and Begin side by side: each case is made once with each key, on a
+// fresh load, and both must reach the same screen.
+for (const press of ['Enter', 'Begin']) {
+  const go = async (page, input) => {
+    if (press === 'Enter') await input.press('Enter');
+    else await page.getByRole('button', { name: 'Begin' }).click();
+  };
+
+  test(`${press} with the identifier empty shows Begin's alert and starts nothing`, async ({ page }) => {
+    const input = await openIdentifierScreen(page);
+    await input.focus();
+    await go(page, input);
+    await expect(page.locator('[role=alert]')).toHaveText(EMPTY_ALERT);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+    await expect(input).toBeFocused();
+  });
+
+  test(`${press} with an identifier holding a lone surrogate shows Begin's alert and starts nothing`, async ({ page }) => {
+    const input = await openIdentifierScreen(page);
+    await input.evaluate((n) => { n.value = 'a\ud800b'; });
+    await input.focus();
+    await go(page, input);
+    await expect(page.locator('[role=alert]')).toHaveText(UNREADABLE_ALERT);
+    await expect(page.locator('fieldset.item')).toHaveCount(0);
+  });
+
+  test(`${press} with an identifier filled starts the form`, async ({ page }) => {
+    const input = await openIdentifierScreen(page);
+    await input.fill('p3');
+    await go(page, input);
+    await expect(page.locator('.progress')).toHaveText('Page 1 of 3');
+    await expect(page.locator('fieldset.item')).toHaveCount(15);
+  });
+}

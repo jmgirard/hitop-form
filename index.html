@@ -143,8 +143,10 @@
     background: var(--bg); color: var(--fg);
   }
 
-  label.field { display: block; margin: 0 0 var(--s4); font-weight: 600; }
-  label.field input {
+  .field { margin: 0 0 var(--s4); }
+  .field label { display: block; font-weight: 600; }
+  .field .hint { color: var(--muted); font-size: var(--t-small); margin: var(--s1) 0 0; }
+  .field input {
     display: block; width: 100%; margin-top: var(--s1);
     font: inherit; padding: var(--s2) var(--s3);
     border: 1px solid var(--line-strong); border-radius: var(--r1);

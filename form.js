@@ -1640,8 +1640,27 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const { exp, plan, title, pageCount } = parts[k];
     const alert = el('p', { role: 'alert' });
     const askParticipant = k === 0 && participant === undefined;
+    // A phone keyboard would capitalize, correct or underline an
+    // identifier, which is a code and not a word, so the input asks it
+    // not to. Enter in the input runs Begin's checks.
     const input = askParticipant
-      ? el('input', { type: 'text', name: 'participant', autocomplete: 'off', required: '' })
+      ? el('input', {
+          type: 'text',
+          id: 'participant',
+          name: 'participant',
+          autocomplete: 'off',
+          autocapitalize: 'off',
+          autocorrect: 'off',
+          spellcheck: 'false',
+          'aria-describedby': 'participant-hint',
+          required: '',
+          onkeydown: (ev) => {
+            if (ev.key === 'Enter' && !ev.isComposing) {
+              ev.preventDefault();
+              begin();
+            }
+          },
+        })
       : null;
     const begin = () => {
       if (askParticipant) {
@@ -1672,7 +1691,11 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       el('div', { class: 'instructions' }, [el('p', { class: 'start', text: exp.instructions.start })]),
       el('p', { class: 'muted', text: k === 0 ? `${counts} ${where}` : counts }),
       ...(askParticipant
-        ? [el('label', { class: 'field' }, ['Participant identifier', input])]
+        ? [el('div', { class: 'field' }, [
+            el('label', { for: 'participant', text: 'Participant identifier' }),
+            el('p', { class: 'hint', id: 'participant-hint', text: 'Type the identifier the study team gave you, exactly as they gave it.' }),
+            input,
+          ])]
         : []),
       alert,
       el('div', { class: 'nav' }, [el('button', { type: 'button', text: 'Begin', onclick: begin })]),
