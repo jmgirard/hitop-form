@@ -267,7 +267,7 @@
     </div>
     <p id="next"></p>
     <p id="open" class="muted"></p>
-    <p id="long" hidden></p>
+    <p id="long" role="status" hidden></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
       <span class="hint">Run this in the project's SQL editor. Its table has a column per item and question. The key can only add rows. After changing instruments, module, random order, Prolific or questions, make a new table. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
@@ -283,7 +283,7 @@
     consentTextFault, fetchExports, planStems, linkStems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
     CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv, writeQuestionsCsv, saveFile,
     checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
-    SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX,
+    SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX, MAX_LINK_BYTES,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -832,9 +832,9 @@
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
     // The check names each question as it reaches it, so the last group
     // named and the field key are the refused ones. The refusal carries
-    // that group's control for the field as `control`. A fault that names
-    // no question, or a field outside QUESTION_CONTROLS, carries none, and
-    // focus goes to the message.
+    // that group's control for the field as `control`. Every fault the
+    // editor can make names a question. A field outside QUESTION_CONTROLS
+    // carries no control, and focus goes to the message.
     let group;
     let key;
     try {
@@ -930,6 +930,14 @@
         return filled;
       }
     } else {
+      // The online form refuses a `c` that decodes to more than
+      // MAX_LINK_BYTES (decodeLink()), so the builder does not fill from one.
+      // Base64url text of n characters decodes to floor(3n / 4) bytes.
+      const bytes = Math.floor(param.length * 3 / 4);
+      if (/^[A-Za-z0-9_-]+$/.test(param) && bytes > MAX_LINK_BYTES) {
+        refuse(`holds a setup of ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads.`);
+        return filled;
+      }
       try {
         config = decodeConfig(param);
       } catch {
@@ -1317,7 +1325,7 @@
     a.textContent = 'Open the link';
     a.target = '_blank';
     a.rel = 'noopener';
-    open.replaceChildren(a, ` (${href.length} characters)`);
+    open.replaceChildren(a, ` (${href.length.toLocaleString('en-US')} characters)`);
     if (href.length > LINK_WARN_LENGTH) {
       long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.`;
       long.hidden = false;

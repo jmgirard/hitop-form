@@ -69,7 +69,8 @@
 //       control at its no-c value, over eight values of c, two that throw
 //       past the three checks among them (one after a completion URL is
 //       filled), and the submit handler still runs; a load with no c leaves
-//       #err empty
+//       #err empty; a c that decodes to 100,001 bytes is refused naming its
+//       size and the limit, and one of exactly 100,000 bytes fills the form
 //  L19: above the form, the intro asks for the required parts, names
 //       "Make the link" and links the online-collection tutorial; the module
 //       hint links the Module Builder
@@ -141,15 +142,16 @@
 //       that holds no form. The form's elements, the instrument rows and
 //       the question list equal those of a load with no link
 //  L37: a link of exactly 8,000 characters shows no long-link warning, and
-//       one of 8,001 shows it naming the length; the study name and the
-//       participant-parameter name are padded at run time to reach each
-//       length
+//       one of 8,001 shows it naming the length, as a status a screen reader
+//       announces; the line beside "Open the link" writes the length with
+//       the same comma; the study name and the participant-parameter name
+//       are padded at run time to reach each length
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -749,6 +751,29 @@ test('a load with no c leaves #err empty', async ({ page }) => {
   await openBuilder(page);
   await expect(page.locator('#err')).toHaveText('');
   await expect(page.locator('#err')).toBeHidden();
+});
+
+// The study name pads the config's JSON to `n` bytes, and the c is that
+// JSON as base64url, as encodeConfig() writes it.
+function paddedC(n) {
+  const config = { instrument: 'hitopbr', study: '' };
+  const study = 's'.repeat(n - Buffer.byteLength(JSON.stringify(config)));
+  const json = JSON.stringify({ ...config, study });
+  expect(Buffer.byteLength(json)).toBe(n);
+  return { study, c: Buffer.from(json, 'utf8').toString('base64url') };
+}
+
+test('a c that decodes to 100,001 bytes is refused naming its size, and one of 100,000 bytes fills the form', async ({ page }) => {
+  await openBuilder(page);
+  const plain = await controls(page);
+  await gotoLong(page, `${base()}link.html?c=${paddedC(100_001).c}`);
+  await expect(page.locator('#err')).toHaveText('The study link you opened holds a setup of 100,001 bytes, more than the 100,000 bytes the online form reads. Fill in the form above to make a new link.');
+  expect(await controls(page)).toEqual(plain);
+
+  const fits = paddedC(100_000);
+  await gotoLong(page, `${base()}link.html?c=${fits.c}`);
+  await expect(page.locator('input[name="study"]')).toHaveValue(fits.study);
+  await expect(page.locator('#err')).toHaveText('');
 });
 
 // L36: what the builder holds, as values: each of the form's elements, the
@@ -1357,9 +1382,9 @@ for (const length of [LONG_AT, LONG_AT + 1]) {
     expect(href.length).toBe(length);
     expect(decodeLinkParam(href).participantParam).toBe(param);
     expect(param).toHaveLength(64);
+    await expect(page.locator('#open')).toHaveText(`Open the link (${length.toLocaleString('en-US')} characters)`);
     if (length > LONG_AT) {
-      await expect(page.locator('#long')).toBeVisible();
-      await expect(page.locator('#long')).toHaveText('This link is 8,001 characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.');
+      await expect(page.getByRole('status').filter({ hasText: 'This link is' })).toHaveText('This link is 8,001 characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.');
     } else {
       await expect(page.locator('#long')).toBeHidden();
       await expect(page.locator('#long')).toHaveText('');
