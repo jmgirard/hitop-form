@@ -14,6 +14,8 @@
 //   Z4: in a browser without DecompressionStream, a z link is refused
 //       naming the browser, and a c link still opens
 //   Z5: participantParam "z" is refused as "c" is, naming the parameter
+//   Z6: a c link that decodes to exactly 100,000 bytes is read, and one of
+//       100,001 bytes is refused naming its size and the limit
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
@@ -108,4 +110,19 @@ test('without DecompressionStream, a c link still opens', async ({ page }) => {
 test('participantParam "z" is refused, naming the parameter', async ({ page }) => {
   await openForm(page, base(), { instrument: 'hitopbr', study: 'zlink', participantParam: 'z' });
   await expectRefused(page, 'The study link\'s participantParam field could not be used: it is "z", which also carries the study link itself.');
+});
+
+// Z6: the c parameter is the padded JSON as base64url, with no compression.
+test('a c link that decodes to exactly 100,000 bytes is read', async ({ page }) => {
+  const json = paddedJson(100_000);
+  expect(Buffer.byteLength(json)).toBe(100_000);
+  await page.goto(`${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+});
+
+test('a c link that decodes to 100,001 bytes is refused, naming its size and the limit', async ({ page }) => {
+  const json = paddedJson(100_001);
+  expect(Buffer.byteLength(json)).toBe(100_001);
+  await page.goto(`${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
+  await expectRefused(page, 'The study link could not be read: its setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Ask the study team for a new link.');
 });

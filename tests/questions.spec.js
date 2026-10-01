@@ -8,7 +8,7 @@
 //   Q1: each fault in questions is refused naming the field, the question's
 //       position and the fault, and no screen of the form shows: the field
 //       not an object, a key other than before and after, neither list, a
-//       list not a list or empty, 51 questions in all; a question not an
+//       list not a list or empty; a question not an
 //       object, with a key outside the seven, without a name, text or type,
 //       a name outside the pattern or repeated across the two lists, a text
 //       not a string, blank, over 1,000 characters, holding a line break or
@@ -19,7 +19,8 @@
 //       surrogate, two options the same after trimming; min or max on a
 //       choice or a text question, a min or max that is not a whole number
 //       or outside -2,147,483,647 to 2,147,483,647, and min above max
-//   Q2: the limits are accepted: 50 questions, a 30-character name, a
+//   Q2: the limits are accepted, and the count of questions has none: 51
+//       questions, 200 short questions, a 30-character name, a
 //       1,000-character text, a 200-character option, 20 options, min and
 //       max at the ends of the range and equal to each other, a text
 //       holding a paired character, and a text and an option holding a tab
@@ -53,11 +54,6 @@ const REFUSED = [
   { name: 'neither list', questions: {}, why: fault('it has neither a before nor an after list.') },
   { name: 'a before list that is a string', questions: { before: 'x' }, why: fault('its before list is not a list.') },
   { name: 'an empty after list', questions: { before: [TEXT_Q], after: [] }, why: fault('its after list is empty, and a list holds 1 or more questions.') },
-  {
-    name: '51 questions',
-    questions: { before: many(26, (i) => ({ ...TEXT_Q, name: `b${i}` })), after: many(25, (i) => ({ ...TEXT_Q, name: `a${i}` })) },
-    why: fault('it has 51 questions, more than the 50 it may hold.'),
-  },
   { name: 'a question that is a string', questions: { before: ['x'] }, why: first('it is not an object.') },
   { name: 'a key "hint"', questions: { before: [{ ...TEXT_Q, hint: 'h' }] }, why: first('it has a field "hint", and a question takes only name, text, type, required, options, min and max.') },
   { name: 'no name', questions: { before: [{ text: 'a', type: 'text' }] }, why: first('it has no name.') },
@@ -128,7 +124,8 @@ for (const probe of REFUSED) {
 
 // Q2
 const ACCEPTED = [
-  { name: '50 questions', questions: { before: many(30, (i) => ({ ...TEXT_Q, name: `b${i}` })), after: many(20, (i) => ({ ...TEXT_Q, name: `a${i}` })) } },
+  { name: '51 questions', questions: { before: many(26, (i) => ({ ...TEXT_Q, name: `b${i}` })), after: many(25, (i) => ({ ...TEXT_Q, name: `a${i}` })) } },
+  { name: '200 short questions', questions: { before: many(120, (i) => ({ ...TEXT_Q, name: `b${i}` })), after: many(80, (i) => ({ ...TEXT_Q, name: `a${i}` })) } },
   { name: 'a 30-character name', questions: { before: [{ ...TEXT_Q, name: `a${'b_9'.repeat(9)}zz` }] } },
   { name: 'a 1,000-character text', questions: { before: [{ ...TEXT_Q, text: 'x'.repeat(1_000) }] } },
   { name: 'a 200-character option and 20 options', questions: { before: [{ ...CHOICE_Q, options: ['y'.repeat(200), ...many(19, (i) => `o${i}`)] }] } },

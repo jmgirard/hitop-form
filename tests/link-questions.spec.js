@@ -21,14 +21,16 @@
 //        a whole number, a maximum outside the range with and without a
 //        leading zero, a bound of more digits than a JavaScript number holds,
 //        each out-of-range bound quoted as typed, and a minimum above the
-//        maximum; 51 questions are refused naming the count
+//        maximum; 51 and 200 short questions are built, and the links open
+//        on their questions
 //   LQ5: blank lines in the options box are skipped, a type that takes no
 //        options or bounds leaves the hidden ones out of the link, and with
 //        no question the builder writes ?c= and no questions field; in a
 //        browser without CompressionStream a link with questions, consent
 //        text, or both is refused naming what it holds; a setup whose JSON
 //        is over 100,000 bytes is refused with its size, and one of exactly
-//        100,000 bytes is built and opens; the min and max boxes ask for no
+//        100,000 bytes is built and opens, for a z setup and for a c setup
+//        with no consent text and no questions; the min and max boxes ask for no
 //        numeric keypad, so a minus sign can be typed
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
@@ -198,21 +200,22 @@ for (const probe of REFUSED) {
   });
 }
 
-test('the editor refuses 51 questions and builds 50', async ({ page }) => {
-  await openBuilder(page);
-  // Filled from a prefilled link, since adding 51 groups by hand is slow.
-  const questions = { before: many(51, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
-  await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
-  await expect(page.locator('fieldset.question-edit')).toHaveCount(51);
-  await openSectionOf(page, '#addQuestion');
-  await make(page);
-  await expect(page.locator('#err')).toHaveText(bad('it has 51 questions, more than the 50 it may hold.'));
-  await expect(page.locator('#out')).toHaveText('');
-  await group(page, 51).getByRole('button', { name: 'Remove' }).click();
-  await make(page);
-  await expect(page.locator('#err')).toHaveText('');
-  expect(decodeLinkParam(await page.locator('#out').textContent()).questions.before).toHaveLength(50);
-});
+for (const n of [51, 200]) {
+  test(`the editor builds ${n} short questions, and the link opens`, async ({ page }) => {
+    // Filled from a prefilled link, since adding the groups by hand is slow.
+    const questions = { before: many(n, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
+    await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
+    await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
+    await openSectionOf(page, '#addQuestion');
+    await make(page);
+    await expect(page.locator('#err')).toHaveText('');
+    const href = await page.locator('#out').textContent();
+    expect(decodeLinkParam(href).questions).toEqual(questions);
+    await page.goto(href);
+    await expect(page.getByRole('heading', { name: 'Before you begin' })).toBeVisible();
+    await expect(page.locator('.question')).toHaveCount(n);
+  });
+}
 
 // LQ5
 test('blank option lines are skipped, hidden fields stay out, and no question writes c', async ({ page }) => {
@@ -303,6 +306,29 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);
   await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.");
+  await expect(page.locator('#out')).toHaveText('');
+});
+
+test('a c setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes is built and opens', async ({ page }) => {
+  // No consent text and no questions, so the link is ?c=. The study name
+  // sets the total byte for byte.
+  await openBuilder(page);
+  await make(page, 's');
+  await expect(page.locator('#err')).toHaveText('');
+  const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(await page.locator('#out').textContent())));
+  const study = (bytes) => 's'.repeat(1 + bytes - base1);
+
+  await make(page, study(100_000));
+  await expect(page.locator('#err')).toHaveText('');
+  const href = await page.locator('#out').textContent();
+  expect([...new URL(href).searchParams.keys()]).toEqual(['c']);
+  expect(Buffer.byteLength(JSON.stringify(decodeLinkParam(href)))).toBe(100_000);
+  await page.goto(href);
+  await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+
+  await openBuilder(page);
+  await make(page, study(100_001));
+  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads.");
   await expect(page.locator('#out')).toHaveText('');
 });
 
