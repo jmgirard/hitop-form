@@ -770,7 +770,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   const keyHint = hintOf('supabaseKey');
   await expect(keyHint).toContainText('Opening a study link on the Study Link Builder or the online form puts the key in GitHub Pages\' logs.');
   await expect(keyHint.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
-  await expect(intro).toContainText('This page keeps and sends nothing you type.');
+  await expect(intro).toContainText('The Study Link Builder keeps and sends nothing you type.');
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
@@ -779,7 +779,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   const sqlHint = page.locator('#sqlBlock .hint');
   await expect(sqlHint).toContainText('Its table has a column per item and question.');
   await expect(sqlHint).toContainText('After changing instruments, module, random order, Prolific or questions, make a new table.');
-  await expect(hintOf('supabaseTable')).toContainText('To write it, this page downloads each instrument from the hitop site.');
+  await expect(hintOf('supabaseTable')).toContainText('To write it, the Study Link Builder downloads each instrument from the hitop site.');
   await openSection(page, 'secOrder');
   await expect(hintOf('shuffle')).toContainText('The responses still list the items in the instrument\'s order');
   await openSection(page, 'secQuestions');
@@ -1206,7 +1206,7 @@ const REFUSE_AT = [
     name: 'a module with no format',
     call: ['e.message, f.elements.module'],
     fill: (page) => inSection(page, 'secOrder', () => page.locator(field('module')).fill('{}')),
-    message: 'The module file could not be used: this page reads format "1.0" and found no format field.',
+    message: 'The module file could not be used: the online form reads format "1.0" and found no format field.',
     focus: field('module'),
     section: 'secOrder',
   },

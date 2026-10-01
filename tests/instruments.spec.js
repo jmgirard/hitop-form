@@ -66,17 +66,17 @@ const REFUSED = [
   {
     name: 'an unknown name',
     fields: { instruments: ['hitopbr', 'pid5x'] },
-    why: fault('entry 2 is "pid5x", an instrument this page does not know.'),
+    why: fault('entry 2 is "pid5x", an instrument the online form does not know.'),
   },
   {
     name: 'a name in upper case',
     fields: { instruments: ['HITOPBR', 'pid5bf'] },
-    why: fault('entry 1 is "HITOPBR", an instrument this page does not know.'),
+    why: fault('entry 1 is "HITOPBR", an instrument the online form does not know.'),
   },
   {
     name: 'a name that is not text',
     fields: { instruments: ['hitopbr', 5] },
-    why: fault('entry 2 is 5, an instrument this page does not know.'),
+    why: fault('entry 2 is 5, an instrument the online form does not know.'),
   },
   // A list or an object as an entry is not a name, even where it holds
   // one: ["hitopbr"] would otherwise read as the key "hitopbr".
@@ -88,7 +88,7 @@ const REFUSED = [
   ].map(([instruments, n, value]) => ({
     name: `the entry ${JSON.stringify(value)}`,
     fields: { instruments },
-    why: fault(`entry ${n} is ${JSON.stringify(value)}, an instrument this page does not know.`),
+    why: fault(`entry ${n} is ${JSON.stringify(value)}, an instrument the online form does not know.`),
   })),
   {
     name: 'a repeated name',
@@ -124,7 +124,7 @@ test('a module beside a list without hitopsr is refused', async ({ page }) => {
 test('a module of another format beside a list with hitopsr is refused by the module check', async ({ page }) => {
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
   await openForm(page, base(), { ...LINK, instruments: ['hitopbr', 'hitopsr'], module });
-  await expectRefused(page, 'The module file could not be used: this page reads format "1.0" and found format "2.0".');
+  await expectRefused(page, 'The module file could not be used: the online form reads format "1.0" and found format "2.0".');
 });
 
 test('a module of another instrument beside a list with hitopsr is refused naming hitopsr', async ({ page }) => {

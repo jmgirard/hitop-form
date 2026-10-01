@@ -102,7 +102,7 @@ export function checkInstruments(
     // An entry that is not text is refused here: Object.hasOwn() reads
     // ["hitopbr"] as the key "hitopbr".
     if (typeof name !== 'string' || !Object.hasOwn(INSTRUMENTS, name)) {
-      throw badAt(`${entry(i)} is ${JSON.stringify(name)}, an instrument this page does not know.`, i);
+      throw badAt(`${entry(i)} is ${JSON.stringify(name)}, an instrument the online form does not know.`, i);
     }
     const first = list.indexOf(name);
     if (first !== i) throw badAt(`it names ${label(name)} twice, as ${entry(first)} and ${entry(i)}.`, i);
@@ -888,7 +888,7 @@ export function checkStore(store) {
   }
   if (!STORE_KINDS.includes(store.kind)) {
     throw bad(
-      `its kind is ${JSON.stringify(store.kind)}, and this page knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
+      `its kind is ${JSON.stringify(store.kind)}, and the online form knows only ${STORE_KINDS.map((k) => JSON.stringify(k)).join(', ')}.`,
     );
   }
   let url = checkStoreUrl(store.url, bad);
@@ -1058,7 +1058,7 @@ export function checkModule(m, instrument) {
     throw bad('it is the instrument export, not a module file. Use the file that the Module Builder or write_module() saved.');
   }
   if (m.format !== MODULE_FORMAT) {
-    throw bad(`this page reads format "${MODULE_FORMAT}" and found ${m.format === undefined ? 'no format field' : `format ${JSON.stringify(m.format)}`}.`);
+    throw bad(`the online form reads format "${MODULE_FORMAT}" and found ${m.format === undefined ? 'no format field' : `format ${JSON.stringify(m.format)}`}.`);
   }
   if (m.instrument !== instrument) {
     throw bad(
@@ -1143,7 +1143,7 @@ export function checkExport(exp, instrument) {
             : null;
   if (found !== null) {
     throw new Error(
-      `This page reads format "${EXPORT_FORMAT}" of the instrument export and found ${found}.`,
+      `The online form reads format "${EXPORT_FORMAT}" of the instrument export and found ${found}.`,
     );
   }
   const shape = (why) => new Error(`The instrument export could not be used: ${why}`);
