@@ -8,6 +8,8 @@
 //   N3: the altered-format refusal
 //   N9: an instruments list of the HiTOP-BR and the PID-5-BF through save:
 //       the set is the page, form.js and the two exports
+//   N10: a link naming a setup file, through save: the page, form.js, the
+//        export and the setup file, each requested once
 //
 // Each walk records every request the page issues and asserts the set of
 // URLs (query strings dropped: the page's own address carries the study link)
@@ -41,6 +43,7 @@ import { test, expect } from '@playwright/test';
 import {
   useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
   exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig, refusalText,
+  serveSetup, setupQuery, setupFingerprint, SETUP_URL,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -193,6 +196,28 @@ test('N9: an instruments list walk through save requests only its files and the 
   await downloading;
   await expect(page.locator('h1')).toHaveText('Thank you');
   expect([...urls].sort()).toEqual([base(), `${base()}form.js`, exportUrl('hitopbr'), exportUrl('pid5bf')].sort());
+});
+
+// N10: a link naming a setup file, walked through save. Each request is
+// counted by its address, so a second fetch of the setup file fails the
+// walk as a request to another address does.
+test('N10: a setup-file walk through save requests its files, the export and the setup file, each once', async ({ page }) => {
+  const setup = { instrument: 'hitopbr', study: 'net', participant: 'n10' };
+  await serveSetup(page, JSON.stringify(setup, null, 2));
+  const counts = new Map();
+  page.on('request', (req) => {
+    const u = recorded(req.url());
+    counts.set(u, (counts.get(u) ?? 0) + 1);
+  });
+  await page.goto(`${base()}?${setupQuery({ sha256: setupFingerprint(setup) })}`);
+  await begin(page);
+  const downloading = awaitDownload(page);
+  await walkAll(page);
+  await downloading;
+  await expect(page.locator('h1')).toHaveText('Thank you');
+  expect(Object.fromEntries([...counts].sort())).toEqual(Object.fromEntries([
+    [base(), 1], [`${base()}form.js`, 1], [exportUrl('hitopbr'), 1], [SETUP_URL, 1],
+  ].sort()));
 });
 
 test('N3: the altered-format refusal requests only its files and the export', async ({ page }) => {
