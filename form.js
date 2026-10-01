@@ -10,8 +10,9 @@
 // posts the responses as one JSON row to the store the link names or, with
 // no store, saves them as one CSV to the participant's device. With no
 // store, no answer is transmitted: the only network requests after the
-// page's own files are the export fetches, besides the move to a
-// completion address when the link names one. With a store, the requests
+// page's own files are the setup file's fetch when the link names one and
+// the export fetches, besides the move to a completion address when the
+// link names one. With a store, the requests
 // after Finish are the POST to its address, any redirect a webhook answers
 // with, and the OPTIONS preflight the browser sends before a supabase
 // insert; the CSV is saved only when that send is
@@ -22,7 +23,10 @@
 // A link can instead name a setup file: `setup`, the https:// address of a
 // JSON file holding those contents, and `sha256`, their fingerprint. The
 // page then makes one more request, for that file, before the export
-// fetches, and its host sees that request. See "A setup file" below.
+// fetches, and its host sees that request. The page's address then holds
+// the file's address and fingerprint in place of the contents, and anyone
+// can read the contents in the file on a public host. See "A setup file"
+// below.
 //
 // A link's `consent` field holds the researcher's consent text, which the
 // page shows on a screen of its own before the start screen, as plain text.

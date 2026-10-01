@@ -229,20 +229,28 @@ with two parameters:
   padding, 43 characters.
 
 The fingerprint is taken over the parsed file, so a change of spaces or
-line endings keeps the link working. A change of any value, or of the
-order of the keys, gives another fingerprint. The online form fetches the
+line endings between the values keeps the link working. A change inside a
+text value, such as the consent text, gives another fingerprint. So does a
+change of any other value, or of the order of the keys. The online form fetches the
 file on each visit. If its fingerprint differs from `sha256`, the online
 form refuses it. So no participant gets a setup the link was not made for.
 A changed file needs a new link: download the setup file again, replace the
 hosted copy and make the link again.
 
 The repository must be public, because the online form sends no sign-in.
+So anyone can read the file, and GitHub's code search can find it. The
+file holds where responses go: the web address, or the Supabase project
+URL, key and table. Anyone who reads the file can send rows there. A link
+that carries the setup shows these only to the people who get the link.
+
 The host must also let other sites read the file. GitHub raw-file
 addresses do: GitHub answers them with `Access-Control-Allow-Origin: *`.
 After an edit, GitHub can serve the old copy of the file for the time its
 `Cache-Control` header states. On 2026-10-01 that header was
 `max-age=300`, five minutes. In that time the builder can find that the
-file does not match. Wait, then make the link again.
+file does not match. A participant can also get the old copy and be
+refused. Wait five minutes after the edit, then make the new link and send
+it.
 
 The online form names each of these refusals under "Details for the study
 team":
@@ -314,11 +322,13 @@ The setup, a Supabase key included, then reaches the host's request logs
 from that request too.
 
 A link that names a setup file puts the file's address and fingerprint in
-the page's address in place of the setup. The host of the setup file sees each
-participant's request for the file, with the participant's IP address and
-browser. For a raw-file address that host is GitHub. The online form sends no
-referrer with that request, so the file's host does not get the page's
-address from it.
+the online form's address in place of the setup. The host of the setup file
+sees each participant's request for the file, with the participant's IP
+address and browser. For a raw-file address that host is GitHub. The online
+form sends no referrer with that request, so the file's host does not get
+the online form's address from it. When the Study Link Builder makes such a link
+or opens one, it also requests the file. The file's host then sees the
+researcher's request in the same way.
 
 ## Recruit through SONA or CloudResearch Connect
 

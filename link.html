@@ -972,7 +972,10 @@
     }
     let config;
     try {
-      config = await fetchSetup(address, (why) => new Error(`names the setup file ${address}, which ${why}.`));
+      // A fetch that throws says what "Make the link" says of it: the host
+      // must let other sites read the file.
+      config = await fetchSetup(address, (why, fault) => new Error(`names the setup file ${address}, which ${why}.${
+        fault === 'connection' ? ' The host must let other sites read the file, as GitHub does for a raw-file address.' : ''}`));
     } catch (e) {
       refuse(e.message);
       return undefined;

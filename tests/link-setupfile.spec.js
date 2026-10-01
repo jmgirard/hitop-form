@@ -352,7 +352,11 @@ test('a changed file is offered, and pressing the offer fills the form for a new
 
 // LF8
 const FETCH_FAULTS = [
-  { name: 'a fetch that throws', serve: { abort: true }, why: 'could not be fetched' },
+  {
+    name: 'a fetch that throws',
+    serve: { abort: true },
+    why: 'could not be fetched. The host must let other sites read the file, as GitHub does for a raw-file address',
+  },
   { name: 'a status of 404', body: 'not found', serve: { status: 404 }, why: 'was answered with HTTP 404' },
   { name: 'a body of 100,001 bytes', body: `{"a":"${'x'.repeat(100_001 - 8)}"}`, why: 'is larger than 100,000 bytes' },
 ];
