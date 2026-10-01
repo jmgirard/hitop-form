@@ -26,8 +26,10 @@
 //       focused) shows the link in a box that scrolls, "Copy the link"
 //       beside the box, and below it one next-step sentence for the site
 //       and the destination chosen: for each recruiting-site choice and
-//       each where-responses-go choice. A z link over 5,000 characters
-//       keeps the box under 16rem high
+//       each where-responses-go choice, each sentence written out in full.
+//       At 375px and 1280px wide, a short link and a z link over 5,000
+//       characters each keep the box under 16rem high with "Copy the link"
+//       to its right, and the long link scrolls in the box
 //   S8: with every section open and one question of each type, under each
 //       recruiting-site choice, each where-responses-go choice and after a
 //       Supabase build: every .hint and .site-hint, shown or not, holds at
@@ -574,26 +576,43 @@ function noise(n) {
   return s;
 }
 
-test('a z link over 5,000 characters stays in a box under 16rem high', async ({ page }) => {
-  await page.goto(`${base()}link.html`);
-  await page.locator('input[name="study"]').fill('long');
-  await openSection(page, 'secConsent');
-  await page.locator('textarea[name="consentText"]').fill(noise(8000));
-  await make(page).click();
-  await expect(page.locator('#err')).toHaveText('');
-  await expectRegion(page);
-  const href = await page.locator('#out').textContent();
-  expect(new URL(href).searchParams.has('z')).toBe(true);
-  expect(href.length).toBeGreaterThan(5000);
-  const { height, rem, scrolls } = await page.locator('#out').evaluate((n) => ({
-    height: n.getBoundingClientRect().height,
-    rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-    scrolls: n.scrollHeight > n.clientHeight,
-  }));
-  expect(height).toBeLessThan(16 * rem);
-  expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
-  await expect(page.locator('#next')).toHaveText(NEXT[0][2]);
-});
+// The region in four states: a short c link and a z link over 5,000
+// characters, each at a phone's width and a desktop's. In each, the copy
+// button sits right of the box, and the box stays under 16rem high. The
+// long link overflows the box, which scrolls.
+for (const width of [375, 1280]) {
+  for (const long of [false, true]) {
+    test(`at ${width}px wide, a ${long ? 'z link over 5,000 characters' : 'short link'} sits in a box under 16rem high beside the copy button`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base()}link.html`);
+      await page.locator('input[name="study"]').fill(long ? 'long' : 'short');
+      if (long) {
+        await openSection(page, 'secConsent');
+        await page.locator('textarea[name="consentText"]').fill(noise(8000));
+      }
+      await make(page).click();
+      await expect(page.locator('#err')).toHaveText('');
+      await expectRegion(page);
+      const href = await page.locator('#out').textContent();
+      const params = new URL(href).searchParams;
+      if (long) {
+        expect(params.has('z')).toBe(true);
+        expect(href.length).toBeGreaterThan(5000);
+      } else {
+        expect(params.has('c')).toBe(true);
+        expect(href.length).toBeLessThan(200);
+      }
+      const { height, rem, scrolls } = await page.locator('#out').evaluate((n) => ({
+        height: n.getBoundingClientRect().height,
+        rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        scrolls: n.scrollHeight > n.clientHeight,
+      }));
+      expect(height).toBeLessThan(16 * rem);
+      if (long) expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
+      await expect(page.locator('#next')).toHaveText(NEXT[0][2]);
+    });
+  }
+}
 
 // S8: the retired terms, stated here as the naming decision lists them:
 // six case-insensitive patterns, four more, and two fixed strings.
