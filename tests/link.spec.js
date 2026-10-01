@@ -134,8 +134,15 @@
 //       the online form, not "this page": an unknown instrument in an opened
 //       link, a store kind added to the destination menu, a module file of
 //       another format, and an instrument export of another format
+//  L36: a z link the builder cannot use is refused by name and fills
+//       nothing: in a browser with no DecompressionStream, and for text
+//       that is not base64url, a stream that unpacks to more than 100,000
+//       bytes, bytes that are not UTF-8, text that is not JSON, and JSON
+//       that holds no form. The form's elements, the instrument rows and
+//       the question list equal those of a load with no link
 
 import { test, expect } from '@playwright/test';
+import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
@@ -720,6 +727,50 @@ test('a load with no c leaves #err empty', async ({ page }) => {
   await expect(page.locator('#err')).toHaveText('');
   await expect(page.locator('#err')).toBeHidden();
 });
+
+// L36: what the builder holds, as values: each of the form's elements, the
+// instrument rows' menus, and the question list's groups.
+function builderValues(page) {
+  return page.evaluate(() => ({
+    elements: [...document.getElementById('f').elements].map((n) => ({
+      tag: n.tagName, name: n.name, value: n.type === 'checkbox' ? n.checked : n.value,
+    })),
+    rows: [...document.querySelectorAll('#instrumentList select')].map((s) => s.value),
+    questions: [...document.getElementById('questionList').children].map((g) => g.querySelector('[name="qName"]')?.value ?? null),
+  }));
+}
+
+// A z parameter of `bytes` deflated, base64url with no padding.
+const zOf = (bytes) => deflateRawSync(Buffer.from(bytes)).toString('base64url');
+
+// L36: the six refusals, each with the words the builder puts between "The
+// study link you opened" and "Fill in the form above".
+const BAD_Z = [
+  {
+    name: 'a good stream, in a browser with no DecompressionStream',
+    z: encodeCompressed({ instrument: 'hitopbr', study: 'zbad' }),
+    init: () => { delete window.DecompressionStream; },
+    message: 'could not be read, because this browser cannot unpack it.',
+  },
+  { name: 'text that is not base64url', z: 'not*base64url', message: 'is not base64url text.' },
+  { name: 'a stream that unpacks to more than 100,000 bytes', z: zOf(Buffer.alloc(100_001, 0x20)), message: 'unpacks to more than 100,000 bytes.' },
+  { name: 'bytes that are not UTF-8', z: zOf([0x7b, 0xff, 0xfe, 0x7d]), message: 'is not UTF-8 text.' },
+  { name: 'text that is not JSON', z: zOf(Buffer.from('not json', 'utf8')), message: 'is not JSON.' },
+  { name: 'JSON that holds no form', z: zOf(Buffer.from('[]', 'utf8')), message: 'does not hold a form.' },
+];
+
+for (const bad of BAD_Z) {
+  test(`L36: a z parameter of ${bad.name} is refused by name and fills nothing`, async ({ page }) => {
+    await openBuilder(page);
+    const plain = await builderValues(page);
+    if (bad.init) await page.addInitScript(bad.init);
+    await page.goto(`${base()}link.html?z=${bad.z}`);
+    if (bad.init) expect(await page.evaluate(() => typeof window.DecompressionStream)).toBe('undefined');
+    await expect(page.locator('#err')).toHaveText(`The study link you opened ${bad.message} Fill in the form above to make a new link.`);
+    expect(await builderValues(page)).toEqual(plain);
+    await expect(page.locator('#prefilled')).toBeHidden();
+  });
+}
 
 // L19: the intro above the form asks for the required parts and links
 // the tutorial; the module hint links the Module Builder.
