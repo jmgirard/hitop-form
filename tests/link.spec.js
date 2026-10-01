@@ -527,7 +527,7 @@ test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   // L3
   const hint = page.locator('label:has(textarea[name="module"]) .hint');
-  await expect(hint).toContainText('HiTOP-SR only: with several instruments');
+  await expect(hint).toContainText(/^HiTOP-SR only\. With several instruments/);
 });
 
 // L15: a pasted descriptor whose items are not in ascending order is refused

@@ -177,7 +177,7 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">Choose or paste a module file from the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code>. HiTOP-SR only: with several instruments, it applies to the HiTOP-SR among them. The online form shows only its items, in its printed order if any. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <span class="hint">HiTOP-SR only. With several instruments, it applies to the HiTOP-SR among them. Choose or paste a module file from the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code>. The online form shows only its items, in its printed order if any. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label>Choose the module file
@@ -203,7 +203,7 @@
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Only beside consent text. The https:// address "I do not agree" leads to. Put <code>{participant}</code> after its <code>?</code> or <code>#</code>. It is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
+      <span class="hint">Only beside consent text. The https:// address "I do not agree" leads to. Any <code>{participant}</code> goes after its <code>?</code> or <code>#</code>. It is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
@@ -214,7 +214,7 @@
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
-      <span class="hint">Only beside a completion URL. A file is saved when the link has no place for responses or a send is not confirmed. Its screen links here. Arrived responses still use the completion URL. For Prolific, your saved-file code's URL.</span>
+      <span class="hint">Only beside a completion URL. A file is saved when responses go to a file or a send is not confirmed. The saved-file screen links here. Arrived responses still use the completion URL. For Prolific, your saved-file code's URL.</span>
       <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>

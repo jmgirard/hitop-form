@@ -761,12 +761,12 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('There, each participant\'s survey code becomes their identifier.');
   const hintOf = (name) => page.locator(`label:has([name="${name}"]) .hint`);
   await expect(hintOf('declinedText')).toContainText('Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL.');
-  await expect(hintOf('completeDeclined')).toContainText('Put {participant} after its ? or #. It is empty unless the link or a recruiting site gives it.');
-  await expect(hintOf('completeSaved')).toContainText('A file is saved when the link has no place for responses or a send is not confirmed. Its screen links here.');
+  await expect(hintOf('completeDeclined')).toContainText('Any {participant} goes after its ? or #. It is empty unless the link or a recruiting site gives it.');
+  await expect(hintOf('completeSaved')).toContainText('A file is saved when responses go to a file or a send is not confirmed. The saved-file screen links here.');
   await expect(hintOf('completeSaved')).toContainText('Arrived responses still use the completion URL.');
   await expect(hintOf('complete')).toContainText('sends the participant to after showing their responses arrived');
   await expect(hintOf('complete')).toContainText('For Prolific, the study page\'s completion URL.');
-  await expect(hintOf('module')).toContainText('with several instruments, it applies to the HiTOP-SR among them.');
+  await expect(hintOf('module')).toContainText('With several instruments, it applies to the HiTOP-SR among them.');
   const keyHint = hintOf('supabaseKey');
   await expect(keyHint).toContainText('Opening a study link on the Study Link Builder or the online form puts the key in GitHub Pages\' logs.');
   await expect(keyHint.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
