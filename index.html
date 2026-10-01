@@ -209,8 +209,12 @@
   .sending:empty { margin: 0; }
 
   /* The "Please answer this item" mark inside an item left unanswered at
-     Next or Finish. The count above the first is styled as an alert. */
+     Next or Finish. The count above the first is styled as an alert. It is
+     drawn empty with the page and, like the status region above, stays in
+     the accessibility tree while empty (never display: none) but takes no
+     room. */
   fieldset .missed { clear: both; color: var(--error); font-weight: 600; margin: 0 0 var(--s2); }
+  .missed-count:empty { display: block; padding: 0; border: 0; margin: 0; }
   /* "Part 2 of 3" on a start screen under a link with several instruments. */
   .part { font-weight: 600; margin: 0 0 var(--s4); }
   code { font-family: var(--mono); font-size: .95em; }

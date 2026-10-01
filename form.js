@@ -1960,8 +1960,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // scrolls to. Answering an item takes its mark away and lowers the count,
   // and the count goes once no mark is left. The alert is drawn empty above
   // the items and its text written only after it is in place, and an answer
-  // writes it only when the number changes, so a screen reader reads a new
-  // count and not each choice.
+  // writes it only when the number changes, so the alert's text changes for
+  // a new count and not for each choice.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
@@ -2005,7 +2005,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
           n.setAttribute('aria-describedby', id);
         }
         // Emptied before it moves, and filled in the next frame, so the
-        // text arrives in an alert already on the screen.
+        // text arrives in an alert already in the page.
         count.textContent = '';
         missed[0].before(count);
         missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });

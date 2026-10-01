@@ -554,13 +554,20 @@ async function probeMissed(page) {
   const items = page.locator('fieldset.item');
   const n = await items.count();
   const blank = [Math.ceil(n / 2), n - 2, n];
-  // The alert is on the page before any press, empty and hidden, above the
-  // first item.
+  // The alert is on the page before any press, above the first item: empty,
+  // taking no room, and not display: none, which would take it out of the
+  // accessibility tree.
   const drawn = await items.first().evaluate((f) => {
     const p = f.previousElementSibling;
-    return { cls: p?.className ?? null, role: p?.getAttribute('role') ?? null, text: p?.textContent ?? null, shown: p ? p.getClientRects().length > 0 : null };
+    return {
+      cls: p?.className ?? null,
+      role: p?.getAttribute('role') ?? null,
+      text: p?.textContent ?? null,
+      display: p ? getComputedStyle(p).display : null,
+      height: p ? p.getBoundingClientRect().height : null,
+    };
   });
-  expect(drawn, 'the alert drawn on show').toEqual({ cls: 'missed-count', role: 'alert', text: '', shown: false });
+  expect(drawn, 'the alert drawn on show').toEqual({ cls: 'missed-count', role: 'alert', text: '', display: 'block', height: 0 });
   await answerPage(page, { skip: blank });
   await expectMissed(page, blank);
   // From here, count each change to the alert's text.
