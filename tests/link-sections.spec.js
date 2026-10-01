@@ -439,23 +439,33 @@ test('question groups: button states as groups are added, moved, removed, prefil
   }
 });
 
-// S7: the sentence each choice gets, stated here.
-const SITE_TEXT = {
-  '': null,
-  prolific: 'Prolific',
-  sona: 'SONA',
-  connect: 'CloudResearch Connect',
-  other: 'your recruiting site',
-};
-const TEST_THEN_GIVE = 'open the link once to test it, and then give it to each participant.';
-function expectedNext(site, kind) {
-  const then = SITE_TEXT[site] === null ? TEST_THEN_GIVE : `paste the link into your study's page on ${SITE_TEXT[site]}.`;
-  if (kind === 'supabase' && SITE_TEXT[site] === null) {
-    return `Run the SQL below once in your Supabase project's SQL editor, then open the link once to test it and give it to each participant.`;
-  }
-  if (kind === 'supabase') return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
-  return then[0].toUpperCase() + then.slice(1);
-}
+// S7: the recruiting-site and where-responses-go choices, and the sentence
+// each pair gets, written out in full here rather than built, so a test
+// cannot share a mistake with the page's own wording.
+const SITES = ['', 'prolific', 'sona', 'connect', 'other'];
+const KINDS = ['', 'webhook', 'supabase'];
+const NEXT = [
+  ['', '', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'webhook', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor, then open the link once to test it and give it to each participant.'],
+  ['prolific', '', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'webhook', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on Prolific.'],
+  ['sona', '', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'webhook', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on SONA.'],
+  ['connect', '', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'webhook', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on CloudResearch Connect.'],
+  ['other', '', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'webhook', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on your recruiting site.'],
+];
+
+test('the next-step table holds one sentence for each site and destination', () => {
+  expect(NEXT.map(([site, kind]) => `${site}|${kind}`).sort())
+    .toEqual(SITES.flatMap((site) => KINDS.map((kind) => `${site}|${kind}`)).sort());
+});
 
 // Fills the destination's fields for a kind.
 async function chooseDestination(page, kind) {
@@ -489,29 +499,27 @@ async function expectRegion(page) {
   expect(n.y, 'the sentence is below the box').toBeGreaterThanOrEqual(b.y + b.height);
 }
 
-for (const site of Object.keys(SITE_TEXT)) {
-  for (const kind of ['', 'webhook', 'supabase']) {
-    test(`the result region for site ${JSON.stringify(site)} and destination ${JSON.stringify(kind)}`, async ({ page }) => {
-      await page.goto(`${base()}link.html`);
-      await page.locator('select[name="instrument"]').selectOption('hitopbr');
-      await page.locator('input[name="study"]').fill('region');
-      await chooseDestination(page, kind);
-      if (site !== '') {
-        await openSection(page, 'secParticipants');
-        await page.locator('select[name="site"]').selectOption(site);
-        if (site === 'other') await page.locator('input[name="participantParam"]').fill('workerId');
-      }
-      await make(page).click();
-      await expect(page.locator('#err')).toHaveText('');
-      await expectRegion(page);
-      await expect(page.locator('#next')).toHaveText(expectedNext(site, kind));
-      // One sentence, counted from the page's text and not from the copy
-      // above: one sentence end, at the close.
-      const next = await page.locator('#next').textContent();
-      expect(next.match(/[.!?](\s|$)/g), `one sentence: ${next}`).toEqual(['.']);
-      await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
-    });
-  }
+for (const [site, kind, sentence] of NEXT) {
+  test(`the result region for site ${JSON.stringify(site)} and destination ${JSON.stringify(kind)}`, async ({ page }) => {
+    await page.goto(`${base()}link.html`);
+    await page.locator('select[name="instrument"]').selectOption('hitopbr');
+    await page.locator('input[name="study"]').fill('region');
+    await chooseDestination(page, kind);
+    if (site !== '') {
+      await openSection(page, 'secParticipants');
+      await page.locator('select[name="site"]').selectOption(site);
+      if (site === 'other') await page.locator('input[name="participantParam"]').fill('workerId');
+    }
+    await make(page).click();
+    await expect(page.locator('#err')).toHaveText('');
+    await expectRegion(page);
+    await expect(page.locator('#next')).toHaveText(sentence);
+    // One sentence, counted from the page's text and not from the table
+    // above: one sentence end, at the close. A semicolon counts as an end.
+    const next = await page.locator('#next').textContent();
+    expect(next.match(/[.;!?](\s|$)/g), `one sentence: ${next}`).toEqual(['.']);
+    await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
+  });
 }
 
 // A string of letters that deflate cannot shrink much, from a fixed seed.
@@ -543,7 +551,7 @@ test('a z link over 5,000 characters stays in a box under 16rem high', async ({ 
   }));
   expect(height).toBeLessThan(16 * rem);
   expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
-  await expect(page.locator('#next')).toHaveText(expectedNext('', ''));
+  await expect(page.locator('#next')).toHaveText(NEXT[0][2]);
 });
 
 // S8: the retired terms, stated here as the naming decision lists them:
@@ -611,7 +619,7 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
     await page.locator('select[name="qType"]').last().selectOption(type);
   }
   await expectText(page, 'sections open');
-  for (const site of Object.keys(SITE_TEXT)) {
+  for (const site of SITES) {
     await page.locator('select[name="site"]').selectOption(site);
     await expectText(page, `site ${JSON.stringify(site)}`);
   }
@@ -638,11 +646,27 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
 
 // S8: each hint's link to the README lands on one of its headings, slugged
 // as GitHub slugs them: lower case, spaces to "-", other punctuation but
-// "-" and "_" dropped.
+// "-" and "_" dropped. A line inside a fenced code block is not a heading,
+// such as a shell comment.
+function readmeSlugs(text) {
+  const slugs = new Set();
+  let fenced = false;
+  for (const line of text.split('\n')) {
+    if (/^(```|~~~)/.test(line)) fenced = !fenced;
+    else if (!fenced && /^#{1,6} /.test(line)) {
+      slugs.add(line.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-'));
+    }
+  }
+  return slugs;
+}
+
+test('a "#" line inside a fenced code block gives no README anchor', () => {
+  const slugs = readmeSlugs(['# Before', '', '```bash', '# x', '```', '', '## After it'].join('\n'));
+  expect([...slugs].sort()).toEqual(['after-it', 'before']);
+});
+
 test('every README link on the page names a README heading', async ({ page }) => {
-  const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
-  const slugs = new Set(readme.split('\n').filter((l) => /^#{1,6} /.test(l)).map((l) =>
-    l.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-')));
+  const slugs = readmeSlugs(await readFile(path.join(ROOT, 'README.md'), 'utf8'));
   await page.goto(`${base()}link.html`);
   for (const s of SECTIONS) await openSection(page, s.id);
   const anchors = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => a.hash.slice(1)));
