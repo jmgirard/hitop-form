@@ -295,6 +295,12 @@ const LINK_FAULTS = [
     query: setupQuery({ sha256: SHA.slice(0, 42) }),
     what: `holds a sha256 field that could not be used: it must be 43 characters of A-Z, a-z, 0-9, "-" and "_", and it is ${JSON.stringify(SHA.slice(0, 42))}.`,
   },
+  {
+    name: 'a sha256 holding a character outside base64url',
+    query: setupQuery({ sha256: `${SHA.slice(0, 42)}=` }),
+    what: `holds a sha256 field that could not be used: it must be 43 characters of A-Z, a-z, 0-9, "-" and "_", and it is ${JSON.stringify(`${SHA.slice(0, 42)}=`)}.`,
+  },
+  { name: 'a relative setup', query: setupQuery({ setup: 'setup.json', sha256: SHA }), what: 'holds a setup field that could not be used: it is not a web address: "setup.json".' },
   { name: 'an http: setup', query: setupQuery({ setup: 'http://setup.example.org/study/setup.json', sha256: SHA }), what: 'holds a setup field that could not be used: it must start with https://, and it is "http://setup.example.org/study/setup.json".' },
   {
     name: 'a setup with a user name and password',

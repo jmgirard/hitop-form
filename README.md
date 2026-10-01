@@ -206,8 +206,11 @@ a JSON file that you host, and give a short link that names it. A link that
 carries the whole setup stays the default.
 
 Under "Where the setup is kept", choose "In a file I host". Press "Download
-the setup file" to save `setup.json`. The builder checks the form first, as
-"Make the link" does. The file holds the setup as JSON, two spaces to a
+the setup file" to save `setup.json`. The builder first runs the field
+checks that "Make the link" runs. It does not download the instruments.
+Take a module item that an instrument file lacks. Under a Supabase table,
+"Make the link" finds it. With no table, the online form finds it on open.
+The file holds the setup as JSON, two spaces to a
 level, with a final newline. It can be at most 100,000 bytes as saved.
 Put the file in a public GitHub repository, then give its raw-file address
 under "Address of the setup file", for example:
@@ -310,8 +313,8 @@ Opening a link on the Study Link Builder to edit it (`link.html?c=…` or
 The setup, a Supabase key included, then reaches the host's request logs
 from that request too.
 
-A link that names a setup file puts only the file's address and
-fingerprint in the page's address. The host of the setup file sees each
+A link that names a setup file puts the file's address and fingerprint in
+the page's address in place of the setup. The host of the setup file sees each
 participant's request for the file, with the participant's IP address and
 browser. For a raw-file address that host is GitHub. The online form sends no
 referrer with that request, so the file's host does not get the page's

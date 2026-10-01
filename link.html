@@ -1530,9 +1530,11 @@
 
   // "Download the setup file" saves the setup the form holds as setup.json,
   // pretty-printed so it reads well when edited on GitHub, with a final
-  // newline. The form takes the checks "Make the link" runs on it first,
-  // and a file over the 100,000 bytes the online form reads is refused,
-  // naming its size. The instruments are not fetched here.
+  // newline. The form first takes the field checks "Make the link" runs on
+  // it (readForm()), and a file over the 100,000 bytes the online form
+  // reads is refused, naming its size. The instruments are not fetched
+  // here, so a module item an instrument file lacks shows at "Make the
+  // link" under a Supabase table, not here.
   document.getElementById('downloadSetup').addEventListener('click', () => {
     err.textContent = '';
     const form = readForm();
