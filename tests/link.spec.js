@@ -1326,12 +1326,13 @@ test('the form.js messages the builder shows name the online form', async ({ pag
 // L37: RFC 9110, section 4.1, recommends support for URIs of at least 8,000
 // octets, and a study link is ASCII. The link is ?c=, the base64url of the
 // setup's JSON with no padding, so `n` bytes take the length below; a
-// length of 4k + 1 has no `n`. The address the page sits at sets the rest.
+// length of 4k + 1 has no `n`. The address the page sits at sets the rest,
+// and both lengths are reachable when that part leaves 1 or 2 over 4.
 const LONG_AT = 8_000;
 const b64Length = (n) => Math.floor(n / 3) * 4 + [0, 2, 3][n % 3];
-const PARAM = `p${'x'.repeat(63)}`;
 
-async function buildPadded(page, study) {
+async function buildPadded(page, study, param) {
+  if (param !== undefined) await page.locator('input[name="participantParam"]').fill(param);
   await page.locator('input[name="study"]').fill(study);
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#out')).not.toHaveText('');
@@ -1343,15 +1344,19 @@ for (const length of [LONG_AT, LONG_AT + 1]) {
     await openBuilder(page);
     await openSectionOf(page, 'site');
     await page.locator('select[name="site"]').selectOption('other');
-    await page.locator('input[name="participantParam"]').fill(PARAM);
-    const first = await buildPadded(page, 's');
+    const first = await buildPadded(page, 's', 'p');
     const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
     const rest = first.length - b64Length(bytes);
     const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => rest + b64Length(k) === length);
     expect(n, `a setup of some size makes a link of ${length} characters`).not.toBeUndefined();
-    const href = await buildPadded(page, `s${'x'.repeat(n - bytes)}`);
+    // The padding the setup needs, up to 63 characters of it in the
+    // parameter name, which holds at most 64, and the rest in the study name.
+    const pad = n - bytes;
+    const param = `p${'x'.repeat(Math.min(63, pad))}`;
+    const href = await buildPadded(page, `s${'x'.repeat(pad - Math.min(63, pad))}`, param);
     expect(href.length).toBe(length);
-    expect(decodeLinkParam(href).participantParam).toBe(PARAM);
+    expect(decodeLinkParam(href).participantParam).toBe(param);
+    expect(param).toHaveLength(64);
     if (length > LONG_AT) {
       await expect(page.locator('#long')).toBeVisible();
       await expect(page.locator('#long')).toHaveText('This link is 8,001 characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.');
