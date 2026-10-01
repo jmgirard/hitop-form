@@ -183,9 +183,9 @@ export async function encodeLink(config) {
 // there, so a small link cannot make it inflate without end.
 export const MAX_LINK_BYTES = 100_000;
 
-// Whether this browser can read a `z` parameter. Chrome and Edge 80 to 102
-// have DecompressionStream but not its deflate-raw format, and the
-// constructor throws for it there, so the check builds one.
+// Whether this browser can read a `z` parameter. Some older Chromium
+// releases have DecompressionStream without its deflate-raw format, so the
+// check builds one, and a constructor that throws means no.
 export function canInflate() {
   if (typeof DecompressionStream !== 'function') return false;
   try {
@@ -2100,8 +2100,8 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     finishButton.textContent = 'Sending…';
     // The empty status line sendingLine() put above the buttons gets its
     // text for the length of the send, which can take up to
-    // SEND_TIMEOUT_MS. A screen reader reads a status region when its text
-    // changes, and often not when it arrives with its text already in it.
+    // SEND_TIMEOUT_MS. Screen readers generally announce a status region
+    // when its text changes, and not always when it arrives with its text.
     nav.previousElementSibling.textContent = 'Sending your answers. Please keep this page open.';
     const outcome = await sendResponses(store, buildRow(record));
     sending = false;

@@ -148,9 +148,10 @@ test('a z link in a browser that cannot unpack it says to open it in another bro
   );
 });
 
-// A browser that has DecompressionStream but not its deflate-raw format,
-// as Chrome and Edge 80 to 102 do: the constructor throws a TypeError for
-// that format, and the page says what it says with no DecompressionStream.
+// A browser that has DecompressionStream but not its deflate-raw format, as
+// some older Chromium releases do, stood in for by a constructor that throws
+// a TypeError for that format: the page says what it says with no
+// DecompressionStream.
 test('a z link in a browser whose DecompressionStream lacks deflate-raw says to open it in another browser', async ({ page }) => {
   await page.addInitScript(() => {
     const Native = window.DecompressionStream;
@@ -515,8 +516,9 @@ async function expectMissed(page, blank) {
 }
 
 // Probes the page on show: three items missed, then one, then all answered.
-// The one left is the middle item, well above the button the press scrolls
-// to, so the scroll check can fail; the last item would already be in view.
+// The one left is the middle item, well above the Next or Finish button,
+// which the click brings into view, so the scroll check can fail; the last
+// item would already be in view.
 async function probeMissed(page) {
   const n = await page.locator('fieldset.item').count();
   const blank = [Math.ceil(n / 2), n - 2, n];
@@ -653,9 +655,9 @@ test('"Yes, I do not agree" with a completeDeclined address goes there', async (
 const SENDING = 'Sending your answers. Please keep this page open.';
 
 // The status line on a screen whose Finish sends: drawn with the screen,
-// empty, directly above the buttons, so a screen reader reads the text the
-// press writes into it. Marked, so the test can tell the press filled this
-// line rather than adding a new one.
+// empty, directly above the buttons, so the press changes the text of a
+// status region already on the page. Marked, so the test can tell the press
+// filled this line rather than adding a new one.
 async function markSendingLine(page) {
   const line = page.locator('p.sending');
   await expect(line, 'the sending line is drawn with the screen').toHaveCount(1);

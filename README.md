@@ -555,8 +555,9 @@ If they cannot be sent, they are saved as a file on this device. It names
 no address. Without one, it says the answers are saved to a file on this
 device. When the link carries no participant identifier, the start screen
 asks for one. A hint under the "Participant identifier" label asks for the
-identifier exactly as the participant received it, from the study team or
-a recruiting site. The field asks a phone keyboard not to
+identifier exactly as the participant received it. It names no source, so
+it fits an identifier from the study team or from a recruiting site. The
+field asks a phone keyboard not to
 capitalize, correct or spell-check it, and Enter in it works as "Begin"
 does. Under the Prolific route the identifier is the Prolific ID in the
 page's address, and the start screen asks only when the address carries
@@ -596,15 +597,16 @@ to it and waits up to
 30 seconds for it to confirm. The button is disabled while it
 waits, so a second press sends nothing. The screen with Finish has an
 empty status line above the buttons. The press writes "Sending your
-answers. Please keep this page open." into it, so a screen reader reads
-it. On a confirmed send the
+answers. Please keep this page open." into it, so the text changes in a
+status region already on the screen. On a confirmed send the
 page says that the answers were sent to the study team, and no file is
 saved. Every other outcome is unconfirmed: an error status, an answer from
 a web address that is not a confirmation, a lost connection, or no answer
 within the limit. Then the page saves the CSV file described below, on a
 screen headed "Your answers were not sent". The screen says that the page
-got no confirmation that the answers reached the study team, since a row
-can still arrive late. It says that the file holds the participant's
+got no confirmation that the answers reached the study team. It does not
+say that they were lost, since the row can still be in the store.
+It says that the file holds the participant's
 answers, and names it, so the participant can send it by hand. The reason the send failed is only in the screen's closed
 "Details for the study team" section.
 
