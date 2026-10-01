@@ -73,9 +73,50 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE } from './helpers.mjs';
+import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE } from './helpers.mjs';
 
 const base = useTarget();
+
+// No request of this spec leaves the browser for anywhere but the test
+// target. Each route below marks the request it fulfills or aborts. The
+// listener records a request to any other address that no route marked,
+// and the test fails on that record when it ends. The instrument exports
+// come from the copies in tests/fixtures/exports/. A request for an export
+// with no copy there is aborted unmarked, so the test fails naming it.
+let answered;
+let strays;
+
+async function fulfillExport(route) {
+  const name = new URL(route.request().url()).pathname.split('/').pop();
+  let body;
+  try {
+    body = await readFile(path.join(FIXTURES, 'exports', name), 'utf8');
+  } catch {
+    return route.abort();
+  }
+  answered.add(route.request());
+  return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body });
+}
+
+function abortRequest(route) {
+  answered.add(route.request());
+  return route.abort();
+}
+
+test.beforeEach(async ({ page }) => {
+  answered = new Set();
+  strays = [];
+  const note = (req) => {
+    if (!req.url().startsWith(base()) && !answered.has(req)) strays.push(`${req.method()} ${req.url()}`);
+  };
+  page.on('requestfinished', note);
+  page.on('requestfailed', note);
+  await page.route(`${EXPORT_BASE}**`, fulfillExport);
+});
+
+test.afterEach(() => {
+  expect(strays, 'requests to another address that no route answered').toEqual([]);
+});
 
 // Stated here rather than read from link.html, so a renamed section or
 // label shows up as a failure.
@@ -742,7 +783,7 @@ test('a field changed while a build waits leaves the result hidden', async ({ pa
   await page.route(`${EXPORT_BASE}**`, async (route) => {
     reached();
     await held;
-    await route.continue();
+    await fulfillExport(route);
   });
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
@@ -979,7 +1020,8 @@ async function supabase(page, patch = {}) {
   await page.locator(field('supabaseTable')).fill(s.table);
 }
 
-// Holds the export requests until release(`how`): 'continue' or 'abort'.
+// Holds the export requests until release(`how`): 'fulfill', from the local
+// copy, or 'abort'.
 function holdExports(page) {
   let reached;
   const asked = new Promise((r) => { reached = r; });
@@ -988,8 +1030,8 @@ function holdExports(page) {
   const ready = page.route(`${EXPORT_BASE}**`, async (route) => {
     reached();
     const how = await released;
-    if (how === 'abort') await route.abort();
-    else await route.continue();
+    if (how === 'abort') await abortRequest(route);
+    else await fulfillExport(route);
   });
   return { ready, asked, release };
 }
@@ -1272,7 +1314,7 @@ const REFUSE_AT = [
     name: 'the export fetch fails',
     call: ['refuseAt(stale() ? STALE : e.message)', 0],
     fill: async (page) => {
-      await page.route(`${EXPORT_BASE}**`, (route) => route.abort());
+      await page.route(`${EXPORT_BASE}**`, abortRequest);
       await supabase(page);
     },
     message: /^The instrument could not be fetched from https:\/\/jmgirard\.github\.io\/hitop\/downloads\/hitopbr\.json\. Check the connection and reload\.$/,
@@ -1300,7 +1342,7 @@ const REFUSE_AT = [
       await supabase(page);
       return hold;
     },
-    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('continue')),
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('fulfill')),
     message: STALE,
     focus: null,
   },
