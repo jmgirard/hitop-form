@@ -35,10 +35,9 @@
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, openBuilderSections, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
+import { useTarget, openSectionOf, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 
 async function openBuilder(page, query = '') {
   await page.goto(`${base()}link.html${query}`);
@@ -91,6 +90,7 @@ const QUESTIONS = {
 test('a link built with one question of each type keeps each list in the editor order and asks them', async ({ page }) => {
   await openBuilder(page);
   await page.locator('select[name="instrument"]').selectOption('pid5bf');
+  await openSectionOf(page, '#addQuestion');
   for (const q of EDITOR) await addQ(page, q);
   await make(page);
   await expect(page.locator('#err')).toHaveText('');
@@ -134,6 +134,7 @@ test('a z link with questions fills the editor and builds the same config', asyn
 test('the shown SQL for the questions equals supabase-hitopbr-questions.sql', async ({ page }) => {
   await openBuilder(page);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
+  await openSectionOf(page, '#addQuestion');
   for (const q of EDITOR) await addQ(page, q);
   await page.locator('select[name="storeKind"]').selectOption('supabase');
   await page.locator('input[name="supabaseUrl"]').fill('https://abc.supabase.co');
@@ -189,6 +190,7 @@ const REFUSED = [
 for (const probe of REFUSED) {
   test(`the editor refuses ${probe.name}, naming the question`, async ({ page }) => {
     await openBuilder(page);
+    await openSectionOf(page, '#addQuestion');
     for (const q of probe.qs) await addQ(page, q);
     await make(page);
     await expect(page.locator('#err')).toHaveText(probe.why);
@@ -202,6 +204,7 @@ test('the editor refuses 51 questions and builds 50', async ({ page }) => {
   const questions = { before: many(51, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
   await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
   await expect(page.locator('fieldset.question-edit')).toHaveCount(51);
+  await openSectionOf(page, '#addQuestion');
   await make(page);
   await expect(page.locator('#err')).toHaveText(bad('it has 51 questions, more than the 50 it may hold.'));
   await expect(page.locator('#out')).toHaveText('');
@@ -219,6 +222,7 @@ test('blank option lines are skipped, hidden fields stay out, and no question wr
   expect([...new URL(plain).searchParams.keys()]).toEqual(['c']);
   expect(decodeLinkParam(plain)).toEqual({ instrument: 'hitopsr', study: 'questions' });
 
+  await openSectionOf(page, '#addQuestion');
   const g = await addQ(page, { name: 'pick', text: 'Pick', type: 'number', min: '1', max: '3' });
   await expect(g.locator('.options-field')).toBeHidden();
   await expect(g.locator('.bounds')).toBeVisible();
@@ -246,8 +250,14 @@ for (const { parts, consent, question } of [
   test(`in a browser without CompressionStream a link with ${parts} is refused naming ${parts}`, async ({ page }) => {
     await page.addInitScript(() => { delete window.CompressionStream; });
     await openBuilder(page);
-    if (consent) await page.locator('textarea[name="consentText"]').fill('You agree to take part.');
-    if (question) await addQ(page, { name: 'a', text: 'A' });
+    if (consent) {
+      await openSectionOf(page, 'consentText');
+      await page.locator('textarea[name="consentText"]').fill('You agree to take part.');
+    }
+    if (question) {
+      await openSectionOf(page, '#addQuestion');
+      await addQ(page, { name: 'a', text: 'A' });
+    }
     await make(page);
     await expect(page.locator('#err')).toHaveText(`This browser cannot make a link with ${parts}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
     await expect(page.locator('#out')).toHaveText('');
@@ -285,6 +295,7 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await expect(page.getByRole('heading', { name: 'Before you begin' })).toBeVisible();
 
   await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
+  await openSectionOf(page, '#addQuestion');
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);
   await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.");
@@ -293,6 +304,7 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
 
 test('the min and max boxes ask for no numeric keypad, and negative bounds are built', async ({ page }) => {
   await openBuilder(page);
+  await openSectionOf(page, '#addQuestion');
   const g = await addQ(page, { name: 'temp', text: 'Temperature', type: 'number', min: '-30', max: '-1' });
   for (const box of ['qMin', 'qMax']) await expect(g.locator(`[name=${box}]`)).not.toHaveAttribute('inputmode');
   await make(page);
@@ -305,6 +317,7 @@ test('the min and max boxes ask for no numeric keypad, and negative bounds are b
 // LQ6
 test('Move up, Move down and Remove reorder and renumber the questions', async ({ page }) => {
   await openBuilder(page);
+  await openSectionOf(page, '#addQuestion');
   for (const name of ['a', 'b', 'c']) await addQ(page, { name, text: name.toUpperCase() });
   const names = () => page.$$eval('fieldset.question-edit', (gs) => gs.map((g) => `${g.querySelector('legend').textContent}:${g.querySelector('[name=qName]').value}`));
   // Each button's accessible name carries its question's number.

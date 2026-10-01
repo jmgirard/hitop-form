@@ -24,15 +24,15 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, openBuilderSections, decodeLinkParam, fetchExport, FIXTURES } from './helpers.mjs';
+import { useTarget, openSectionOf, decodeLinkParam, fetchExport, FIXTURES } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 
 const FIXTURE = path.join(FIXTURES, 'module-plain.json');
 
 async function openBuilder(page) {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, 'module');
   await page.locator('select[name="instrument"]').selectOption('hitopsr');
   await page.locator('input[name="study"]').fill('module file');
 }

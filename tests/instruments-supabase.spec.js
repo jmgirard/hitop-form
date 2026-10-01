@@ -14,12 +14,11 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  useTarget, openBuilderSections, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
+  useTarget, openSectionOf, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
   readFixture, prolificQuery, chosenIndexFor,
 } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 const store = useStore();
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));
@@ -59,9 +58,14 @@ async function builderSql(page, c) {
   while ((await page.locator('#instrumentList select').count()) < c.stems.length) await add.click();
   for (let k = 0; k < c.stems.length; k++) await page.locator('#instrumentList select').nth(k).selectOption(c.stems[k]);
   await page.locator('input[name="study"]').fill('list');
+  if (c.config.participant || c.config.prolific) await openSectionOf(page, 'participant');
   if (c.config.participant) await page.locator('input[name="participant"]').fill(c.config.participant);
-  if (c.config.shuffle) await page.locator('input[name="shuffle"]').check();
+  if (c.config.shuffle) {
+    await openSectionOf(page, 'shuffle');
+    await page.locator('input[name="shuffle"]').check();
+  }
   if (c.config.prolific) await page.locator('select[name="site"]').selectOption('prolific');
+  if (c.config.questions) await openSectionOf(page, '#addQuestion');
   for (const list of ['before', 'after']) {
     for (const q of c.config.questions?.[list] ?? []) {
       await page.getByRole('button', { name: 'Add a question' }).click();

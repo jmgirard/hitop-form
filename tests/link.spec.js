@@ -144,12 +144,11 @@
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
-  useTarget, openBuilderSections, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
+  useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
 } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 const store = useStore();
 
 // Stated here rather than read from form.js or the exports, so a change to
@@ -176,6 +175,7 @@ for (const o of OFFERED) {
     await page.goto(`${base()}link.html`);
     await page.locator('select[name="instrument"]').selectOption(o.value);
     await page.locator('input[name="study"]').fill('link');
+    await openSectionOf(page, 'participant');
     await page.locator('input[name="participant"]').fill('l1');
     await page.getByRole('button', { name: 'Make the link' }).click();
     const href = await page.locator('#out').textContent();
@@ -195,6 +195,7 @@ async function build(page, storeUrl) {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l4');
   await page.locator('select[name="storeKind"]').selectOption('webhook');
   await page.locator('input[name="store"]').fill(storeUrl);
@@ -210,9 +211,16 @@ async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = f
   await page.locator('select[name="instrument"]').selectOption(instrument);
   await page.locator('input[name="study"]').fill('link');
   // Prolific as the recruiting site needs the participant field empty.
+  await openSectionOf(page, 'participant');
   if (!prolific) await page.locator('input[name="participant"]').fill('l6');
-  if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
-  if (shuffle) await page.locator('input[name="shuffle"]').check();
+  if (module) {
+    await openSectionOf(page, 'module');
+    await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  }
+  if (shuffle) {
+    await openSectionOf(page, 'shuffle');
+    await page.locator('input[name="shuffle"]').check();
+  }
   if (prolific) await page.locator('select[name="site"]').selectOption('prolific');
   await page.locator('select[name="storeKind"]').selectOption('supabase');
   await page.locator('input[name="supabaseUrl"]').fill(url);
@@ -264,6 +272,7 @@ test('the file kind builds a link with no store even when the hidden address fie
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l4');
   await page.locator('select[name="storeKind"]').selectOption('webhook');
   await page.locator('input[name="store"]').fill('not a url');
@@ -331,6 +340,7 @@ for (const w of [
 // no shuffle field.
 test('the random-order box: its label and hint, and the link it builds', async ({ page }) => {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, 'shuffle');
   const box = page.getByRole('checkbox', { name: /Show the items in a random order/ });
   await expect(box).toBeVisible();
   await expect(box).not.toBeChecked();
@@ -341,6 +351,7 @@ test('the random-order box: its label and hint, and the link it builds', async (
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l9');
   await page.getByRole('button', { name: 'Make the link' }).click();
   const plain = await page.locator('#out').textContent();
@@ -368,6 +379,7 @@ test('the random-order box: its label and hint, and the link it builds', async (
 // with no site carries neither.
 test('Prolific as the recruiting site: its hint, and the link it builds', async ({ page }) => {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, 'site');
   const box = page.getByRole('combobox', { name: /Recruiting site/ });
   await expect(box).toBeVisible();
   await expect(box).toHaveValue('');
@@ -404,6 +416,7 @@ test('Prolific as the recruiting site beside a filled participant field is refus
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l11');
   await page.locator('select[name="site"]').selectOption('prolific');
   await page.getByRole('button', { name: 'Make the link' }).click();
@@ -418,7 +431,9 @@ test('the Completion URL field puts complete in the link, and an http:// address
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l12');
+  await openSectionOf(page, 'complete');
   await page.locator('input[name="complete"]').fill(COMPLETE_URL);
   await page.getByRole('button', { name: 'Make the link' }).click();
   expect(await page.locator('#err').textContent()).toBe('');
@@ -447,7 +462,9 @@ test('the Completion URL after a saved file field puts completeSaved in the link
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('l14');
+  await openSectionOf(page, 'complete');
   await page.locator('input[name="complete"]').fill(COMPLETE_URL);
   await page.locator('input[name="completeSaved"]').fill(COMPLETE_SAVED_URL);
   await page.getByRole('button', { name: 'Make the link' }).click();
@@ -545,7 +562,9 @@ for (const entry of NOT_ASCENDING) {
     await page.goto(`${base()}link.html`);
     await page.locator('select[name="instrument"]').selectOption(module.instrument);
     await page.locator('input[name="study"]').fill('link');
+    await openSectionOf(page, 'participant');
     await page.locator('input[name="participant"]').fill('l15');
+    await openSectionOf(page, 'module');
     await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
     await page.getByRole('button', { name: 'Make the link' }).click();
     await expect(page.locator('#err')).toHaveText(NOT_ASCENDING_MESSAGE);
@@ -950,6 +969,7 @@ async function buildSite(page, { site, param, participant = '' }) {
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
+  await openSectionOf(page, 'site');
   if (participant !== '') await page.locator('input[name="participant"]').fill(participant);
   await page.locator('select[name="site"]').selectOption(site);
   if (param !== undefined) await page.locator('input[name="participantParam"]').fill(param);
@@ -963,6 +983,7 @@ const bare = (href) => `${new URL(href).origin}${new URL(href).pathname}?c=${new
 // L24: the menu's choices in order, and the one element each shows.
 test('the recruiting-site menu offers five choices and shows only the chosen one\'s hint or field', async ({ page }) => {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, 'site');
   const options = await page.$$eval('select[name="site"] option', (nodes) => nodes.map((n) => ({ value: n.value, label: n.textContent })));
   expect(options).toEqual(SITE_CHOICES.map(({ value, label }) => ({ value, label })));
   for (const c of SITE_CHOICES) {
@@ -1066,6 +1087,7 @@ for (const c of [
   test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
     await openBuilder(page, { config });
+    await openSectionOf(page, 'site');
     await expect(page.locator('#err')).toHaveText('');
     await expect(page.locator('select[name="site"]')).toHaveValue(c.site);
     await expect(page.locator('input[name="participantParam"]')).toHaveValue(c.field);
@@ -1099,8 +1121,12 @@ for (const shuffle of [false, true]) {
       await page.goto(`${base()}link.html`);
       await page.locator('select[name="instrument"]').selectOption('hitopbr');
       await page.locator('input[name="study"]').fill('link');
+      await openSectionOf(page, 'site');
       if (site === '') await page.locator('input[name="participant"]').fill('l29');
-      if (shuffle) await page.locator('input[name="shuffle"]').check();
+      if (shuffle) {
+        await openSectionOf(page, 'shuffle');
+        await page.locator('input[name="shuffle"]').check();
+      }
       await page.locator('select[name="site"]').selectOption(site);
       await page.locator('select[name="storeKind"]').selectOption('supabase');
       await page.locator('input[name="supabaseUrl"]').fill('https://abc.supabase.co');
@@ -1133,7 +1159,9 @@ for (const field of ['complete', 'completeSaved']) {
       await page.goto(`${base()}link.html`);
       await page.locator('select[name="instrument"]').selectOption('hitopbr');
       await page.locator('input[name="study"]').fill('link');
+      await openSectionOf(page, 'site');
       await page.locator('select[name="site"]').selectOption('sona');
+      await openSectionOf(page, 'complete');
       if (field === 'completeSaved') await page.locator('input[name="complete"]').fill(COMPLETE_FINE);
       await page.locator(`input[name="${field}"]`).fill(c.address);
       await page.getByRole('button', { name: 'Make the link' }).click();
@@ -1146,6 +1174,7 @@ for (const field of ['complete', 'completeSaved']) {
 // L31: the chosen site's hint describes the menu for a screen reader.
 test('the recruiting-site menu is described by the chosen site\'s hint', async ({ page }) => {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, 'site');
   const menu = page.locator('select[name="site"]');
   for (const [site, hint] of [['', null], ['prolific', 'prolificHint'], ['sona', 'sonaHint'], ['connect', 'connectHint'], ['other', null], ['', null]]) {
     await menu.selectOption(site);
@@ -1276,6 +1305,7 @@ test('the form.js messages the builder shows name the online form', async ({ pag
   await page.locator('select[name="instrument"]').selectOption('hitopsr');
   await page.locator('input[name="study"]').fill('l35');
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
+  await openSectionOf(page, 'module');
   await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
   await make.click();
   await expect(err).toHaveText('The module file could not be used: the online form reads format "1.0" and found format "2.0".');

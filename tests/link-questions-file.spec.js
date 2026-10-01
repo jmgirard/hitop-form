@@ -39,13 +39,13 @@
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, openBuilderSections, decodeLinkParam, awaitDownload } from './helpers.mjs';
+import { useTarget, openSectionOf, decodeLinkParam, awaitDownload } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 
 async function openBuilder(page) {
   await page.goto(`${base()}link.html`);
+  await openSectionOf(page, '#questionsFile');
 }
 
 const BOM = '﻿';
@@ -326,6 +326,7 @@ for (const probe of REFUSED) {
 // own files are not in the record.
 test('LF5: loading a file makes no network request', async ({ page }) => {
   await page.goto(`${base()}link.html`, { waitUntil: 'networkidle' });
+  await openSectionOf(page, '#questionsFile');
   const urls = [];
   page.on('request', (req) => urls.push(req.url()));
   await load(page, FULL);

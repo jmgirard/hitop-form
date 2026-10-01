@@ -133,19 +133,18 @@ export async function allowLocalStore(context) {
   }
 }
 
-// Registers a beforeEach hook that opens every optional section of the Study
-// Link Builder once each page loads, so a spec about the fields themselves
-// can fill them without opening their sections first. The sections' own
-// closed and opened states are tested in link-sections.spec.js, which does
-// not use this.
-export function openBuilderSections() {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      document.addEventListener('DOMContentLoaded', () => {
-        for (const d of document.querySelectorAll('details.optional')) d.open = true;
-      });
-    });
-  });
+// Opens the Study Link Builder's optional section that holds a control, by
+// a click on the section's summary, as a researcher opens it. `control` is a
+// field's name, such as 'participant', or a CSS selector, such as
+// '#questionsFile'. A section already open takes no click. A control in
+// none of the sections is an error, so a call that names a wrong control
+// fails here rather than at the fill after it.
+export async function openSectionOf(page, control) {
+  const selector = /^\w+$/.test(control) ? `[name="${control}"]` : control;
+  const section = page.locator(`details.optional:has(${selector})`);
+  await expect(section, `the section holding ${selector}`).toHaveCount(1);
+  if (!(await section.evaluate((d) => d.open))) await section.locator('> summary').click();
+  await expect(section).toHaveJSProperty('open', true);
 }
 
 // The store a link names for a path on the recording endpoint.

@@ -46,12 +46,11 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, openBuilderSections, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
+  useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
   leadColumns,
 } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 const store = useStore();
 
 test.beforeEach(async ({ context }) => allowLocalStore(context));
@@ -349,7 +348,11 @@ for (const shuffle of [false, true]) {
       await page.goto(`${base()}link.html`);
       await page.locator('select[name="instrument"]').selectOption('hitopbr');
       await page.locator('input[name="study"]').fill('consent');
-      if (shuffle) await page.locator('input[name="shuffle"]').check();
+      if (shuffle) {
+        await openSectionOf(page, 'shuffle');
+        await page.locator('input[name="shuffle"]').check();
+      }
+      await openSectionOf(page, 'consentText');
       await page.locator('textarea[name="consentText"]').fill(consent);
       await page.locator('select[name="storeKind"]').selectOption('supabase');
       await page.locator('input[name="supabaseUrl"]').fill('https://abcdefghijkl.supabase.co');

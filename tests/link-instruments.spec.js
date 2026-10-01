@@ -29,10 +29,9 @@
 //        forms)
 
 import { test, expect } from '@playwright/test';
-import { useTarget, openBuilderSections, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';
+import { useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 
 const rows = (page) => page.locator('#instrumentList .instrument-row');
 const menus = (page) => page.locator('#instrumentList select[name="instrument"]');
@@ -51,9 +50,14 @@ async function chooseInstruments(page, stems) {
 async function build(page, stems, { module, questions = false } = {}) {
   await chooseInstruments(page, stems);
   await page.locator('input[name="study"]').fill('list');
+  await openSectionOf(page, 'participant');
   await page.locator('input[name="participant"]').fill('b1');
-  if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  if (module) {
+    await openSectionOf(page, 'module');
+    await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
+  }
   if (questions) {
+    await openSectionOf(page, '#addQuestion');
     await page.getByRole('button', { name: 'Add a question' }).click();
     await page.locator('input[name="qName"]').fill('age');
     await page.locator('input[name="qText"]').fill('How old are you?');
