@@ -19,7 +19,7 @@
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, openForm, encodeConfig, encodeCompressed, refusalText } from './helpers.mjs';
+import { useTarget, openForm, encodeConfig, encodeCompressed, refusalText, gotoLong } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -116,13 +116,13 @@ test('participantParam "z" is refused, naming the parameter', async ({ page }) =
 test('a c link that decodes to exactly 100,000 bytes is read', async ({ page }) => {
   const json = paddedJson(100_000);
   expect(Buffer.byteLength(json)).toBe(100_000);
-  await page.goto(`${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
+  await gotoLong(page, `${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
   await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
 });
 
 test('a c link that decodes to 100,001 bytes is refused, naming its size and the limit', async ({ page }) => {
   const json = paddedJson(100_001);
   expect(Buffer.byteLength(json)).toBe(100_001);
-  await page.goto(`${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
+  await gotoLong(page, `${base()}?c=${z(Buffer.from(json, 'utf8'))}`);
   await expectRefused(page, 'The study link could not be read: its setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Ask the study team for a new link.');
 });

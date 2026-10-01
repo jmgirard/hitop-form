@@ -147,10 +147,7 @@ export async function serveDir(dir) {
   // close with one still open.
   const held = new Set();
 
-  // Node refuses a request whose headers, the request line included, pass
-  // 16 KiB. A `c` link that decodes to 100,000 bytes is about 133,000
-  // characters, so the limit here is 256 KiB.
-  const server = http.createServer({ maxHeaderSize: 256 * 1024 }, async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname.startsWith('/hang/')) {
       held.add(res);
