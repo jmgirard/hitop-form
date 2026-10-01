@@ -148,6 +148,27 @@ test('a z link in a browser that cannot unpack it says to open it in another bro
   );
 });
 
+// A browser that has DecompressionStream but not its deflate-raw format,
+// as Chrome and Edge 80 to 102 do: the constructor throws a TypeError for
+// that format, and the page says what it says with no DecompressionStream.
+test('a z link in a browser whose DecompressionStream lacks deflate-raw says to open it in another browser', async ({ page }) => {
+  await page.addInitScript(() => {
+    const Native = window.DecompressionStream;
+    window.DecompressionStream = class extends Native {
+      constructor(format) {
+        if (format === 'deflate-raw') throw new TypeError(`Failed to construct 'DecompressionStream': Unsupported compression format: '${format}'`);
+        super(format);
+      }
+    };
+  });
+  await openForm(page, base(), { instrument: 'hitopbr', study: 'screens', participant: 'p1' }, { param: 'z' });
+  await expectErrorScreen(
+    page,
+    NEXT.browser,
+    'This browser cannot read the study link, because it cannot unpack it. Open the link in a current version of Chrome, Edge, Firefox or Safari.',
+  );
+});
+
 // P1: the second call, fetching the exports. A fetch that fails outright
 // is a connection failure, for one instrument and for a list; an export
 // the site answers with an error status is not.

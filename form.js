@@ -183,9 +183,17 @@ export async function encodeLink(config) {
 // there, so a small link cannot make it inflate without end.
 export const MAX_LINK_BYTES = 100_000;
 
-// Whether this browser can read a `z` parameter.
+// Whether this browser can read a `z` parameter. Chrome and Edge 80 to 102
+// have DecompressionStream but not its deflate-raw format, and the
+// constructor throws for it there, so the check builds one.
 export function canInflate() {
-  return typeof DecompressionStream === 'function';
+  if (typeof DecompressionStream !== 'function') return false;
+  try {
+    new DecompressionStream('deflate-raw');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // A `z` parameter's config, or a throw through `bad` naming the fault: the
