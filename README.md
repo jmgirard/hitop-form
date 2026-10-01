@@ -907,7 +907,9 @@ npx playwright test
 workflow runs the suite on every pull request and every push to `main`,
 against the checkout.
 It runs every Monday against the deployed page, so a new package export that
-breaks the page is noticed. On that run the send tests ask the browser for
+breaks the page is noticed. `tests/link-sections.spec.js` is the exception:
+it answers the page's export requests from the copies in
+`tests/fixtures/exports/`, so it does not check a new export. On that run the send tests ask the browser for
 permission to reach the local recording server from the public page. If
 the browser refuses, they skip with the reason printed.
 

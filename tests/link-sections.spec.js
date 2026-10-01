@@ -755,13 +755,17 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
 // S8: each hint's link to the README lands on one of its headings, slugged
 // as GitHub slugs them: lower case, spaces to "-", other punctuation but
 // "-" and "_" dropped. A line inside a fenced code block is not a heading,
-// such as a shell comment.
+// such as a shell comment. A fence may be indented, as inside a list item,
+// and only a run of the same character at least as long closes it.
 function readmeSlugs(text) {
   const slugs = new Set();
-  let fenced = false;
+  let fence = null;
   for (const line of text.split('\n')) {
-    if (/^(```|~~~)/.test(line)) fenced = !fenced;
-    else if (!fenced && /^#{1,6} /.test(line)) {
+    const run = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence === null && run) fence = run;
+    else if (fence !== null) {
+      if (run && run[0] === fence[0] && run.length >= fence.length && /^\s*[`~]+\s*$/.test(line)) fence = null;
+    } else if (/^#{1,6} /.test(line)) {
       slugs.add(line.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-'));
     }
   }
@@ -770,6 +774,26 @@ function readmeSlugs(text) {
 
 test('a "#" line inside a fenced code block gives no README anchor', () => {
   const slugs = readmeSlugs(['# Before', '', '```bash', '# x', '```', '', '## After it'].join('\n'));
+  expect([...slugs].sort()).toEqual(['after-it', 'before']);
+});
+
+test('an indented fence, a "~~~" line inside a backtick fence, and a longer fence each hide their "#" lines', () => {
+  const slugs = readmeSlugs([
+    '# Before',
+    '1. A step:',
+    '   ```bash',
+    '# a',
+    '   ```',
+    '```',
+    '~~~',
+    '# b',
+    '```',
+    '````md',
+    '```',
+    '# c',
+    '````',
+    '## After it',
+  ].join('\n'));
   expect([...slugs].sort()).toEqual(['after-it', 'before']);
 });
 

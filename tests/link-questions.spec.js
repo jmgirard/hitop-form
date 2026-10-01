@@ -295,6 +295,10 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await expect(page.getByRole('heading', { name: 'Before you begin' })).toBeVisible();
 
   await openBuilder(page, `?z=${encodeCompressed(setup(1 + need))}`);
+  // The z prefill unpacks before it fills the groups and opens their
+  // section, so the fill is awaited first: a click on the summary before
+  // then would close the section the prefill opens.
+  await expect(group(page, 9).locator('[name=qText]')).toHaveValue('x'.repeat(1 + need));
   await openSectionOf(page, '#addQuestion');
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);

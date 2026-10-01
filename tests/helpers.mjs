@@ -25,7 +25,9 @@ export function exportUrl(instrument) {
 }
 
 // Fetches the export the page will fetch, so a test's expectations come from
-// the same file and not from a copy that could drift.
+// the same file and not from a copy that could drift. link-sections.spec.js
+// is the exception: it answers the page's export requests from the copies
+// in fixtures/exports/, which can fall behind the site.
 export async function fetchExport(instrument) {
   const res = await fetch(exportUrl(instrument));
   if (!res.ok) throw new Error(`fetching ${exportUrl(instrument)}: HTTP ${res.status}`);

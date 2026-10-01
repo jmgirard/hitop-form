@@ -62,7 +62,8 @@ async function make(page, { consent, declined, completeDeclined, study = 'consen
 
 // Sets a box's value from the page: fill() would turn a lone surrogate into
 // U+FFFD, and the builder reads the box as it holds its value. The box's
-// section is opened first, as a researcher opens it.
+// section is opened first, by a click on its summary. The write fires no
+// input event, so the section's summary is not redrawn.
 async function setBox(page, name, value) {
   await openSectionOf(page, name);
   await page.locator(`textarea[name="${name}"]`).evaluate((node, v) => { node.value = v; }, value);
