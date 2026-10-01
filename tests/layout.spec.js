@@ -142,7 +142,8 @@ test('a refused blank item is highlighted as one unbroken box', async ({ page })
   const blank = 3;
   await answerPage(page, { skip: [blank] });
   await nextButton(page).click();
-  await expect(page.locator('[role=alert]')).toContainText(`item ${blank} on this page`);
+  await expect(page.locator('[role=alert]')).toHaveText('1 item on this page has no answer yet.');
+  await expect(page.locator('fieldset.item').nth(blank - 1).locator('.missed')).toHaveText('Please answer this item');
   const measured = await measureItems(page);
   const m = measured[blank - 1];
   const errorColour = await page.evaluate(() => {

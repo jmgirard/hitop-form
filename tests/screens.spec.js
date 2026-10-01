@@ -23,6 +23,17 @@
 //       capitals, correction and spell check; Enter runs Begin's checks, so
 //       an empty value or one holding a lone surrogate gets Begin's alert
 //       and a filled value starts the form
+//   P4: at 375 px, on the first and the last page of each part of a
+//       HiTOP-BR link and of a PID-5-BF plus HiTOP-BR link: "Page p of n"
+//       above the items and beside the Next or Finish button, n the pages
+//       of that instrument, and under the list "Part k of m" in both
+//       places; every option's label at least 44 px high; with three items
+//       missed and then one, a press marks each missed item "Please answer
+//       this item" and no other, puts the count directly above the first
+//       missed item, and scrolls that item into view
+//   P5: the first and the last page of each of the five instruments hold a
+//       closed "Instructions" section above the items, whose body text is
+//       the export's instructions.start
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -400,5 +411,142 @@ for (const press of ['Enter', 'Begin']) {
     await go(page, input);
     await expect(page.locator('.progress')).toHaveText('Page 1 of 3');
     await expect(page.locator('fieldset.item')).toHaveCount(15);
+  });
+}
+
+// ---- P4 ---------------------------------------------------------------
+
+// The count above the first missed item, stated here.
+const missedCount = (n) => (n === 1 ? '1 item on this page has no answer yet.' : `${n} items on this page have no answer yet.`);
+
+// Answers every item on the page through the page itself, the first option
+// of each, so a long walk takes one evaluation a page.
+async function answerAll(page) {
+  await page.locator('fieldset.item').evaluateAll((nodes) => {
+    for (const fs of nodes) fs.querySelector('input[type=radio]').click();
+  });
+}
+
+// Presses the forward button and waits for the next screen.
+async function forward(page) {
+  await markScreen(page);
+  await nextButton(page).click();
+  await waitNewScreen(page);
+}
+
+// The checks P4 makes on an item page: page `p` of `n`, part `k` of `m`
+// (m 1 for a single instrument).
+async function expectProgress(page, { p, n, k, m }) {
+  const pageText = `Page ${p} of ${n}`;
+  const partText = `Part ${k} of ${m}`;
+  const where = page.locator('main > p.where');
+  await expect(where.locator('.progress')).toHaveText(pageText);
+  if (m > 1) await expect(where).toHaveText(`${partText} · ${pageText}`);
+  else await expect(where).toHaveText(pageText);
+  const step = page.locator('.nav .step');
+  await expect(step).toHaveText(m > 1 ? `${partText} · ${pageText}` : pageText);
+  // Above the items: the line ends before the first item starts.
+  const [w, item] = await Promise.all([where.boundingBox(), page.locator('fieldset.item').first().boundingBox()]);
+  expect(w.y + w.height, `${pageText}: the line above the items`).toBeLessThanOrEqual(item.y);
+  // Beside the button: on its row, and just before it.
+  const button = nextButton(page);
+  await expect(button).toHaveText(/^(Next|Finish)$/);
+  const [s, b] = await Promise.all([step.boundingBox(), button.boundingBox()]);
+  expect(s.y < b.y + b.height && b.y < s.y + s.height, `${pageText}: the line shares the button's row`).toBe(true);
+  expect(s.x + s.width, `${pageText}: the line ends before the button`).toBeLessThanOrEqual(b.x);
+  expect(b.x - (s.x + s.width), `${pageText}: no more than 2rem between them`).toBeLessThanOrEqual(32);
+  // Each option's label is the target a finger presses.
+  const heights = await page.locator('fieldset.item .options label').evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().height));
+  expect(heights.length).toBeGreaterThan(0);
+  expect(Math.min(...heights), `${pageText}: the lowest option label`).toBeGreaterThanOrEqual(44);
+}
+
+// Leaves the items at places `blank` (counted from 1 on the page) without
+// an answer, presses forward, and checks the marks, the count above the
+// first, and the scroll; the page stays.
+async function expectMissed(page, blank) {
+  const items = page.locator('fieldset.item');
+  const before = await page.locator('.progress').textContent();
+  await nextButton(page).click();
+  const marked = await items.evaluateAll((ns) => ns.map((n, i) => (n.querySelector('.missed') ? i + 1 : null)).filter((i) => i !== null));
+  expect(marked, 'the items marked').toEqual(blank);
+  for (const i of blank) await expect(items.nth(i - 1).locator('.missed')).toHaveText('Please answer this item');
+  const first = items.nth(blank[0] - 1);
+  const above = await first.evaluate((n) => ({
+    cls: n.previousElementSibling?.className ?? null,
+    text: n.previousElementSibling?.textContent ?? null,
+    role: n.previousElementSibling?.getAttribute('role') ?? null,
+  }));
+  expect(above, 'the element directly above the first missed item').toEqual({ cls: 'missed-count', text: missedCount(blank.length), role: 'alert' });
+  await expect(first, 'the first missed item is in view').toBeInViewport();
+  await expect(page.locator('.progress'), 'the page stays').toHaveText(before);
+}
+
+// Probes the page on show: three items missed, then one, then all answered.
+async function probeMissed(page) {
+  const n = await page.locator('fieldset.item').count();
+  const blank = [Math.ceil(n / 2), n - 2, n];
+  await answerPage(page, { skip: blank });
+  await expectMissed(page, blank);
+  for (const i of blank.slice(0, 2)) await page.locator('fieldset.item').nth(i - 1).locator('input[type=radio]').first().check();
+  await expectMissed(page, blank.slice(2));
+  await page.locator('fieldset.item').nth(n - 1).locator('input[type=radio]').first().check();
+  await expect(page.locator('.missed-count'), 'the count goes once every item is answered').toHaveCount(0);
+}
+
+for (const link of [
+  { name: 'a HiTOP-BR link', config: { instrument: 'hitopbr' }, pages: [3] },
+  { name: 'a PID-5-BF plus HiTOP-BR link', config: { instruments: ['pid5bf', 'hitopbr'] }, pages: [2, 3] },
+]) {
+  test(`${link.name}: the progress lines, the option targets and the missed-item marks, at 375 px`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(formUrl(base(), { ...link.config, study: 'screens', participant: 'p4' }));
+    const m = link.pages.length;
+    for (const [i, n] of link.pages.entries()) {
+      // The part's start screen, whose one button is Begin.
+      await expect(page.getByRole('button', { name: 'Begin' })).toBeVisible();
+      await forward(page);
+      for (let p = 1; p <= n; p++) {
+        if (p === 1 || p === n) {
+          await expectProgress(page, { p, n, k: i + 1, m });
+          await probeMissed(page);
+        } else {
+          await answerAll(page);
+        }
+        await forward(page);
+      }
+    }
+    await expect(page.locator('main > h1')).toHaveText('Thank you');
+  });
+}
+
+// ---- P5 ---------------------------------------------------------------
+
+// The instructions section on the page on show: closed, named
+// "Instructions", above the first item, and the text of its body.
+async function expectReminder(page, start, label) {
+  const reminder = page.locator('main > details.reminder');
+  await expect(reminder, label).toHaveCount(1);
+  await expect(reminder).toHaveJSProperty('open', false);
+  await expect(reminder.locator('> summary')).toHaveText('Instructions');
+  const body = await reminder.evaluate((d) => [...d.childNodes].filter((c) => c.nodeName !== 'SUMMARY').map((c) => c.textContent).join(''));
+  expect(body, `${label}: the body text`).toBe(start);
+  const before = await reminder.evaluate((d) => !!(d.compareDocumentPosition(document.querySelector('fieldset.item')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  expect(before, `${label}: above the items`).toBe(true);
+}
+
+for (const stem of ['hitopsr', 'hitopbr', 'pid5', 'pid5sf', 'pid5bf']) {
+  test(`${TITLES[stem]}: the first and the last page hold the closed instructions`, async ({ page }) => {
+    const exp = await fetchExport(stem);
+    const n = Math.ceil(exp.items.length / 15);
+    await openForm(page, base(), { instrument: stem, study: 'screens', participant: 'p5' });
+    await forward(page);
+    await expectReminder(page, exp.instructions.start, `${TITLES[stem]} page 1`);
+    for (let p = 1; p < n; p++) {
+      await answerAll(page);
+      await forward(page);
+    }
+    await expect(page.locator('.progress')).toHaveText(`Page ${n} of ${n}`);
+    await expectReminder(page, exp.instructions.start, `${TITLES[stem]} page ${n}`);
   });
 }

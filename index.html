@@ -110,8 +110,11 @@
   fieldset.item .options { clear: both; }
   fieldset.item legend .pos { color: var(--muted); font-weight: 400; margin-right: var(--s2); }
   .options { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-top: var(--s2); }
+  /* Each option's label, which holds its radio and its text, is the
+     target a finger presses: at least 44px high. */
   .options label {
     display: inline-flex; align-items: center; gap: var(--s2);
+    min-height: 44px;
     padding: var(--s1) var(--s2);
     border-radius: var(--r1);
     cursor: pointer;
@@ -177,7 +180,28 @@
   /* The status region under "Save the file" stays in the accessibility tree
      while empty (never display: none), but adds no space before a press. */
   .saved-again:empty { margin: 0; }
-  .progress { color: var(--muted); font-size: var(--t-small); margin: 0 0 var(--s4); }
+  /* "Part k of m · Page p of n" above the items, and again beside the
+     forward button. */
+  .where { color: var(--muted); font-size: var(--t-small); margin: 0 0 var(--s3); }
+  .nav { flex-wrap: wrap; }
+  .nav .forward { display: flex; align-items: center; gap: var(--s3); margin-left: auto; }
+  .nav .step { color: var(--muted); font-size: var(--t-small); white-space: nowrap; }
+
+  /* The instrument's instructions, closed above the items. */
+  details.reminder {
+    border: 1px solid var(--line);
+    border-radius: var(--r1);
+    background: var(--surface);
+    padding: var(--s2) var(--s4);
+    margin: 0 0 var(--s4);
+  }
+  details.reminder summary { cursor: pointer; font-weight: 600; }
+  details.reminder[open] summary { margin-bottom: var(--s2); }
+  details.reminder p { margin: 0; }
+
+  /* An item left unanswered at Next or Finish, and the count above the
+     first of them. */
+  fieldset .missed { clear: both; color: var(--error); font-weight: 600; margin: 0 0 var(--s2); }
   /* "Part 2 of 3" on a start screen under a link with several instruments. */
   .part { font-weight: 600; margin: 0 0 var(--s4); }
   code { font-family: var(--mono); font-size: .95em; }

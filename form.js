@@ -1918,27 +1918,55 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
   // Page `page` of part `part`. Its first page carries no Back. Past its
   // last page come the next part's start screen, then the after screen when
   // the link has one, and Finish on the last page of the last part
-  // otherwise.
+  // otherwise. The page and, under a list, the part are stated above the
+  // items and again beside the forward button; the instrument's
+  // instructions sit in a closed section above the items.
+  //
+  // Next or Finish with items unanswered marks each one with "Please answer
+  // this item", inside it and named by its aria-describedby, and puts the
+  // count of them in an alert directly above the first, which the page
+  // scrolls to. Answering an item takes its mark away, and the count goes
+  // once no mark is left.
   function showPage() {
     const p = parts[part];
     const { answers, pageCount } = p;
     const first = page * PAGE_SIZE;
     const slice = p.plan.shown.slice(first, first + PAGE_SIZE);
-    const alert = el('p', { role: 'alert' });
+    const count = el('p', { role: 'alert', class: 'missed-count' });
     const nodes = slice.map((it, i) => itemNode(p, it, first + i + 1));
     const last = page === pageCount - 1;
     const lastPart = part === parts.length - 1;
+    const partText = `Part ${part + 1} of ${parts.length}`;
+    const pageText = `Page ${page + 1} of ${pageCount}`;
+
+    const unmark = (node) => {
+      node.querySelector('.missed')?.remove();
+      node.removeAttribute('aria-describedby');
+    };
+    nodes.forEach((node) => node.addEventListener('change', () => {
+      unmark(node);
+      if (!nodes.some((n) => n.classList.contains('unanswered'))) count.remove();
+    }));
 
     const advance = () => {
       if (sending) return;
-      const missing = slice.findIndex((it) => !answers.has(it.number));
-      if (missing >= 0) {
-        nodes.forEach((n, i) => n.classList.toggle('unanswered', !answers.has(slice[i].number)));
-        // Both numbers: the one printed beside the item, and its place on
-        // this page.
-        alert.textContent = `Please answer item ${first + missing + 1} (item ${missing + 1} on this page) before continuing.`;
-        nodes[missing].scrollIntoView({ block: 'center' });
-        nodes[missing].querySelector('input[type=radio]').focus({ preventScroll: true });
+      const missed = nodes.filter((n, i) => !answers.has(slice[i].number));
+      if (missed.length > 0) {
+        nodes.forEach((n, i) => {
+          unmark(n);
+          n.classList.toggle('unanswered', !answers.has(slice[i].number));
+        });
+        for (const n of missed) {
+          const id = `missed-${n.dataset.number}`;
+          n.querySelector('legend').after(el('p', { class: 'missed', id, text: 'Please answer this item' }));
+          n.setAttribute('aria-describedby', id);
+        }
+        count.textContent = missed.length === 1
+          ? '1 item on this page has no answer yet.'
+          : `${missed.length} items on this page have no answer yet.`;
+        missed[0].before(count);
+        count.scrollIntoView({ block: 'start' });
+        missed[0].querySelector('input[type=radio]').focus({ preventScroll: true });
         return;
       }
       if (last && !lastPart) start(part + 1);
@@ -1957,14 +1985,25 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
     const nav = el('div', { class: 'nav' }, [
       ...(page > 0 ? [el('button', { type: 'button', class: 'secondary', text: 'Back', onclick: back })] : []),
       el('span', { class: 'spacer' }),
-      el('button', { type: 'button', text: last && lastPart && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
+      // One group, so a narrow screen that wraps the row keeps the line
+      // beside the button.
+      el('div', { class: 'forward' }, [
+        el('span', { class: 'step', text: multi ? `${partText} · ${pageText}` : pageText }),
+        el('button', { type: 'button', text: last && lastPart && after.length === 0 ? 'Finish' : 'Next', onclick: advance }),
+      ]),
     ]);
 
     root.replaceChildren(
       heading(p.title),
-      el('p', { class: 'progress', text: `Page ${page + 1} of ${pageCount}` }),
+      el('p', { class: 'where' }, [
+        ...(multi ? [el('span', { class: 'part-of', text: partText }), ' · '] : []),
+        el('span', { class: 'progress', text: pageText }),
+      ]),
+      el('details', { class: 'reminder' }, [
+        el('summary', { text: 'Instructions' }),
+        el('p', { text: p.exp.instructions.start }),
+      ]),
       ...nodes,
-      alert,
       nav,
       foot(),
     );
@@ -2015,7 +2054,7 @@ function runForm(root, config, exps, plans, prolific, fromAddress) {
       return;
     }
     sending = true;
-    const finishButton = nav.querySelector('button:last-of-type');
+    const finishButton = [...nav.querySelectorAll('button')].at(-1);
     for (const b of nav.querySelectorAll('button')) b.disabled = true;
     finishButton.textContent = 'Sending…';
     const outcome = await sendResponses(store, buildRow(record));

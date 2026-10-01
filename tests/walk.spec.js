@@ -2,12 +2,12 @@
 //
 //   W1: every page but the last shows 15 items, and the last shows the
 //       remainder (fewer than 15 when the item count is not a multiple of 15)
-//   W2: on a full page, with the first, a middle and the last item left blank
-//       in turn, pressing Next refuses each time, naming the blank item's
-//       position on the page, and the page does not advance; once the item is
-//       answered, Next advances
-//   W3: on the last page, with one item left blank, Finish refuses naming it;
-//       once answered, Finish reaches the done screen
+//   W2: on a full page, with the first, a middle and the last item left
+//       blank and then answered in turn, pressing Next refuses each time,
+//       marking the items still blank and no other and counting them, and
+//       the page does not advance; once all are answered, Next advances
+//   W3: on the last page, with one item left blank, Finish refuses marking
+//       it; once answered, Finish reaches the done screen
 //
 // Walked for the full HiTOP-BR (45 items, three full pages) and the shuffled
 // module fixture (21 items: one full page and a last page of six).
@@ -20,10 +20,15 @@ import {
 
 const base = useTarget();
 
-// The refusal names the number printed beside the item and its place on the
-// page: on page p, position k on the page is item 15 (p - 1) + k.
-function refusal(k, p) {
-  return `Please answer item ${PAGE_SIZE * (p - 1) + k} (item ${k} on this page) before continuing.`;
+// A refusal of the blank items at places `ks` on the page: the count above
+// the first, and the mark inside each of them and no other item.
+async function expectRefused(page, ks) {
+  await expect(page.locator('[role=alert]')).toHaveText(
+    ks.length === 1 ? '1 item on this page has no answer yet.' : `${ks.length} items on this page have no answer yet.`,
+  );
+  const marked = await page.$$eval('fieldset.item', (nodes) => nodes.map((n, i) => (n.querySelector('.missed') ? i + 1 : null)).filter((i) => i !== null));
+  expect(marked, 'the items marked').toEqual(ks);
+  for (const k of ks) await expect(page.locator('fieldset.item').nth(k - 1).locator('.missed')).toHaveText('Please answer this item');
 }
 
 async function answerOne(page, k) {
@@ -47,9 +52,9 @@ async function walk(page, itemCount) {
       // W2: first, middle and last of a full page, blank in turn.
       const probes = [1, 8, PAGE_SIZE];
       await answerPage(page, { skip: probes });
-      for (const k of probes) {
+      for (const [i, k] of probes.entries()) {
         await nextButton(page).click();
-        await expect(page.locator('[role=alert]')).toHaveText(refusal(k, 1));
+        await expectRefused(page, probes.slice(i));
         expect(await currentPage(page), 'did not advance').toEqual({ page: 1, of: pages });
         // The named item's first option holds focus after a refusal.
         await expect(page.locator('fieldset.item').nth(k - 1).locator('input[type=radio]').first()).toBeFocused();
@@ -60,7 +65,7 @@ async function walk(page, itemCount) {
       const k = lastCount;
       await answerPage(page, { skip: [k] });
       await nextButton(page).click();
-      await expect(page.locator('[role=alert]')).toHaveText(refusal(k, p));
+      await expectRefused(page, [k]);
       expect(await currentPage(page), 'did not advance').toEqual({ page: p, of: pages });
       await answerOne(page, k);
     } else {
