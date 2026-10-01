@@ -432,7 +432,7 @@ test('the Completion URL after a saved file field puts completeSaved in the link
   // this hint keeps.
   const hint = page.locator('label:has(input[name="completeSaved"]) .hint');
   await expect(hint).toContainText('Only beside a completion URL');
-  await expect(hint).toContainText("your study's completion code for a saved file");
+  await expect(hint).toContainText("For Prolific, your saved-file code's URL.");
 
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
   await page.locator('input[name="study"]').fill('link');
@@ -523,7 +523,7 @@ test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   // L3
   const hint = page.locator('label:has(textarea[name="module"]) .hint');
-  await expect(hint).toContainText(/^HiTOP-SR only\./);
+  await expect(hint).toContainText('HiTOP-SR only: with several instruments');
 });
 
 // L15: a pasted descriptor whose items are not in ascending order is refused
@@ -916,10 +916,9 @@ test('the recruiting-site menu offers five choices and shows only the chosen one
   }
   const sona = page.locator('#sonaHint');
   // S9 in link-sections.spec.js checks the XXXX rule and the credit token.
-  await expect(sona).toContainText("The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code");
-  await expect(sona).toContainText("Paste the link as SONA's Study URL");
+  await expect(sona).toContainText("Paste the link, ending in id=%SURVEY_CODE%, as SONA's Study URL.");
   await expect(page.locator('#connectHint')).toContainText('from the participantId parameter');
-  await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('write {participant} after its ? or #');
+  await expect(page.locator('label:has(input[name="complete"]) .hint')).toContainText('{participant} after its ? or # becomes the identifier');
 });
 
 // L25: the link each choice builds.
@@ -1099,7 +1098,7 @@ test('the recruiting-site menu is described by the chosen site\'s hint', async (
     else await expect(menu, `under ${site}`).toHaveAttribute('aria-describedby', hint);
   }
   await menu.selectOption('sona');
-  await expect(menu).toHaveAccessibleDescription(/The link ends in id=%SURVEY_CODE%, which SONA fills with each participant's survey code/);
+  await expect(menu).toHaveAccessibleDescription(/Paste the link, ending in id=%SURVEY_CODE%, as SONA's Study URL/);
 });
 
 // L34: "Make the link" does nothing until the prefill ends. Before the

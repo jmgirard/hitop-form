@@ -40,7 +40,14 @@
 //       XXXX rule and says the credit token is readable in the study link;
 //       the declined-text hint gives both fixed sentences; the decline
 //       address takes {participant}; the saved-file address leaves the
-//       completion URL in force when responses arrive
+//       completion URL in force when responses arrive. Six more facts: the
+//       SONA hint says the survey code becomes the identifier and names the
+//       "Completion URL" field; the decline address takes {participant}
+//       after its ? or #; the saved-file hint names the two cases that save
+//       a file; the completion hint gives Prolific's study-page URL; the
+//       module hint says a module applies to the HiTOP-SR among several
+//       instruments; the key hint says an opened study link, on either
+//       page, puts the key in GitHub Pages' logs
 //  S10: with "Another site" chosen and one question of each type, 50
 //       characters put into each text input and box in the sections
 //       (typed where the field shows, sent as input events where the
@@ -749,15 +756,22 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(page.locator('#prolificHint')).toContainText('If Prolific\'s URL-parameters option adds them again, it reads the filled ones.');
   await site.selectOption('sona');
   const sona = page.locator('#sonaHint');
-  await expect(sona).toContainText('For completion, give SONA\'s client-side URL with {participant} for XXXX.');
+  await expect(sona).toContainText('As the "Completion URL", give SONA\'s client-side URL with {participant} for XXXX.');
   await expect(sona).toContainText('XXXX. Its credit token is readable in the study link.');
+  await expect(sona).toContainText('There, each participant\'s survey code becomes their identifier.');
   const hintOf = (name) => page.locator(`label:has([name="${name}"]) .hint`);
   await expect(hintOf('declinedText')).toContainText('Left empty: "You chose not to take part.", plus "You can close this page." with no decline URL.');
-  await expect(hintOf('completeDeclined')).toContainText('{participant} is empty unless the link or a recruiting site gives it.');
-  await expect(hintOf('completeSaved')).toContainText('in place of the completion URL, which still applies when responses arrive.');
-  await expect(hintOf('complete')).toContainText('sends the participant to after showing that their responses arrived');
+  await expect(hintOf('completeDeclined')).toContainText('Put {participant} after its ? or #. It is empty unless the link or a recruiting site gives it.');
+  await expect(hintOf('completeSaved')).toContainText('A file is saved when the link has no place for responses or a send is not confirmed. Its screen links here.');
+  await expect(hintOf('completeSaved')).toContainText('Arrived responses still use the completion URL.');
+  await expect(hintOf('complete')).toContainText('sends the participant to after showing their responses arrived');
+  await expect(hintOf('complete')).toContainText('For Prolific, the study page\'s completion URL.');
+  await expect(hintOf('module')).toContainText('with several instruments, it applies to the HiTOP-SR among them.');
+  const keyHint = hintOf('supabaseKey');
+  await expect(keyHint).toContainText('Opening a study link on the Study Link Builder or the online form puts the key in GitHub Pages\' logs.');
+  await expect(keyHint.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
   await expect(intro).toContainText('This page keeps and sends nothing you type.');
-  await expect(sona).toContainText('The link ends in id=%SURVEY_CODE%, which SONA fills with each participant\'s survey code.');
+  await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
   await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');

@@ -139,7 +139,7 @@
           <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
         </label>
         <label>Publishable key
-          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key.</span>
+          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key. Opening a study link on the Study Link Builder or the online form puts the key in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>.</span>
           <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
         </label>
         <label>Table name
@@ -165,7 +165,7 @@
       </select>
     </label>
     <p class="site-hint" id="prolificHint" hidden>The online form reads each participant's Prolific ID from the address. Paste the link, placeholders included, as the study URL. If Prolific's URL-parameters option adds them again, it reads the filled ones. The responses gain <code>prolific_study</code> and <code>prolific_session</code> columns.</p>
-    <p class="site-hint" id="sonaHint" hidden>The link ends in <code>id=%SURVEY_CODE%</code>, which SONA fills with each participant's survey code. Paste the link as SONA's Study URL. For completion, give SONA's client-side URL with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
+    <p class="site-hint" id="sonaHint" hidden>Paste the link, ending in <code>id=%SURVEY_CODE%</code>, as SONA's Study URL. There, each participant's survey code becomes their identifier. As the "Completion URL", give SONA's client-side URL with <code>{participant}</code> for <code>XXXX</code>. Its credit token is readable in the study link.</p>
     <p class="site-hint" id="connectHint" hidden>The online form reads each participant's Connect ID from the <code>participantId</code> parameter as their identifier. Give the link as the project URL in Connect, and Connect's completion redirect URL as the completion URL.</p>
     <div id="otherFields" hidden>
       <label>Address parameter
@@ -177,7 +177,7 @@
     <details class="optional" id="secOrder">
       <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
     <label>Module file
-      <span class="hint">HiTOP-SR only. Choose or paste the module file that the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code> saved. The online form then shows only the module's items, in its printed order when it records one. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
+      <span class="hint">Choose or paste a module file from the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code>. HiTOP-SR only: with several instruments, it applies to the HiTOP-SR among them. The online form shows only its items, in its printed order if any. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
       <textarea name="module" spellcheck="false"></textarea>
     </label>
     <label>Choose the module file
@@ -203,18 +203,18 @@
       <textarea name="declinedText" class="prose"></textarea>
     </label>
     <label>Completion URL after a decline
-      <span class="hint">Only beside consent text. An https:// address the online form sends the participant to after "I do not agree". <code>{participant}</code> is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
+      <span class="hint">Only beside consent text. The https:// address "I do not agree" leads to. Put <code>{participant}</code> after its <code>?</code> or <code>#</code>. It is empty unless the link or a recruiting site gives it. For Prolific, your no-consent completion URL.</span>
       <input name="completeDeclined" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
     <details class="optional" id="secFinish">
       <summary><span class="sec-name">When the participant finishes</span> <span class="sec-state">Not used</span></summary>
     <label>Completion URL
-      <span class="hint">An https:// address the online form sends the participant to after showing that their responses arrived, and links to after a saved file. Where it needs the identifier, write <code>{participant}</code> after its <code>?</code> or <code>#</code>. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
+      <span class="hint">An https:// address the online form sends the participant to after showing their responses arrived, and links to after a saved file. For Prolific, the study page's completion URL. <code>{participant}</code> after its <code>?</code> or <code>#</code> becomes the identifier. <a href="https://github.com/jmgirard/hitop-form#when-the-participant-finishes">Completion URLs</a>.</span>
       <input name="complete" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     <label>Completion URL after a saved file
-      <span class="hint">Only beside a completion URL. The saved-file screen links here in place of the completion URL, which still applies when responses arrive. For Prolific, the URL of your study's completion code for a saved file.</span>
+      <span class="hint">Only beside a completion URL. A file is saved when the link has no place for responses or a send is not confirmed. Its screen links here. Arrived responses still use the completion URL. For Prolific, your saved-file code's URL.</span>
       <input name="completeSaved" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.prolific.com/submissions/complete?cc=…">
     </label>
     </details>
