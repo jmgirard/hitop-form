@@ -282,7 +282,7 @@
     consentTextFault, fetchExports, planStems, linkStems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
     CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv, writeQuestionsCsv, saveFile,
     checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
-    SETUP_FILE_MAX, FINGERPRINT,
+    SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -1268,6 +1268,11 @@
       }
       if (stale()) {
         refuseAt(STALE);
+        return;
+      }
+      const columns = storeColumns(items, config.shuffle === true, prolific, config.questions).length;
+      if (columns > POSTGRES_COLUMNS_MAX) {
+        refuseAt(`The Supabase table would have ${columns.toLocaleString('en-US')} columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.`);
         return;
       }
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);

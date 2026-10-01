@@ -1288,6 +1288,21 @@ function isIntegerArray(x) {
   return Array.isArray(x) && x.every((v) => Number.isInteger(v));
 }
 
+// The most columns a PostgreSQL table can have (PostgreSQL documentation,
+// Appendix K). A row must also fit in one 8,192-byte page, so a table under
+// this limit can still refuse a row of long answers. link.html refuses a
+// Supabase setup whose table would have more columns.
+export const POSTGRES_COLUMNS_MAX = 1_600;
+
+// The columns storeSql() creates, in its order, each as [name, type].
+export function storeColumns(items, shuffle = false, prolific = false, questions = undefined) {
+  return [
+    ...leadColumns({ shuffle, prolific }).map((c) => [c, 'text']),
+    ...items.map((it) => [it.name, 'integer']),
+    ...questionColumns({ questions }).map((c) => [c, 'text']),
+  ];
+}
+
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (the `items` of each planStems() plan, one group
 // per instrument in the link's order, joined into one list): the five study
@@ -1301,12 +1316,7 @@ function isIntegerArray(x) {
 export function storeSql(table, items, shuffle = false, prolific = false, questions = undefined) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
-  const lead = leadColumns({ shuffle, prolific });
-  const columns = [
-    ...lead.map((c) => `  ${q(c)} text`),
-    ...items.map((it) => `  ${q(it.name)} integer`),
-    ...questionColumns({ questions }).map((c) => `  ${q(c)} text`),
-  ];
+  const columns = storeColumns(items, shuffle, prolific, questions).map(([name, type]) => `  ${q(name)} ${type}`);
   return [
     `create table ${t} (`,
     columns.join(',\n'),

@@ -34,6 +34,9 @@
 //        numeric keypad, so a minus sign can be typed
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
+//   LQ7: with a Supabase table, a setup whose table has 1,600 columns is
+//        built and its SQL holds 1,600 columns; one of 1,601 is refused
+//        naming the count, and no link or SQL shows
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -366,3 +369,37 @@ test('Move up, Move down and Remove reorder and renumber the questions', async (
   await make(page);
   expect(decodeLinkParam(await page.locator('#out').textContent()).questions.before.map((q) => q.name)).toEqual(['c', 'b']);
 });
+
+// LQ7: PostgreSQL allows 1,600 columns in a table. The HiTOP-BR has 45
+// items and the row has 5 lead columns, so 1,550 questions make 1,600
+// columns.
+const PG_MAX = 1_600;
+const HITOPBR_ITEMS = 45;
+const LEAD = 5;
+for (const columns of [PG_MAX, PG_MAX + 1]) {
+  test(`a Supabase table of ${columns.toLocaleString('en-US')} columns is ${columns > PG_MAX ? 'refused, naming the count' : 'built'}`, async ({ page }) => {
+    const n = columns - LEAD - HITOPBR_ITEMS;
+    const questions = { before: many(n, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
+    await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
+    await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
+    await page.locator('select[name="storeKind"]').selectOption('supabase');
+    await page.locator('input[name="supabaseUrl"]').fill('https://abc.supabase.co');
+    await page.locator('input[name="supabaseKey"]').fill('sb_publishable_x');
+    await page.locator('input[name="supabaseTable"]').fill('hitopbr_responses');
+    await make(page, 'columns');
+    if (columns > PG_MAX) {
+      await expect(page.locator('#err')).toHaveText('The Supabase table would have 1,601 columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.');
+      await expect(page.locator('#out')).toHaveText('');
+      await expect(page.locator('#sqlBlock')).toBeHidden();
+      return;
+    }
+    await expect(page.locator('#err')).toHaveText('');
+    // The shown SQL's column lines: the lead columns, one integer column per
+    // item and one text column per question.
+    const sql = await page.locator('#sql').inputValue();
+    const lines = sql.slice(sql.indexOf('(\n') + 2, sql.indexOf('\n);')).split(',\n');
+    expect(lines).toHaveLength(PG_MAX);
+    expect(lines.filter((l) => l.endsWith(' integer'))).toHaveLength(HITOPBR_ITEMS);
+    expect(lines.filter((l) => l.startsWith('  "q_'))).toHaveLength(n);
+  });
+}

@@ -75,8 +75,8 @@
 //       at run time is fired once per control: the instrument row at fault
 //       (a repeat and a second PID-5 form, each at rows 2 and 3), each
 //       question field in the page's control map, and the four store
-//       fields. The fetch failure, the encode
-//       failure and the four stale-build refusals are among them, and so
+//       fields. The fetch failure, a Supabase table of 1,601 columns, the
+//       encode failure and the four stale-build refusals are among them, and so
 //       are the setup file's: no address, an http:// address, no
 //       crypto.subtle, a failed fetch, a field changed while it fails and
 //       while it succeeds, a file that does not match, and a download over
@@ -1450,6 +1450,19 @@ const REFUSE_AT = [
     },
     press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('fulfill')),
     message: STALE,
+    focus: null,
+  },
+  {
+    // 5 lead columns, the HiTOP-BR's 45 items and 1,551 questions.
+    name: 'a Supabase table of more than 1,600 columns',
+    call: ['The Supabase table would have'],
+    query: () => `?z=${encodeCompressed({
+      instrument: 'hitopbr',
+      study: 'refusals',
+      questions: { before: Array.from({ length: 1_551 }, (_, k) => ({ name: `q${k}`, text: 't', type: 'text' })) },
+    })}`,
+    fill: (page) => supabase(page),
+    message: 'The Supabase table would have 1,601 columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.',
     focus: null,
   },
   {
