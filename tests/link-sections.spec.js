@@ -21,13 +21,17 @@
 //       all three buttons disabled; each button's accessible name begins
 //       with its visible text. Checked for 1, 2 and 3 rows and groups as
 //       added, and again after a move, a removal, a prefill from a study
-//       link and a questions file load
+//       link and a questions file load. With `disabled` removed, a press on
+//       the first Move up or the last Move down moves nothing and focuses
+//       the row's other move button
 //   S7: after a build, a region headed "Your study link" (the heading
 //       focused) shows the link in a box that scrolls, "Copy the link"
 //       beside the box, and below it one next-step sentence for the site
 //       and the destination chosen: for each recruiting-site choice and
-//       each where-responses-go choice. A z link over 5,000 characters
-//       keeps the box under 16rem high
+//       each where-responses-go choice, each sentence written out in full.
+//       At 375px and 1280px wide, a short link and a z link over 5,000
+//       characters each keep the box under 16rem high with "Copy the link"
+//       to its right, and the long link scrolls in the box
 //   S8: with every section open and one question of each type, under each
 //       recruiting-site choice, each where-responses-go choice and after a
 //       Supabase build: every .hint and .site-hint, shown or not, holds at
@@ -73,9 +77,50 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE } from './helpers.mjs';
+import { useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE } from './helpers.mjs';
 
 const base = useTarget();
+
+// No request of this spec leaves the browser for anywhere but the test
+// target. Each route below marks the request it fulfills or aborts. The
+// listener records a request to any other address that no route marked,
+// and the test fails on that record when it ends. The instrument exports
+// come from the copies in tests/fixtures/exports/. A request for an export
+// with no copy there is aborted unmarked, so the test fails naming it.
+let answered;
+let strays;
+
+async function fulfillExport(route) {
+  const name = new URL(route.request().url()).pathname.split('/').pop();
+  let body;
+  try {
+    body = await readFile(path.join(FIXTURES, 'exports', name), 'utf8');
+  } catch {
+    return route.abort();
+  }
+  answered.add(route.request());
+  return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body });
+}
+
+function abortRequest(route) {
+  answered.add(route.request());
+  return route.abort();
+}
+
+test.beforeEach(async ({ page }) => {
+  answered = new Set();
+  strays = [];
+  const note = (req) => {
+    if (!req.url().startsWith(base()) && !answered.has(req)) strays.push(`${req.method()} ${req.url()}`);
+  };
+  page.on('requestfinished', note);
+  page.on('requestfailed', note);
+  await page.route(`${EXPORT_BASE}**`, fulfillExport);
+});
+
+test.afterEach(() => {
+  expect(strays, 'requests to another address that no route answered').toEqual([]);
+});
 
 // Stated here rather than read from link.html, so a renamed section or
 // label shows up as a failure.
@@ -317,6 +362,7 @@ const ONE_FIELD = [
   { name: 'participant', patch: { participant: 'p1' }, id: 'secParticipants', labels: 'Participant' },
   { name: 'prolific', patch: { prolific: true }, id: 'secParticipants', labels: 'Recruiting site' },
   { name: 'participantParam of SONA', patch: { participantParam: 'id' }, id: 'secParticipants', labels: 'Recruiting site' },
+  { name: 'participantParam of CloudResearch Connect', patch: { participantParam: 'participantId' }, id: 'secParticipants', labels: 'Recruiting site', site: 'connect' },
   { name: 'participantParam of another site', patch: { participantParam: 'workerId' }, id: 'secParticipants', labels: 'Recruiting site, Address parameter' },
   { name: 'module', patch: 'module', id: 'secOrder', labels: 'Module file' },
   { name: 'shuffle', patch: { shuffle: true }, id: 'secOrder', labels: 'Show the items in a random order' },
@@ -342,6 +388,7 @@ for (const one of ONE_FIELD) {
     await page.goto(`${base()}link.html${query}`);
     await expect(page.locator('#err')).toHaveText('');
     await expect(state(page, one.id)).toHaveText(one.labels);
+    if (one.site) await expect(page.locator('select[name="site"]')).toHaveValue(one.site);
     for (const s of SECTIONS) {
       expect(await isOpen(page, s.id), `${s.id} open`).toBe(s.id === one.id);
       if (s.id !== one.id) await expect(state(page, s.id)).toHaveText('Not used');
@@ -439,23 +486,77 @@ test('question groups: button states as groups are added, moved, removed, prefil
   }
 });
 
-// S7: the sentence each choice gets, stated here.
-const SITE_TEXT = {
-  '': null,
-  prolific: 'Prolific',
-  sona: 'SONA',
-  connect: 'CloudResearch Connect',
-  other: 'your recruiting site',
+// S6: the guards inside Move up and Move down. The first Move up and the
+// last Move down are disabled, so no press reaches them. With `disabled`
+// removed, a press on either leaves the order as it was, and focus goes to
+// the other move button of that row, as after any move that leaves the
+// pressed button disabled.
+const ORDERS = {
+  instrument: {
+    fill: async (page) => {
+      for (let k = 1; k < 3; k++) await page.getByRole('button', { name: 'Add an instrument' }).click();
+      for (const [k, stem] of ['hitopsr', 'hitopbr', 'pid5bf'].entries()) await page.locator('#instrumentList select').nth(k).selectOption(stem);
+    },
+    order: (page) => page.locator('#instrumentList select').evaluateAll((ss) => ss.map((s) => s.value)),
+    expected: ['hitopsr', 'hitopbr', 'pid5bf'],
+  },
+  question: {
+    fill: async (page) => {
+      await openSection(page, 'secQuestions');
+      for (let k = 1; k <= 3; k++) {
+        await page.getByRole('button', { name: 'Add a question' }).click();
+        await page.locator('input[name="qName"]').nth(k - 1).fill(`q${k}`);
+      }
+    },
+    order: (page) => page.locator('input[name="qName"]').evaluateAll((ns) => ns.map((n) => n.value)),
+    expected: ['q1', 'q2', 'q3'],
+  },
 };
-const TEST_THEN_GIVE = 'open the link once to test it, and then give it to each participant.';
-function expectedNext(site, kind) {
-  const then = SITE_TEXT[site] === null ? TEST_THEN_GIVE : `paste the link into your study's page on ${SITE_TEXT[site]}.`;
-  if (kind === 'supabase' && SITE_TEXT[site] === null) {
-    return `Run the SQL below once in your Supabase project's SQL editor, then open the link once to test it and give it to each participant.`;
-  }
-  if (kind === 'supabase') return `Run the SQL below once in your Supabase project's SQL editor before you ${then}`;
-  return then[0].toUpperCase() + then.slice(1);
+
+for (const [kind, o] of Object.entries(ORDERS)) {
+  test(`${kind} rows: a forced press on the first Move up or the last Move down moves nothing`, async ({ page }) => {
+    await page.goto(`${base()}link.html`);
+    await o.fill(page);
+    expect(await o.order(page)).toEqual(o.expected);
+    for (const [pressed, other] of [[`Move up ${kind} 1`, `Move down ${kind} 1`], [`Move down ${kind} 3`, `Move up ${kind} 3`]]) {
+      const b = page.getByRole('button', { name: pressed, exact: true });
+      await expect(b).toBeDisabled();
+      await b.evaluate((n) => { n.disabled = false; });
+      await b.click();
+      expect(await o.order(page), `after ${pressed}`).toEqual(o.expected);
+      await expect(page.getByRole('button', { name: other, exact: true })).toBeFocused();
+      await expectButtons(page, kind, 3);
+    }
+  });
 }
+
+// S7: the recruiting-site and where-responses-go choices, and the sentence
+// each pair gets, written out in full here rather than built, so a test
+// cannot share a mistake with the page's own wording.
+const SITES = ['', 'prolific', 'sona', 'connect', 'other'];
+const KINDS = ['', 'webhook', 'supabase'];
+const NEXT = [
+  ['', '', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'webhook', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor, then open the link once to test it and give it to each participant.'],
+  ['prolific', '', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'webhook', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on Prolific.'],
+  ['sona', '', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'webhook', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on SONA.'],
+  ['connect', '', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'webhook', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on CloudResearch Connect.'],
+  ['other', '', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'webhook', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on your recruiting site.'],
+];
+
+test('the next-step table holds one sentence for each site and destination', () => {
+  expect(NEXT.map(([site, kind]) => `${site}|${kind}`).sort())
+    .toEqual(SITES.flatMap((site) => KINDS.map((kind) => `${site}|${kind}`)).sort());
+});
 
 // Fills the destination's fields for a kind.
 async function chooseDestination(page, kind) {
@@ -489,29 +590,27 @@ async function expectRegion(page) {
   expect(n.y, 'the sentence is below the box').toBeGreaterThanOrEqual(b.y + b.height);
 }
 
-for (const site of Object.keys(SITE_TEXT)) {
-  for (const kind of ['', 'webhook', 'supabase']) {
-    test(`the result region for site ${JSON.stringify(site)} and destination ${JSON.stringify(kind)}`, async ({ page }) => {
-      await page.goto(`${base()}link.html`);
-      await page.locator('select[name="instrument"]').selectOption('hitopbr');
-      await page.locator('input[name="study"]').fill('region');
-      await chooseDestination(page, kind);
-      if (site !== '') {
-        await openSection(page, 'secParticipants');
-        await page.locator('select[name="site"]').selectOption(site);
-        if (site === 'other') await page.locator('input[name="participantParam"]').fill('workerId');
-      }
-      await make(page).click();
-      await expect(page.locator('#err')).toHaveText('');
-      await expectRegion(page);
-      await expect(page.locator('#next')).toHaveText(expectedNext(site, kind));
-      // One sentence, counted from the page's text and not from the copy
-      // above: one sentence end, at the close.
-      const next = await page.locator('#next').textContent();
-      expect(next.match(/[.!?](\s|$)/g), `one sentence: ${next}`).toEqual(['.']);
-      await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
-    });
-  }
+for (const [site, kind, sentence] of NEXT) {
+  test(`the result region for site ${JSON.stringify(site)} and destination ${JSON.stringify(kind)}`, async ({ page }) => {
+    await page.goto(`${base()}link.html`);
+    await page.locator('select[name="instrument"]').selectOption('hitopbr');
+    await page.locator('input[name="study"]').fill('region');
+    await chooseDestination(page, kind);
+    if (site !== '') {
+      await openSection(page, 'secParticipants');
+      await page.locator('select[name="site"]').selectOption(site);
+      if (site === 'other') await page.locator('input[name="participantParam"]').fill('workerId');
+    }
+    await make(page).click();
+    await expect(page.locator('#err')).toHaveText('');
+    await expectRegion(page);
+    await expect(page.locator('#next')).toHaveText(sentence);
+    // One sentence, counted from the page's text and not from the table
+    // above: one sentence end, at the close. A semicolon counts as an end.
+    const next = await page.locator('#next').textContent();
+    expect(next.match(/[.;!?](\s|$)/g), `one sentence: ${next}`).toEqual(['.']);
+    await expect(page.locator('#sqlBlock')).toBeVisible({ visible: kind === 'supabase' });
+  });
 }
 
 // A string of letters that deflate cannot shrink much, from a fixed seed.
@@ -525,26 +624,43 @@ function noise(n) {
   return s;
 }
 
-test('a z link over 5,000 characters stays in a box under 16rem high', async ({ page }) => {
-  await page.goto(`${base()}link.html`);
-  await page.locator('input[name="study"]').fill('long');
-  await openSection(page, 'secConsent');
-  await page.locator('textarea[name="consentText"]').fill(noise(8000));
-  await make(page).click();
-  await expect(page.locator('#err')).toHaveText('');
-  await expectRegion(page);
-  const href = await page.locator('#out').textContent();
-  expect(new URL(href).searchParams.has('z')).toBe(true);
-  expect(href.length).toBeGreaterThan(5000);
-  const { height, rem, scrolls } = await page.locator('#out').evaluate((n) => ({
-    height: n.getBoundingClientRect().height,
-    rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
-    scrolls: n.scrollHeight > n.clientHeight,
-  }));
-  expect(height).toBeLessThan(16 * rem);
-  expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
-  await expect(page.locator('#next')).toHaveText(expectedNext('', ''));
-});
+// The region in four states: a short c link and a z link over 5,000
+// characters, each at a phone's width and a desktop's. In each, the copy
+// button sits right of the box, and the box stays under 16rem high. The
+// long link overflows the box, which scrolls.
+for (const width of [375, 1280]) {
+  for (const long of [false, true]) {
+    test(`at ${width}px wide, a ${long ? 'z link over 5,000 characters' : 'short link'} sits in a box under 16rem high beside the copy button`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base()}link.html`);
+      await page.locator('input[name="study"]').fill(long ? 'long' : 'short');
+      if (long) {
+        await openSection(page, 'secConsent');
+        await page.locator('textarea[name="consentText"]').fill(noise(8000));
+      }
+      await make(page).click();
+      await expect(page.locator('#err')).toHaveText('');
+      await expectRegion(page);
+      const href = await page.locator('#out').textContent();
+      const params = new URL(href).searchParams;
+      if (long) {
+        expect(params.has('z')).toBe(true);
+        expect(href.length).toBeGreaterThan(5000);
+      } else {
+        expect(params.has('c')).toBe(true);
+        expect(href.length).toBeLessThan(200);
+      }
+      const { height, rem, scrolls } = await page.locator('#out').evaluate((n) => ({
+        height: n.getBoundingClientRect().height,
+        rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+        scrolls: n.scrollHeight > n.clientHeight,
+      }));
+      expect(height).toBeLessThan(16 * rem);
+      if (long) expect(scrolls, 'the link overflows the box, which scrolls').toBe(true);
+      await expect(page.locator('#next')).toHaveText(NEXT[0][2]);
+    });
+  }
+}
 
 // S8: the retired terms, stated here as the naming decision lists them:
 // six case-insensitive patterns, four more, and two fixed strings.
@@ -611,7 +727,7 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
     await page.locator('select[name="qType"]').last().selectOption(type);
   }
   await expectText(page, 'sections open');
-  for (const site of Object.keys(SITE_TEXT)) {
+  for (const site of SITES) {
     await page.locator('select[name="site"]').selectOption(site);
     await expectText(page, `site ${JSON.stringify(site)}`);
   }
@@ -638,11 +754,51 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
 
 // S8: each hint's link to the README lands on one of its headings, slugged
 // as GitHub slugs them: lower case, spaces to "-", other punctuation but
-// "-" and "_" dropped.
+// "-" and "_" dropped. A line inside a fenced code block is not a heading,
+// such as a shell comment. A fence may be indented, as inside a list item,
+// and only a run of the same character at least as long closes it.
+function readmeSlugs(text) {
+  const slugs = new Set();
+  let fence = null;
+  for (const line of text.split('\n')) {
+    const run = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence === null && run) fence = run;
+    else if (fence !== null) {
+      if (run && run[0] === fence[0] && run.length >= fence.length && /^\s*[`~]+\s*$/.test(line)) fence = null;
+    } else if (/^#{1,6} /.test(line)) {
+      slugs.add(line.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-'));
+    }
+  }
+  return slugs;
+}
+
+test('a "#" line inside a fenced code block gives no README anchor', () => {
+  const slugs = readmeSlugs(['# Before', '', '```bash', '# x', '```', '', '## After it'].join('\n'));
+  expect([...slugs].sort()).toEqual(['after-it', 'before']);
+});
+
+test('an indented fence, a "~~~" line inside a backtick fence, and a longer fence each hide their "#" lines', () => {
+  const slugs = readmeSlugs([
+    '# Before',
+    '1. A step:',
+    '   ```bash',
+    '# a',
+    '   ```',
+    '```',
+    '~~~',
+    '# b',
+    '```',
+    '````md',
+    '```',
+    '# c',
+    '````',
+    '## After it',
+  ].join('\n'));
+  expect([...slugs].sort()).toEqual(['after-it', 'before']);
+});
+
 test('every README link on the page names a README heading', async ({ page }) => {
-  const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
-  const slugs = new Set(readme.split('\n').filter((l) => /^#{1,6} /.test(l)).map((l) =>
-    l.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-')));
+  const slugs = readmeSlugs(await readFile(path.join(ROOT, 'README.md'), 'utf8'));
   await page.goto(`${base()}link.html`);
   for (const s of SECTIONS) await openSection(page, s.id);
   const anchors = await page.$$eval('a[href^="https://github.com/jmgirard/hitop-form#"]', (as) => as.map((a) => a.hash.slice(1)));
@@ -718,7 +874,7 @@ test('a field changed while a build waits leaves the result hidden', async ({ pa
   await page.route(`${EXPORT_BASE}**`, async (route) => {
     reached();
     await held;
-    await route.continue();
+    await fulfillExport(route);
   });
   await page.goto(`${base()}link.html`);
   await page.locator('select[name="instrument"]').selectOption('hitopbr');
@@ -955,7 +1111,8 @@ async function supabase(page, patch = {}) {
   await page.locator(field('supabaseTable')).fill(s.table);
 }
 
-// Holds the export requests until release(`how`): 'continue' or 'abort'.
+// Holds the export requests until release(`how`): 'fulfill', from the local
+// copy, or 'abort'.
 function holdExports(page) {
   let reached;
   const asked = new Promise((r) => { reached = r; });
@@ -964,8 +1121,8 @@ function holdExports(page) {
   const ready = page.route(`${EXPORT_BASE}**`, async (route) => {
     reached();
     const how = await released;
-    if (how === 'abort') await route.abort();
-    else await route.continue();
+    if (how === 'abort') await abortRequest(route);
+    else await fulfillExport(route);
   });
   return { ready, asked, release };
 }
@@ -1248,7 +1405,7 @@ const REFUSE_AT = [
     name: 'the export fetch fails',
     call: ['refuseAt(stale() ? STALE : e.message)', 0],
     fill: async (page) => {
-      await page.route(`${EXPORT_BASE}**`, (route) => route.abort());
+      await page.route(`${EXPORT_BASE}**`, abortRequest);
       await supabase(page);
     },
     message: /^The instrument could not be fetched from https:\/\/jmgirard\.github\.io\/hitop\/downloads\/hitopbr\.json\. Check the connection and reload\.$/,
@@ -1276,7 +1433,7 @@ const REFUSE_AT = [
       await supabase(page);
       return hold;
     },
-    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('continue')),
+    press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('fulfill')),
     message: STALE,
     focus: null,
   },

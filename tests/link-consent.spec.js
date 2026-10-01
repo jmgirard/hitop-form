@@ -25,10 +25,9 @@
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, openBuilderSections, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
+import { useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
 
 const base = useTarget();
-openBuilderSections();
 
 const TEXT = [
   'You are invited to take part in a study.',
@@ -53,14 +52,20 @@ async function make(page, { consent, declined, completeDeclined, study = 'consen
   await page.locator('input[name="study"]').fill(study);
   if (consent !== undefined) await setBox(page, 'consentText', consent);
   if (declined !== undefined) await setBox(page, 'declinedText', declined);
-  if (completeDeclined !== undefined) await page.locator('input[name="completeDeclined"]').fill(completeDeclined);
+  if (completeDeclined !== undefined) {
+    await openSectionOf(page, 'completeDeclined');
+    await page.locator('input[name="completeDeclined"]').fill(completeDeclined);
+  }
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#err, #out').filter({ hasText: /./ }).first()).toBeVisible();
 }
 
 // Sets a box's value from the page: fill() would turn a lone surrogate into
-// U+FFFD, and the builder reads the box as it holds its value.
+// U+FFFD, and the builder reads the box as it holds its value. The box's
+// section is opened first, by a click on its summary. The write fires no
+// input event, so the section's summary is not redrawn.
 async function setBox(page, name, value) {
+  await openSectionOf(page, name);
   await page.locator(`textarea[name="${name}"]`).evaluate((node, v) => { node.value = v; }, value);
 }
 
@@ -191,6 +196,7 @@ test('a Consent box of 20,000 characters and a Declined box of 2,000 build a lin
 // K6
 test('"Another site" with the address parameter "z" is refused by name', async ({ page }) => {
   await openBuilder(page);
+  await openSectionOf(page, 'site');
   await page.locator('select[name="site"]').selectOption('other');
   await page.locator('input[name="participantParam"]').fill('z');
   await make(page);
