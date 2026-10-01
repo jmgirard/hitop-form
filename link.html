@@ -107,7 +107,7 @@
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
   <h1>Study Link Builder</h1>
-  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps and sends nothing you type. Opening a study link, here or on the online form, puts its setup in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
+  <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps nothing you type and sends it nowhere, except a setup file's address to that file's host. Opening a study link on either page puts its setup, or its setup file's address, in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
     <p>The link you opened filled in these addresses. Check each one.</p>
     <ul id="prefilledList"></ul>
@@ -144,7 +144,7 @@
           <input name="supabaseUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://abcdefghijkl.supabase.co">
         </label>
         <label>Publishable key
-          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link, so use no other key. Opening a study link on the Study Link Builder or the online form puts the key in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>.</span>
+          <span class="hint">The project's publishable key, or its legacy anon key. It goes into every study link or setup file, so use no other key. A study link holding it, opened here or on the online form, puts it in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>.</span>
           <input name="supabaseKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…">
         </label>
         <label>Table name
@@ -248,7 +248,7 @@
       <label class="check"><input type="radio" name="setupWhere" value="link" checked> In the study link</label>
       <label class="check"><input type="radio" name="setupWhere" value="file"> In a file I host</label>
       <div id="setupFileFields" hidden>
-        <p class="hint">Download the setup file and put it on a public https:// host that lets other sites read it. After any change to the form, replace the hosted copy and make a new link.</p>
+        <p class="hint">Download the setup file and put it on a public https:// host that lets other sites read it. Anyone can then read where responses go. After any change to the form, replace the hosted copy and make a new link.</p>
         <p class="file-buttons"><button type="button" class="secondary" id="downloadSetup">Download the setup file</button></p>
         <label>Address of the setup file
           <span class="hint">The https:// address of the file itself, such as a GitHub raw-file address. Up to 100,000 bytes. The Study Link Builder fetches it to check that it matches the form.</span>
@@ -1137,12 +1137,16 @@
   }
   // "Fill in the form from the current file" empties the form, fills it
   // from the file as fetched, and shows the notice. A built link goes, so
-  // the next one is made from the filled form.
+  // the next one is made from the filled form. A module file read still
+  // running drops its text, as when the researcher types in the module box,
+  // and the file controls' messages go with the fields they described.
   function fillFromCurrent(hosted) {
     changedOffer.hidden = true;
     changedOffer.replaceChildren();
     err.textContent = '';
     hideResult();
+    moduleReads += 1;
+    for (const p of [moduleFileErr, moduleFileStatus, questionsErr, questionsStatus]) p.textContent = '';
     try {
       f.reset();
       questionList.replaceChildren();
@@ -1187,13 +1191,11 @@
 
   async function build() {
     // Once "Make the link" is pressed the fields are the researcher's own,
-    // so the notice of what the opened link filled goes. So does the offer
-    // to fill the form from a changed setup file, which would replace them
-    // with the file's setup.
+    // so the notice of what the opened link filled goes. The offer to fill
+    // the form from a changed setup file goes once a link is made, below, so
+    // a refused press leaves it to be pressed.
     notice.hidden = true;
     noticeList.replaceChildren();
-    changedOffer.hidden = true;
-    changedOffer.replaceChildren();
     err.textContent = '';
     result.hidden = true;
     out.textContent = '';
@@ -1306,6 +1308,10 @@
     next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;
+    // The link is made from the researcher's fields, and the offer would
+    // replace them with the file's setup.
+    changedOffer.hidden = true;
+    changedOffer.replaceChildren();
     result.hidden = false;
     resultHeading.focus();
   }

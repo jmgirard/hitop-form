@@ -32,7 +32,9 @@
 //        and offers "Fill in the form from the current file"; pressing it
 //        fills the form, and the next link carries the file's current
 //        fingerprint; making a link of the researcher's own hides the
-//        offer; a file nested too deeply to fingerprint is refused by
+//        offer, and a refused press leaves it; pressing it empties the
+//        file controls' messages and drops a module file read still
+//        running; a file nested too deeply to fingerprint is refused by
 //        name, opened and at "Make the link" (JSON.stringify() made to
 //        throw, since Chromium writes any file that fits)
 //   LF8: an opened link whose fetch throws, is answered 404, or is over
@@ -369,6 +371,56 @@ test('making a link hides the offer to fill the form from a changed file', async
   await expect(offer).toBeHidden();
   await expect(offer.getByRole('button', { name: 'Fill in the form from the current file' })).toHaveCount(0);
   await expect(page.locator('input[name="study"]')).toHaveValue('hosted');
+});
+
+// LF7: a press that is refused makes no link, so the offer stays and can
+// still be pressed.
+test('a refused "Make the link" leaves the offer to fill the form from a changed file', async ({ page }) => {
+  await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  const offer = page.locator('#setupChanged');
+  await expect(offer).toBeVisible();
+  await fillPlain(page);
+  await chooseFile(page);
+  await make(page).click();
+  await expectRefused(page, 'Give the address of the setup file, or choose "In the study link".');
+  await expect(offer).toBeVisible();
+  await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
+  await expect(page.locator('input[name="study"]')).toHaveValue('edited');
+});
+
+// LF7: the offer's press replaces every field, so what the file controls
+// said goes, and a module file read that ends after the press drops its
+// text. The read is held open by File.prototype.text() until the test
+// lets it go.
+test('pressing the offer empties the file controls\' messages and drops a module file read still running', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'late.json') return real.call(this);
+      return new Promise((resolve) => { window.releaseRead = () => resolve('{"late": true}'); });
+    };
+  });
+  await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  const offer = page.locator('#setupChanged');
+  await expect(offer).toBeVisible();
+  await openSectionOf(page, '#questionsFile');
+  await page.locator('#questionsFile').setInputFiles({
+    name: 'q.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('list,name,text,type,options,required,min,max\nbefore,ok,Fine,text,,,,\n'),
+  });
+  await expect(page.locator('#questionsStatus')).toHaveText('Loaded 1 question from q.csv.');
+  await page.locator('#moduleFile').setInputFiles({ name: 'late.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  await page.waitForFunction(() => typeof window.releaseRead === 'function');
+  await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
+  await expect(page.locator('input[name="study"]')).toHaveValue('edited');
+  await expect(page.locator('#questionsStatus')).toHaveText('');
+  // The read's own continuation runs once the promise settles, within the
+  // next task, so one task later it has dropped its text or written it.
+  await page.evaluate(() => { window.releaseRead(); return new Promise((r) => setTimeout(r, 50)); });
+  await expect(page.locator('#moduleFileStatus')).toHaveText('');
+  await expect(page.locator('textarea[name="module"]')).toHaveValue('');
 });
 
 // A setup file this browser cannot write back out as JSON, such as one

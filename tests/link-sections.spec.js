@@ -39,7 +39,8 @@
 //       form part) holds at most 60; the page's text, placeholders and
 //       aria-labels hold none of the retired terms, the built link exempt
 //   S9: the short hints keep the facts a researcher acts on: the intro says
-//       an opened study link reaches the host's logs; the Prolific hint says
+//       an opened study link, or its setup file's address, reaches the
+//       host's logs; the Prolific hint says
 //       a doubled parameter reads its filled value; the SONA hint gives the
 //       XXXX rule and says the credit token is readable in the study link;
 //       the declined-text hint gives both fixed sentences; the decline
@@ -50,8 +51,11 @@
 //       after its ? or #; the saved-file hint names the two cases that save
 //       a file; the completion hint gives Prolific's study-page URL; the
 //       module hint says a module applies to the HiTOP-SR among several
-//       instruments; the key hint says an opened study link, on either
-//       page, puts the key in GitHub Pages' logs
+//       instruments; the key hint says the key goes into every study link
+//       or setup file, and that an opened study link holding it, on either
+//       page, puts it in GitHub Pages' logs; the setup-file hint says anyone
+//       can then read where responses go; the intro says the builder sends
+//       what you type only as a setup file's address, to that file's host
 //  S10: with "Another site" chosen and one question of each type, 50
 //       characters put into each text input and box in the sections
 //       (typed where the field shows, sent as input events where the
@@ -921,7 +925,7 @@ test('a field changed while a build waits leaves the result hidden', async ({ pa
 test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   const intro = page.locator('#intro');
-  await expect(intro).toContainText('Opening a study link, here or on the online form, puts its setup in GitHub Pages\' logs.');
+  await expect(intro).toContainText('Opening a study link on either page puts its setup, or its setup file\'s address, in GitHub Pages\' logs.');
   await expect(intro.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
   await openSection(page, 'secParticipants');
   const site = page.locator('select[name="site"]');
@@ -941,9 +945,11 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(hintOf('complete')).toContainText('For Prolific, the study page\'s completion URL.');
   await expect(hintOf('module')).toContainText('With several instruments, it applies to the HiTOP-SR among them.');
   const keyHint = hintOf('supabaseKey');
-  await expect(keyHint).toContainText('Opening a study link on the Study Link Builder or the online form puts the key in GitHub Pages\' logs.');
+  await expect(keyHint).toContainText('It goes into every study link or setup file, so use no other key.');
+  await expect(keyHint).toContainText('A study link holding it, opened here or on the online form, puts it in GitHub Pages\' logs.');
+  await expect(page.locator('#setupFileFields .hint').first()).toContainText('Anyone can then read where responses go.');
   await expect(keyHint.locator('a[href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees"]')).toHaveText('GitHub Pages\' logs');
-  await expect(intro).toContainText('The Study Link Builder keeps and sends nothing you type.');
+  await expect(intro).toContainText('The Study Link Builder keeps nothing you type and sends it nowhere, except a setup file\'s address to that file\'s host.');
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
