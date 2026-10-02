@@ -1127,13 +1127,14 @@ workflow runs the suite on every pull request and every push to `main`,
 against the checkout. On those runs the page gets the instrument exports from
 the copies in `tests/fixtures/exports/`, and a test fails on an export request
 that no route answers.
-It runs every Monday against the deployed page, with the exports fetched from
-the package's site, so a new package export that breaks the page is noticed.
-`tests/exports.spec.js` runs only then, and fails when a copy differs from the
-site's file. `tests/link-sections.spec.js` answers the page's export requests
-from the copies on every run. On that run the send tests ask the browser for
-permission to reach the local recording server from the public page. If
-the browser refuses, they skip with the reason printed.
+It runs every Monday, and on a manual run, against the deployed page, with the
+exports fetched from the package's site, so a new package export that breaks
+the page is noticed. `tests/exports.spec.js` runs only on those runs, and fails
+when a copy differs from the site's file. On those runs the send tests ask the
+browser for permission to reach the local recording server from the public
+page. If the browser refuses, they skip with the reason printed.
+`tests/link-sections.spec.js` answers the page's export requests from the
+copies on every run.
 
 ## License
 

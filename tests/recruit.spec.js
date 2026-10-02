@@ -24,8 +24,8 @@
 // P13's address without the token. Each use of the address, and each
 // source of the identifier:
 //
-//   P8: a confirmed send, identifier "a&b c" from the address: at the held
-//       navigation request the sent screen's link is the filled address,
+//   P8: a confirmed send, identifier "a&b c" from the address: as the
+//       navigation starts, the sent screen's link is the filled address,
 //       and the one navigation goes there
 //   P9: a confirmed send under prolific: true, identifier 12345 from
 //       PROLIFIC_PID: the one navigation goes to the filled address

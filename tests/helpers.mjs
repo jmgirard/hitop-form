@@ -86,10 +86,11 @@ export function routeExport(page, instrument, handle) {
 }
 
 // With FORM_TARGET empty, every page of the test's browser context gets the
-// exports from the copies in fixtures/exports/, and the test fails on each
-// export request that no route marked as answered. A page's own route for an
-// export runs first, and route.fallback() passes the request on to the
-// copies. With FORM_TARGET set, the fixture does nothing, and the exports
+// exports from the copies in fixtures/exports/ until begin() takes the route
+// off (see stopExportCopies()), and the test fails on each export request
+// that no route marked as answered. A page's own route for an export runs
+// first, and route.fallback() passes the request on to the copies. With
+// FORM_TARGET set, the fixture does nothing, and the exports
 // come from the site unless the spec routes them.
 export const test = baseTest.extend({
   exportCopies: [async ({ context }, use) => {
@@ -717,8 +718,8 @@ export async function currentPage(page) {
 // The document's states from now until the page starts to leave, in the
 // order they arose. `snapshot` is a function run in the page, taking no
 // arguments and closing over nothing. A mutation observer reports its result
-// at each change. The Navigation API's `navigate` event reports it once more
-// when a script starts a navigation, before the navigation's request, and
+// after each batch of changes. The Navigation API's `navigate` event reports
+// it once more when a navigation starts, before the navigation's request, and
 // nothing is recorded after that. Both reports go through one exposed
 // function, so they arrive in the order the page made them, and
 // `states.left` turns true with the last. `states.at(-1)` is then the
