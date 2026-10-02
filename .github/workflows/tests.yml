@@ -10,9 +10,10 @@
 #
 # A pull request and a push answer the instrument exports from the copies in
 # tests/fixtures/exports/. The weekly and manual runs fetch them from
-# jmgirard.github.io and check each copy against the site's file. Those runs
-# go red on an outage of jmgirard.github.io just as on a real break, after
-# the one retry playwright.config.js allows.
+# jmgirard.github.io and check each copy against the site's file, except in
+# tests/link-sections.spec.js, which answers them from the copies on every
+# run. Those runs go red on an outage of jmgirard.github.io just as on a
+# real break, after the one retry playwright.config.js allows.
 name: Tests
 
 on:

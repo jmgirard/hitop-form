@@ -57,8 +57,8 @@
 //       nothing: the row posted to a webhook equals the T1 body without
 //       shuffle and has the T12 shape under it
 //  T15: with a complete address in the link, a confirmed send draws the
-//       sent screen before it issues the one navigation request to it: while
-//       the request is held open, the heading is "Thank you", the paragraph
+//       sent screen before it issues the one navigation request to it: in
+//       the document as the navigation starts, the heading is "Thank you", the paragraph
 //       says the answers were sent, a "Continue to the next step of the
 //       study" paragraph links to the address, and no nav button is in the document; the row
 //       still reaches the store, and no file is saved
@@ -82,7 +82,7 @@
 //       study-team section
 //  T20: the sent screen has no "Save the file" button: asserted in T5's
 //       walks and the supabase walks after the screen shows, and in T15's
-//       document at the held request
+//       document as the navigation starts
 //
 // Walked for the HiTOP-BR and the shuffled HiTOP-SR module fixture through
 // /record and through /redirect (T1 to T3), the HiTOP-BR for the rest. The
@@ -402,8 +402,8 @@ for (const shuffle of [false, true]) {
 // link to the address and no nav button left. Then the route answers. A
 // locator or an evaluate waits on the pending navigation, so the document
 // reaches the test through observeUntilLeave(): a report at every change,
-// then one as the page starts to leave, which is the document at the
-// request.
+// then one as the page starts to leave, before the request. A redraw after
+// that, while the request is held, is not seen.
 function snapshot() {
   return {
     h1: document.querySelector('h1')?.textContent ?? null,

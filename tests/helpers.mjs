@@ -7,7 +7,8 @@
 // quietly test the checkout instead.
 //
 // The instrument exports come from the copies in fixtures/exports/ when
-// FORM_TARGET is empty, and from the package's site when it is set. Every
+// FORM_TARGET is empty, and from the package's site when it is set, except
+// in link-sections.spec.js, which routes them to the copies always. Every
 // spec takes `test` and `expect` from here rather than from
 // '@playwright/test', so the `exportCopies` fixture below runs in each test.
 
@@ -88,7 +89,8 @@ export function routeExport(page, instrument, handle) {
 // exports from the copies in fixtures/exports/, and the test fails on each
 // export request that no route marked as answered. A page's own route for an
 // export runs first, and route.fallback() passes the request on to the
-// copies. With FORM_TARGET set, the exports come from the site.
+// copies. With FORM_TARGET set, the fixture does nothing, and the exports
+// come from the site unless the spec routes them.
 export const test = baseTest.extend({
   exportCopies: [async ({ context }, use) => {
     if (process.env.FORM_TARGET?.trim()) {
@@ -384,10 +386,12 @@ export async function allowLocalStore(context) {
 // fails here rather than at the fill after it.
 //
 // After an opened c, z or setup-file link fills the form, a call passes
-// `wasOpen`: the open state the fill leaves the section in. The call waits
-// for that state and fails when the section does not reach it, so a fill
+// `wasOpen`: the open state the fill leaves the section in. The call fails
+// when the section is not in that state within the expect timeout, so a fill
 // that leaves the section closed fails the test, and a call that expects the
-// section open never clicks its summary.
+// section open never clicks its summary. A closed section passes
+// `wasOpen: false` at once, even when a fill still running would open it, so
+// the caller waits for the fill to finish before such a call.
 export async function openSectionOf(page, control, { wasOpen } = {}) {
   const selector = /^\w+$/.test(control) ? `[name="${control}"]` : control;
   const section = page.locator(`details.optional:has(${selector})`);
@@ -717,8 +721,9 @@ export async function currentPage(page) {
 // when a script starts a navigation, before the navigation's request, and
 // nothing is recorded after that. Both reports go through one exposed
 // function, so they arrive in the order the page made them, and
-// `states.left` turns true with the last. While a route holds the
-// navigation's request, `states.at(-1)` is then the document at the request.
+// `states.left` turns true with the last. `states.at(-1)` is then the
+// document as the navigation starts. A change after that, such as a redraw
+// while a route holds the navigation's request, is not recorded.
 export async function observeUntilLeave(page, snapshot) {
   const states = [];
   states.left = false;
