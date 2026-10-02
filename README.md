@@ -38,9 +38,9 @@ instrument, or the second PID-5 form. A refusal that names no one field
 moves focus to the message.
 
 The Study Link Builder needs JavaScript. If JavaScript is off, the page
-says so. If the builder's script does not load or does not run, as in an
-older browser, the page says that the builder did not start. "Make the
-link" then stays disabled.
+says so. If the builder's script does not load, or the browser cannot read
+it, the page says that the builder did not start. "Make the link" then
+stays disabled.
 
 ### Required parts
 
@@ -341,8 +341,9 @@ row and leaves the rest for you. The builder refuses a link it cannot read,
 one that does not hold a form, one naming an instrument it does not offer,
 or one with a `module` and no HiTOP-SR, and fills no field from it. It
 also refuses a link whose module is nested too deeply for this browser to
-show in the box. While a `z` link unpacks, the form takes no typing or
-presses. So the fill does not replace anything you type meanwhile.
+show in the box. In a browser that supports `inert`, the form takes no
+typing or presses while a `z` link unpacks. So the fill does not replace
+anything you type meanwhile.
 
 A link that names a setup file opens the same way, as
 `link.html?setup=…&sha256=…`. The builder fetches the file. When it
