@@ -1145,7 +1145,8 @@ for (const c of [
   test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
     await openBuilder(page, { config });
-    await openSectionOf(page, 'site');
+    // A link that selects a site opens the section that holds the menu.
+    await openSectionOf(page, 'site', { wasOpen: c.site !== '' });
     await expect(page.locator('#err')).toHaveText('');
     await expect(page.locator('select[name="site"]')).toHaveValue(c.site);
     await expect(page.locator('input[name="participantParam"]')).toHaveValue(c.field);

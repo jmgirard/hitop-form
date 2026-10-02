@@ -25,7 +25,8 @@
 //        is written so, and the online form opens the made link
 //   LF5: link.html opened with setup and sha256 fills the form from a
 //        matching file as a z link fills it, with "In a file I host" chosen
-//        and the address filled and listed
+//        and the address filled and listed. The sections holding a filled
+//        field are open, and the others closed
 //   LF6: each fault in the shape of the opened link is refused in the
 //        builder's refusal pattern, and nothing is fetched or filled
 //   LF7: a file that changed since the link was made leaves the form empty
@@ -304,6 +305,11 @@ test('an opened setup-file link fills the form from a matching file, the file ch
   ]);
   await expect(page.locator('#prefilled')).toBeFocused();
   await expect(page.locator('#setupChanged')).toBeHidden();
+  // The file sets a completion URL and consent text, so their two sections
+  // open and the other three stay closed.
+  for (const [id, open] of [['secParticipants', false], ['secOrder', false], ['secConsent', true], ['secFinish', true], ['secQuestions', false]]) {
+    await expect(page.locator(`#${id}`), `${id} open`).toHaveJSProperty('open', open);
+  }
 });
 
 // LF6
@@ -421,7 +427,8 @@ test('pressing the offer empties the file controls\' messages and drops a module
   await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
   const offer = page.locator('#setupChanged');
   await expect(offer).toBeVisible();
-  await openSectionOf(page, '#questionsFile');
+  // The changed file leaves the form empty, so its sections stay closed.
+  await openSectionOf(page, '#questionsFile', { wasOpen: false });
   await page.locator('#questionsFile').setInputFiles({
     name: 'q.csv', mimeType: 'text/csv',
     buffer: Buffer.from('list,name,text,type,options,required,min,max\nbefore,ok,Fine,text,,,,\n'),

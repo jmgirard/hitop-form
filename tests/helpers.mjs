@@ -316,10 +316,19 @@ export async function allowLocalStore(context) {
 // '#questionsFile'. A section already open takes no click. A control in
 // none of the sections is an error, so a call that names a wrong control
 // fails here rather than at the fill after it.
-export async function openSectionOf(page, control) {
+//
+// After an opened c, z or setup-file link fills the form, a call passes
+// `wasOpen`: the open state the fill leaves the section in. The call waits
+// for that state and fails when the section does not reach it, so a fill
+// that leaves the section closed fails the test, and a call that expects the
+// section open never clicks its summary.
+export async function openSectionOf(page, control, { wasOpen } = {}) {
   const selector = /^\w+$/.test(control) ? `[name="${control}"]` : control;
   const section = page.locator(`details.optional:has(${selector})`);
   await expect(section, `the section holding ${selector}`).toHaveCount(1);
+  if (wasOpen !== undefined) {
+    await expect(section, `the section holding ${selector}, ${wasOpen ? 'open' : 'closed'} before the call`).toHaveJSProperty('open', wasOpen);
+  }
   if (!(await section.evaluate((d) => d.open))) await section.locator('> summary').click();
   await expect(section).toHaveJSProperty('open', true);
 }

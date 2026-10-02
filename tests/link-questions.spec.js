@@ -210,7 +210,7 @@ for (const n of [51, 200]) {
     const questions = { before: many(n, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
     await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
     await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
-    await openSectionOf(page, '#addQuestion');
+    await openSectionOf(page, '#addQuestion', { wasOpen: true });
     await make(page);
     await expect(page.locator('#err')).toHaveText('');
     const href = await page.locator('#out').textContent();
@@ -306,7 +306,7 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   // section, so the fill is awaited first: a click on the summary before
   // then would close the section the prefill opens.
   await expect(group(page, 9).locator('[name=qText]')).toHaveValue('x'.repeat(1 + need));
-  await openSectionOf(page, '#addQuestion');
+  await openSectionOf(page, '#addQuestion', { wasOpen: true });
   await group(page, 9).locator('[name=qText]').fill('x'.repeat(2 + need));
   await make(page);
   await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.");
