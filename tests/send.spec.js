@@ -459,7 +459,7 @@ for (const w of [
       // T20
       saveButtons: 0,
     };
-    expect(states.at(-1), 'the document at the request').toEqual(sentScreen);
+    expect(states.at(-1), 'the document as the navigation starts').toEqual(sentScreen);
     // form.js draws the sent screen and starts the navigation in one task,
     // so the report as the page leaves is the only one that shows it.
     expect(states.filter((s) => s.h1 === 'Thank you'), 'the sent screen was drawn once, whole').toEqual([sentScreen]);

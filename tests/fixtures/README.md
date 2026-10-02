@@ -9,8 +9,8 @@ editing it.
 | `exports/pid5.json`, `exports/pid5sf.json`, `exports/pid5bf.json` | Copied unchanged from the same directory at hitop commit `d4f43238`, where the three files were last changed in `e4a1fa3a`. On 2026-10-02 each equaled the site's file byte for byte, and so did the two above. |
 
 With `FORM_TARGET` empty, the `exportCopies` fixture in `tests/helpers.mjs`
-answers every export request from the five copies, and `fetchExport()` reads
-them. `tests/link-sections.spec.js` answers its export requests from them on
+answers each export request from the five copies until `begin()` takes its
+route off, and `fetchExport()` reads them. `tests/link-sections.spec.js` answers its export requests from them on
 every run. With `FORM_TARGET` set, `tests/exports.spec.js` fails when a copy
 differs from the site's file. To refresh the copies, run
 `cp ../hitop/pkgdown/assets/downloads/{hitopbr,hitopsr,pid5,pid5sf,pid5bf}.json tests/fixtures/exports/`

@@ -511,10 +511,12 @@ export function refusalText(page) {
 
 // Presses Begin on the start screen, entering a participant identifier first
 // when the screen asks for one. Once Begin shows, the exports are loaded, so
-// the copies route comes off (stopExportCopies()).
+// the copies route comes off (stopExportCopies()). The wait for Begin runs
+// to the test's own timeout, not the shorter expect timeout, as the click
+// alone did, since on the weekly run Begin waits on the site's exports.
 export async function begin(page, participant) {
   const press = page.getByRole('button', { name: 'Begin' });
-  await expect(press).toBeVisible();
+  await expect(press).toBeVisible({ timeout: test.info().timeout });
   await stopExportCopies(page.context());
   const input = page.locator('input[name="participant"]');
   if (participant !== undefined) await input.fill(participant);

@@ -377,8 +377,11 @@ for (const width of [375, 1280]) {
         });
       }
     }
+    // The pairs cover every option of the two menus.
+    const options = (name) => page.locator(`select[name="${name}"] option`).evaluateAll((os) => os.map((o) => o.value));
+    expect(SITES, 'the site menu\'s options').toEqual(await options('site'));
+    expect(KINDS, 'the destination menu\'s options').toEqual(await options('storeKind'));
     const fits = Object.fromEntries(Object.keys(found).map((pair) => [pair, { over: [], scrolls: false }]));
-    expect(Object.keys(found)).toHaveLength(SITES.length * KINDS.length);
     expect(found).toEqual(fits);
   });
 }

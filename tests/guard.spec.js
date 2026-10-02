@@ -65,8 +65,8 @@
 //       identifier holding a paired character (U+1F600)
 //       is accepted and fills the completion address with its encoding
 //
-// The altered exports are copies of the live export served in its place, so
-// nothing but the one field differs.
+// The altered exports are copies of the export fetchExport() returns, served
+// in its place, so nothing but the one field differs.
 
 import {
   test, expect, useTarget, openForm, begin, walkAll, awaitDownload, fetchExport, readDescriptor, JWT_SHAPED_KEY,
@@ -593,7 +593,7 @@ test('a participant holding a paired character is accepted and fills the complet
   await expect(page.locator('p.complete a')).toHaveAttribute('href', 'https://example.org/done?code=p%F0%9F%98%80');
 });
 
-test('the live export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
+test('the unaltered export is accepted (the probes fail for their field, not for the copy)', async ({ page }) => {
   const exp = await fetchExport('hitopbr');
   await openForm(page, base(), { instrument: 'hitopbr', study: 'guard', participant: 'g3' }, {
     exportJson: exp,

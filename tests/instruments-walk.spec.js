@@ -69,7 +69,7 @@ async function walkPart(page, { k, stems, exps, module, participant }) {
   return seen.map((it) => it.number);
 }
 
-// The exports of `stems`, as the live site serves them to the page.
+// The exports of `stems`, as the page gets them (fetchExport()).
 async function exportsFor(stems) {
   return Promise.all(stems.map((stem) => fetchExport(stem)));
 }
