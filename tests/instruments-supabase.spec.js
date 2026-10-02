@@ -12,9 +12,8 @@
 //        and one to a supabase store on the recording server, and the keys
 //        of each posted row equal the fixture's column lines, in order
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openSectionOf, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
+  test, expect, useTarget, openSectionOf, useStore, allowLocalStore, formUrl, webhook, supabase, begin, answerPage, currentPage, nextButton,
   readFixture, prolificQuery, chosenIndexFor,
 } from './helpers.mjs';
 

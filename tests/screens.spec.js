@@ -44,11 +44,10 @@
 //       sent", says the file holds the answers, and shows no HTTP detail
 //       outside the closed study-team section
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, openForm, formUrl, fetchExport, exportUrl, readDescriptor, refusalText, ROOT,
+  test, expect, useTarget, openForm, formUrl, fetchExport, exportUrl, routeExport, readDescriptor, refusalText, ROOT,
   answerPage, nextButton, awaitDownload, COMPLETE_URL, COMPLETE_SAVED_URL, CONTINUE,
 } from './helpers.mjs';
 
@@ -174,7 +173,7 @@ test('a z link in a browser whose DecompressionStream lacks deflate-raw says to 
 // is a connection failure, for one instrument and for a list; an export
 // the site answers with an error status is not.
 test('an export fetch that fails says to check the connection and reload', async ({ page }) => {
-  await page.route(exportUrl('hitopbr'), (route) => route.abort('internetdisconnected'));
+  await routeExport(page, 'hitopbr', (route) => route.abort('internetdisconnected'));
   await openForm(page, base(), { instrument: 'hitopbr', study: 'screens', participant: 'p1' });
   await expectErrorScreen(
     page,
@@ -184,7 +183,7 @@ test('an export fetch that fails says to check the connection and reload', async
 });
 
 test('an export fetch that fails in a list says to check the connection and reload', async ({ page }) => {
-  await page.route(exportUrl('pid5bf'), (route) => route.abort('internetdisconnected'));
+  await routeExport(page, 'pid5bf', (route) => route.abort('internetdisconnected'));
   await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'screens', participant: 'p1' }));
   await expectErrorScreen(
     page,
@@ -194,7 +193,7 @@ test('an export fetch that fails in a list says to check the connection and relo
 });
 
 test('an export the site answers with HTTP 500 says to contact the study team', async ({ page }) => {
-  await page.route(exportUrl('hitopbr'), (route) => route.fulfill({ status: 500, body: 'down' }));
+  await routeExport(page, 'hitopbr', (route) => route.fulfill({ status: 500, body: 'down' }));
   await openForm(page, base(), { instrument: 'hitopbr', study: 'screens', participant: 'p1' });
   await expectErrorScreen(page, NEXT.contact, `The instrument could not be fetched from ${exportUrl('hitopbr')} (HTTP 500).`);
 });

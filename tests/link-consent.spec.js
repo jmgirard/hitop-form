@@ -23,9 +23,8 @@
 //   K7: link.html with both c and z, and with a z that does not decompress,
 //       is refused by name and fills nothing
 
-import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
+import { test, expect, useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam } from './helpers.mjs';
 
 const base = useTarget();
 

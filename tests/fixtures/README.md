@@ -5,7 +5,19 @@ editing it.
 
 | File | Generator |
 |---|---|
-| `exports/hitopbr.json`, `exports/hitopsr.json` | Copied unchanged from the hitop repository's `pkgdown/assets/downloads/` at its commit `318629fe`, where the two files were last changed in `47284611`. The package site serves them at `https://jmgirard.github.io/hitop/downloads/`, and on 2026-09-30 each equaled the site's file byte for byte. `tests/link-sections.spec.js` answers the Study Link Builder's export requests with them, so that spec sends no request to the network. To refresh them, run `cp ../hitop/pkgdown/assets/downloads/{hitopbr,hitopsr}.json tests/fixtures/exports/` from the repository root, with a hitop checkout beside this one. |
+| `exports/hitopbr.json`, `exports/hitopsr.json` | Copied unchanged from the hitop repository's `pkgdown/assets/downloads/` at its commit `318629fe`, where the two files were last changed in `47284611`. The package site serves them at `https://jmgirard.github.io/hitop/downloads/`, and on 2026-09-30 each equaled the site's file byte for byte. |
+| `exports/pid5.json`, `exports/pid5sf.json`, `exports/pid5bf.json` | Copied unchanged from the same directory at hitop commit `d4f43238`, where the three files were last changed in `e4a1fa3a`. On 2026-10-02 each equaled the site's file byte for byte, and so did the two above. |
+
+With `FORM_TARGET` empty, the `exportCopies` fixture in `tests/helpers.mjs`
+answers each export request from the five copies until `begin()` takes its
+route off, and `fetchExport()` reads them. `tests/link-sections.spec.js` answers its export requests from them on
+every run. With `FORM_TARGET` set, `tests/exports.spec.js` fails when a copy
+differs from the site's file. To refresh the copies, run
+`cp ../hitop/pkgdown/assets/downloads/{hitopbr,hitopsr,pid5,pid5sf,pid5bf}.json tests/fixtures/exports/`
+from the repository root, with a hitop checkout beside this one.
+
+| File | Generator |
+|---|---|
 | `module-plain.json`, `module-shuffled.json` | `Rscript tests/fixtures/make-descriptors.R` from the repository root, with the hitop package installed. Both hold the same two-scale HiTOP-SR module (Distress-Dysphoria and Agoraphobia, 21 items). The shuffled one carries an `itemOrder` drawn under `set.seed(95)`. |
 | `responses-hitopbr.csv`, `responses-hitopsr.csv`, `responses-module-shuffled.csv`, `responses-pid5.csv`, `responses-pid5sf.csv`, `responses-pid5bf.csv` | `WRITE_FIXTURES=1 npx playwright test tests/save.spec.js`. Add `-g <pattern>` to rewrite only the files of the cases whose names match it (`-g pid5` rewrites the three PID-5 files). Each is one form saved by the page for study `fixture` and participant `p001`. Every item is answered by the fixed pattern `chosenIndex()` in `tests/helpers.mjs`. The `form_build` and `submitted` columns carry the export's build date and the clock at capture. The test compares every other column. |
 | `responses-hitopbr-shuffled.csv` | `WRITE_FIXTURES=1 npx playwright test tests/save.spec.js -g "hitopbr under shuffle"`, captured 2026-09-23 (its `submitted` stamp is the next day in UTC). One HiTOP-BR form saved by the page for study `fixture` and participant `p001` under a link with `shuffle: true`. The page drew the order at random, so no rerun writes the same file. The header holds the five lead columns, `item_order` and the 45 item columns in the instrument's order. Every item is answered by `chosenIndex()` at the position it was shown at. The values therefore follow from the `item_order` cell, and the test checks them against it. The hitop package's reader test reads a copy. |

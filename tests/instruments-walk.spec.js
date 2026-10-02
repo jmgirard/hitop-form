@@ -26,9 +26,8 @@
 //       first page, where only the first instrument holds answers
 //   W7: the start screen of a link with one instrument shows no part line
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, readDescriptor, chosenIndexFor, PAGE_SIZE, refusalText,
+  test, expect, useTarget, formUrl, begin, walkAll, fetchExport, exportUrl, routeExport, readDescriptor, chosenIndexFor, PAGE_SIZE, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -70,7 +69,7 @@ async function walkPart(page, { k, stems, exps, module, participant }) {
   return seen.map((it) => it.number);
 }
 
-// The exports of `stems`, as the live site serves them to the page.
+// The exports of `stems`, as the page gets them (fetchExport()).
 async function exportsFor(stems) {
   return Promise.all(stems.map((stem) => fetchExport(stem)));
 }
@@ -79,9 +78,11 @@ async function exportsFor(stems) {
 test('the page fetches every export of the list before it shows its first screen', async ({ page }) => {
   let release;
   const held = new Promise((resolve) => { release = resolve; });
+  // Passed on, once released, to the route that answers it: the copy, or
+  // the site under FORM_TARGET.
   await page.route(exportUrl('pid5bf'), async (route) => {
     await held;
-    await route.continue();
+    await route.fallback();
   });
   await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'walk', participant: 'w1' }));
   await page.waitForTimeout(1000);
@@ -94,7 +95,7 @@ test('the page fetches every export of the list before it shows its first screen
 
 // W2
 test('a missing export in a list is refused naming its instrument', async ({ page }) => {
-  await page.route(exportUrl('pid5bf'), (route) => route.fulfill({ status: 404, body: 'not here' }));
+  await routeExport(page, 'pid5bf', (route) => route.fulfill({ status: 404, body: 'not here' }));
   await page.goto(formUrl(base(), { instruments: ['hitopbr', 'pid5bf'], study: 'walk', participant: 'w2' }));
   await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 404).`);
   await expect(page.getByRole('button', { name: 'Begin' })).toHaveCount(0);
@@ -102,7 +103,7 @@ test('a missing export in a list is refused naming its instrument', async ({ pag
 
 test('an export of another format in a list is refused naming its instrument', async ({ page }) => {
   const exp = await fetchExport('hitopbr');
-  await page.route(exportUrl('hitopbr'), (route) => route.fulfill({
+  await routeExport(page, 'hitopbr', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
   }));
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopbr'], study: 'walk', participant: 'w2' }));
@@ -112,7 +113,7 @@ test('an export of another format in a list is refused naming its instrument', a
 
 test('with two exports refused, the first in the list is named', async ({ page }) => {
   for (const stem of ['hitopbr', 'pid5bf']) {
-    await page.route(exportUrl(stem), (route) => route.fulfill({ status: 500, body: 'down' }));
+    await routeExport(page, stem, (route) => route.fulfill({ status: 500, body: 'down' }));
   }
   await page.goto(formUrl(base(), { instruments: ['pid5bf', 'hitopsr', 'hitopbr'], study: 'walk', participant: 'w2' }));
   await expect(refusalText(page)).toHaveText(`PID-5-BF: The instrument could not be fetched from ${exportUrl('pid5bf')} (HTTP 500).`);

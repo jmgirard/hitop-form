@@ -61,9 +61,8 @@
 //        a read running when the row is set away and back drops its text,
 //        so message, status and box are then empty
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor, readFixture,
+  test, expect, useTarget, openSectionOf, encodeConfig, encodeCompressed, decodeLinkParam, readDescriptor, readFixture,
   serveSetup, setupFingerprint, setupQuery,
 } from './helpers.mjs';
 

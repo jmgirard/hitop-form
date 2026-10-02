@@ -38,9 +38,8 @@
 //   LF8: "Download these questions" saves nothing and names the fault when
 //        the editor holds none or holds a faulty question
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, openSectionOf, decodeLinkParam, awaitDownload } from './helpers.mjs';
+import { test, expect, useTarget, openSectionOf, decodeLinkParam, awaitDownload } from './helpers.mjs';
 
 const base = useTarget();
 

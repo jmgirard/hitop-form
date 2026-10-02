@@ -24,8 +24,8 @@
 // P13's address without the token. Each use of the address, and each
 // source of the identifier:
 //
-//   P8: a confirmed send, identifier "a&b c" from the address: at the held
-//       navigation request the sent screen's link is the filled address,
+//   P8: a confirmed send, identifier "a&b c" from the address: as the
+//       navigation starts, the sent screen's link is the filled address,
 //       and the one navigation goes there
 //   P9: a confirmed send under prolific: true, identifier 12345 from
 //       PROLIFIC_PID: the one navigation goes to the filled address
@@ -54,11 +54,10 @@
 //       as three U+FFFD characters, and the sent screen links to the
 //       address filled with them
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
-  prolificQuery, COMPLETE_URL, CONTINUE,
+  test, expect, useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
+  prolificQuery, COMPLETE_URL, CONTINUE, observeUntilLeave,
 } from './helpers.mjs';
 import { readParticipantParam, fillParticipant } from '../form.js';
 
@@ -222,20 +221,15 @@ async function serveCompletion(page, { hold = false } = {}) {
   return { requests, release };
 }
 
-// The document at the moment of a navigation request, reported through a
-// mutation observer (a locator waits on the pending navigation).
-async function observeLink(page) {
-  const states = [];
-  await page.exposeFunction('noteLink', (s) => states.push(s));
-  await page.evaluate(`(() => {
-    const snap = () => ({
-      h1: document.querySelector('h1')?.textContent ?? null,
-      href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
-      text: document.querySelector('p.complete a')?.textContent ?? null,
-    });
-    new MutationObserver(() => window.noteLink(snap())).observe(document.body, { childList: true, subtree: true });
-  })()`);
-  return states;
+// The document's states until the page starts to leave, the last of them
+// the document as the navigation starts, before its request
+// (observeUntilLeave(); a locator waits on the pending navigation).
+function observeLink(page) {
+  return observeUntilLeave(page, () => ({
+    h1: document.querySelector('h1')?.textContent ?? null,
+    href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+    text: document.querySelector('p.complete a')?.textContent ?? null,
+  }));
 }
 
 // P8
@@ -247,9 +241,10 @@ test('a confirmed send fills the token with the identifier from the address in t
   await expect(page.locator('input[name="participant"]')).toHaveCount(0);
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
-  expect(states.at(-1), 'the sent screen at the request').toEqual({
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
+  expect(states.at(-1), 'the sent screen as the navigation starts').toEqual({
     h1: 'Thank you', href: SONA_FILLED_ABC, text: CONTINUE,
   });
   release();
@@ -343,9 +338,10 @@ test('under participantParam, a confirmed send uses a completion address without
   }, { extra: `&id=${SONA_CODE}` });
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
-  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: CONTINUE });
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
+  expect(states.at(-1), 'the sent screen as the navigation starts').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: CONTINUE });
   release();
   await expect(page).toHaveURL(EXAMPLE_PARSED);
   expect(requests).toEqual([EXAMPLE_PARSED]);
@@ -415,10 +411,11 @@ test('an address value encoding a surrogate arrives as replacement characters, a
   await expect(page.locator('input[name="participant"]')).toHaveCount(0);
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
   const filled = 'https://example.org/done?code=%EF%BF%BD%EF%BF%BD%EF%BF%BD';
-  expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: CONTINUE });
+  expect(states.at(-1), 'the sent screen as the navigation starts').toEqual({ h1: 'Thank you', href: filled, text: CONTINUE });
   release();
   await expect(page).toHaveURL(filled);
   expect(requests).toEqual([filled]);

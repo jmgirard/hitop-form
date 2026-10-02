@@ -162,10 +162,9 @@
 //       the test first checks that the browser throws on the module's
 //       indented write
 
-import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
-  useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
+  test, expect, useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, routeExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
   expectHeldInput, expectReleasedInput, deepModuleText, encodeCompressedText, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
@@ -1145,7 +1144,8 @@ for (const c of [
   test(`a c parameter selects the recruiting site and rebuilds the link: ${c.name}`, async ({ page }) => {
     const config = { instrument: 'hitopbr', study: 'prefill', ...c.config };
     await openBuilder(page, { config });
-    await openSectionOf(page, 'site');
+    // A link that selects a site opens the section that holds the menu.
+    await openSectionOf(page, 'site', { wasOpen: c.site !== '' });
     await expect(page.locator('#err')).toHaveText('');
     await expect(page.locator('select[name="site"]')).toHaveValue(c.site);
     await expect(page.locator('input[name="participantParam"]')).toHaveValue(c.field);
@@ -1369,7 +1369,7 @@ test('the form.js messages the builder shows name the online form', async ({ pag
 
   // An instrument export of another format, read for a Supabase table's SQL.
   const exp = await fetchExport('hitopbr');
-  await page.route(exportUrl('hitopbr'), (route) => route.fulfill({
+  await routeExport(page, 'hitopbr', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ ...exp, format: '2.0' }),
   }));
   const { err: exportErr } = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });

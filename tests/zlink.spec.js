@@ -17,9 +17,8 @@
 //   Z6: a c link that decodes to exactly 100,000 bytes is read, and one of
 //       100,001 bytes is refused naming its size and the limit
 
-import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
-import { useTarget, openForm, encodeConfig, encodeCompressed, refusalText, gotoLong } from './helpers.mjs';
+import { test, expect, useTarget, openForm, encodeConfig, encodeCompressed, refusalText, gotoLong } from './helpers.mjs';
 
 const base = useTarget();
 

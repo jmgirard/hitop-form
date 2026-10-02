@@ -26,10 +26,9 @@
 //        differs, and a browser without crypto.subtle (kind browser)
 //   SF4: participantParam "setup" and "sha256" are refused as "c" is
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, refusalText, begin, walkAll, awaitDownload, parseCsv, encodeConfig, encodeCompressed,
+  test, expect, useTarget, refusalText, begin, walkAll, awaitDownload, parseCsv, encodeConfig, encodeCompressed,
   setupFingerprint, serveSetup, setupQuery, SETUP_URL, SETUP_TIMEOUT_MS,
 } from './helpers.mjs';
 

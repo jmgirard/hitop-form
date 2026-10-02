@@ -26,8 +26,7 @@
 //       holding a paired character, and a text and an option holding a tab
 //       and a no-break space, which are not line breaks
 
-import { test, expect } from '@playwright/test';
-import { useTarget, openForm, refusalText } from './helpers.mjs';
+import { test, expect, useTarget, openForm, refusalText } from './helpers.mjs';
 
 const base = useTarget();
 

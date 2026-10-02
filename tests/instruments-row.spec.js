@@ -29,11 +29,10 @@
 // The expected cells are worked out here from the exports, the descriptor
 // and the pattern, not read from form.js.
 
-import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, useStore, allowLocalStore, formUrl, webhook, begin, answerPage, currentPage, nextButton, awaitDownload,
+  test, expect, useTarget, useStore, allowLocalStore, formUrl, webhook, begin, answerPage, currentPage, nextButton, awaitDownload,
   parseCsv, leadColumns, fetchExport, readDescriptor, chosenIndexFor, prolificQuery, PROLIFIC, PAGE_SIZE, FIXTURES,
   readFixture,
 } from './helpers.mjs';

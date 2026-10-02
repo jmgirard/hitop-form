@@ -19,8 +19,7 @@
 //       fieldset has the error colour on all four borders and its legend
 //       still meets Y1, so the highlight is one unbroken box
 
-import { test, expect } from '@playwright/test';
-import { useTarget, openForm, begin, answerPage, nextButton, currentPage, fetchExport } from './helpers.mjs';
+import { test, expect, useTarget, openForm, begin, answerPage, nextButton, currentPage, fetchExport } from './helpers.mjs';
 
 const base = useTarget();
 

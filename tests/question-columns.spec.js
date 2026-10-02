@@ -17,11 +17,10 @@
 //        submitted and form_build. Run with WRITE_FIXTURES=1 to rewrite it.
 //        The hitop package's reader test reads a copy.
 
-import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv, leadColumns,
+  test, expect, useTarget, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv, leadColumns,
   prolificQuery, FIXTURES, readFixture,
 } from './helpers.mjs';
 

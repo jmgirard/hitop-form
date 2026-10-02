@@ -27,9 +27,8 @@
 //       the export's order for the HiTOP-BR, the descriptor's itemOrder for
 //       the module
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor,
+  test, expect, useTarget, openForm, begin, walkAll, fetchExport, readDescriptor,
 } from './helpers.mjs';
 
 const base = useTarget();
