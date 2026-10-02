@@ -69,8 +69,9 @@
 //       naming an instrument the select does not offer each write their
 //       fault's message, naming the c parameter, into #err and leave every
 //       control at its no-c value, over nine values of c, two whose module
-//       makes the module box's write throw RangeError among them (one
-//       beside a completion URL), refused as nested too deeply, and the
+//       makes the module box's write throw RangeError among them (one in
+//       a link that also holds a completion URL), refused as nested too
+//       deeply, and the
 //       submit handler still runs; a load with no c leaves
 //       #err empty; a c that decodes to 100,001 bytes is refused naming its
 //       size and the limit, and one of exactly 100,000 bytes fills the form
@@ -710,10 +711,10 @@ test('a c carrying the instrument and a module fills the module textarea with th
 // Each bad value writes its fault's message, naming the c parameter, and
 // leaves every control as the no-c load leaves it. The eighth and ninth
 // pass the three checks and make the module box's indented write throw
-// RangeError, the ninth beside a completion URL. The page writes that text
-// before it fills any field, so it refuses the link by name with nothing
-// filled and no address listed, and the script still reaches its submit
-// handler. A module nested past some six thousand levels throws that way
+// RangeError, the ninth in a link that also holds a completion URL. The
+// page writes that text before it fills any field, so it refuses the link
+// by name with nothing filled and no address listed, and the script still
+// reaches its submit handler. A module nested past some six thousand levels throws that way
 // in V8, but its c runs to some 16 KB, past what the test server and a
 // page host accept in an address, so the throw is provoked by an init
 // script that makes JSON.stringify throw on a marked module instead. L41
@@ -747,7 +748,7 @@ const BAD_C = [
     init: throwOnMarkedModule,
   },
   {
-    name: 'a module that makes JSON.stringify throw RangeError beside a completion URL',
+    name: 'a module that makes JSON.stringify throw RangeError, in a link that also holds a completion URL',
     config: { instrument: 'hitopsr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
     message: TOO_DEEP,
     init: throwOnMarkedModule,
@@ -762,7 +763,7 @@ for (const bad of BAD_C) {
     await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
     await expect(page.locator('#err')).toHaveText(`The study link you opened ${bad.message} Fill in the form above to make a new link.`);
     expect(await controls(page)).toEqual(plain);
-    // L20: a refused c lists no address, even one filled before a throw.
+    // L20: a refused c lists no address, even one the link holds.
     await expect(page.locator('#prefilled')).toBeHidden();
     await expect(page.locator('#prefilled li')).toHaveCount(0);
     // L23: focus is on the refusal.
