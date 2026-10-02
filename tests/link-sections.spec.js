@@ -88,13 +88,19 @@
 //       crypto.subtle, a failed fetch, a field changed while it fails and
 //       while it succeeds, a file that does not match, and a download over
 //       100,000 bytes
+//  S13: a throw in the prefill path ends with "Make the link" enabled and
+//       a message: a throw in a c link's fill and a second throw in
+//       emptying the form say the link was not read; a throw in the setup
+//       steps on a load with no link says the builder did not start, and
+//       a build then works; a throw in the setup steps after a refusal by
+//       name from prefill(), openSetupFile() or fill() keeps that refusal
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE, retiredIn,
-  setupFingerprint, setupQuery, SETUP_URL,
+  setupFingerprint, setupQuery, SETUP_URL, armOnAddress,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1116,6 +1122,94 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
   await make(page).click();
   await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
 });
+
+// S13: a throw in the prefill path, each plant armed when the page reads
+// its address (armOnAddress()). Each test asserts that its plants threw, so
+// a pass is not a load where nothing was thrown.
+const NOT_READ = 'The study link you opened could not be read. Fill in the form above to make a new link.';
+
+test('a throw in the fill, then a throw in emptying the form, still ends with a message and an enabled button', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(() => {
+    // fill() sets the shuffle box, and resetForm() starts with f.reset().
+    const checked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    Object.defineProperty(HTMLInputElement.prototype, 'checked', {
+      configurable: true,
+      get() { return checked.get.call(this); },
+      set(value) {
+        if (window.armed && this.name === 'shuffle') {
+          window.fillThrew = true;
+          throw new Error('planted fill throw');
+        }
+        checked.set.call(this, value);
+      },
+    });
+    const reset = HTMLFormElement.prototype.reset;
+    HTMLFormElement.prototype.reset = function () {
+      if (window.armed) {
+        window.resetThrew = true;
+        throw new Error('planted reset throw');
+      }
+      return reset.call(this);
+    };
+  });
+  await page.goto(`${base()}link.html?c=${encodeConfig({ instrument: 'hitopbr', study: 'thrown' })}`);
+  await expect(make(page)).toBeEnabled();
+  await expect(page.locator('#err')).toHaveText(NOT_READ);
+  expect(await page.evaluate(() => [window.fillThrew, window.resetThrew])).toEqual([true, true]);
+});
+
+// The last statement of showFilled() hides or shows the notice. The plant
+// throws there once, so resetForm() can hide the notice after it.
+function throwInShowFilled() {
+  const hidden = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'hidden');
+  let thrown = false;
+  Object.defineProperty(HTMLElement.prototype, 'hidden', {
+    configurable: true,
+    get() { return hidden.get.call(this); },
+    set(value) {
+      if (window.armed && !thrown && this.id === 'prefilled') {
+        thrown = true;
+        window.showThrew = true;
+        throw new Error('planted showFilled throw');
+      }
+      hidden.set.call(this, value);
+    },
+  });
+}
+
+test('a throw in the setup steps on a load with no link says the builder did not start, and it still builds', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(throwInShowFilled);
+  await page.goto(`${base()}link.html`);
+  await expect(make(page)).toBeEnabled();
+  await expect(page.locator('#err')).toHaveText('The Study Link Builder did not start correctly. Reload the page.');
+  expect(await page.evaluate(() => window.showThrew)).toBe(true);
+  await page.locator('input[name="study"]').fill('after the throw');
+  await make(page).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
+});
+
+// One refusal by name from each of prefill(), openSetupFile() and fill().
+const opened = (what) => `The study link you opened ${what} Fill in the form above to make a new link.`;
+for (const [source, query, message] of [
+  [
+    'prefill()',
+    `c=${encodeConfig({ instrument: 'hitopbr', study: 'twice' })}&z=${encodeCompressed({ instrument: 'hitopbr', study: 'twice' })}`,
+    opened('holds its setup twice, in two forms, and a study link holds it once.'),
+  ],
+  ['openSetupFile()', setupQuery({ sha256: null }), opened('names a setup file and gives no fingerprint for it (sha256).')],
+  ['fill()', `c=${encodeConfig({ instrument: 'nope', study: 'unknown' })}`, opened('names an instrument the Study Link Builder does not offer: "nope".')],
+]) {
+  test(`a throw in the setup steps after a refusal from ${source} keeps that refusal`, async ({ page }) => {
+    await page.addInitScript(armOnAddress);
+    await page.addInitScript(throwInShowFilled);
+    await page.goto(`${base()}link.html?${query}`);
+    await expect(make(page)).toBeEnabled();
+    await expect(page.locator('#err')).toHaveText(message);
+    expect(await page.evaluate(() => window.showThrew)).toBe(true);
+  });
+}
 
 // S12: one entry per refusal. `call` names the refuseAt() line the entry
 // fires, by a piece of its text and, where two lines read the same, which

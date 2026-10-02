@@ -917,11 +917,10 @@
   // it differs, the form stays empty and a message offers to fill it from
   // the file as it is now, after which a new link must be made.
   //
-  // A throw past these
-  // checks (a module nested deep enough to stop JSON.stringify), or in the
-  // setup steps that follow the prefill, is the first refusal with the form
-  // reset, so the script reaches its submit handler and no field keeps a
-  // part of the config. A `c` accepted here can
+  // A throw past these checks, or in the setup steps that follow the
+  // prefill, empties the form and writes a message (reportThrow()), so the
+  // script reaches its submit handler and no field keeps a part of the
+  // config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
   // responses go, where the participant is sent or pointed at the end) is
   // listed in a notice above the form, as text, for the researcher to check.
@@ -1194,12 +1193,28 @@
     changedOffer.hidden = true;
     changedOffer.replaceChildren();
   }
+  // After a throw in the prefill, the setup steps or the offer's fill: the
+  // form emptied, and a message written straight into #err. A refusal
+  // already written by name stays. Otherwise an opened link "could not be
+  // read", and a load with no link says the page did not start. The message
+  // is written even when emptying the form throws too, so the page never
+  // ends a throw with no message.
+  function reportThrow() {
+    try {
+      resetForm();
+    } catch {
+      // The message below still shows.
+    }
+    if (err.textContent !== '') return;
+    err.textContent = ['c', 'z', 'setup', 'sha256'].some((p) => opened.has(p))
+      ? 'The study link you opened could not be read. Fill in the form above to make a new link.'
+      : 'The Study Link Builder did not start correctly. Reload the page.';
+  }
   // The setup steps run inside the same guard as the prefill.
   try {
     showFilled(await prefill());
   } catch {
-    resetForm();
-    refuse('could not be read.');
+    reportThrow();
   }
   // "Fill in the form from the current file" empties the form, fills it
   // from the file as fetched, and shows the notice. A built link goes, so
@@ -1220,8 +1235,7 @@
       noticeList.replaceChildren();
       showFilled(fillFromFile(hosted, []));
     } catch {
-      resetForm();
-      refuse('could not be read.');
+      reportThrow();
     }
     if (err.textContent !== '') err.focus();
     else notice.focus();

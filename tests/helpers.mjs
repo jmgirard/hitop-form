@@ -147,6 +147,19 @@ export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
   return q.toString();
 }
 
+// An init script that sets window.armed when the Study Link Builder reads
+// its own address, which it does just before its prefill starts. A plant
+// that throws only while window.armed is set throws at no earlier call.
+export function armOnAddress() {
+  const Real = URLSearchParams;
+  window.URLSearchParams = class extends Real {
+    constructor(init) {
+      super(init);
+      if (init === window.location.search) window.armed = true;
+    }
+  };
+}
+
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
 // getter for its base URL (always ending in a slash).
 export function useTarget() {

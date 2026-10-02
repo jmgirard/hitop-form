@@ -52,7 +52,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
-  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS,
+  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -434,6 +434,34 @@ test('pressing the offer empties the file controls\' messages and drops a module
   await expect(page.locator('.instrument-row .module-status')).toHaveText('');
   await expect(page.locator('.instrument-row textarea[name="module"]')).toHaveValue('');
   await expect(page.locator('#result')).toBeVisible();
+});
+
+// LF7: a throw in the offer's fill, then a second throw in emptying the
+// form, still leaves a message. fillFromCurrent() and resetForm() each start
+// with f.reset(), and the plant throws at every call once armed
+// (armOnAddress()). The load calls no f.reset().
+test('a throw in the offer\'s fill and in emptying the form still leaves a message and an enabled button', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(() => {
+    const reset = HTMLFormElement.prototype.reset;
+    window.resets = 0;
+    HTMLFormElement.prototype.reset = function () {
+      if (window.armed) {
+        window.resets += 1;
+        throw new Error('planted reset throw');
+      }
+      return reset.call(this);
+    };
+  });
+  await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  const offer = page.locator('#setupChanged');
+  await expect(offer).toBeVisible();
+  expect(await page.evaluate(() => window.resets)).toBe(0);
+  await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
+  await expect(err(page)).toHaveText(refusal('could not be read.'));
+  expect(await page.evaluate(() => window.resets)).toBe(2);
+  await expect(make(page)).toBeEnabled();
 });
 
 // A setup file this browser cannot write back out as JSON, such as one
