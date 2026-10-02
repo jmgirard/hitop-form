@@ -1568,3 +1568,33 @@ test('L41: a z link whose module is nested too deeply to show is refused by name
   await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
   expect(errors).toEqual([]);
 });
+
+// L42: Firefox throws an InternalError ("too much recursion"), not a
+// RangeError, where Chromium's indented write runs out of stack. No test
+// runs Firefox, so a plant makes the module box's indented write throw an
+// error of each name. An InternalError is refused as nested too deeply. A
+// TypeError is not, and the link "could not be read".
+for (const [name, message] of [
+  ['InternalError', DEEP_MODULE_REFUSAL],
+  ['TypeError', 'The study link you opened could not be read. Fill in the form above to make a new link.'],
+]) {
+  test(`L42: a module box write that throws ${name} gets its own message`, async ({ page }) => {
+    await page.addInitScript((errorName) => {
+      const real = JSON.stringify;
+      JSON.stringify = function (value, replacer, space) {
+        if (space === 2 && value !== null && typeof value === 'object' && 'plant' in value) {
+          window.plantThrew = true;
+          const e = new Error('too much recursion');
+          e.name = errorName;
+          throw e;
+        }
+        return real.apply(this, arguments);
+      };
+    }, name);
+    await page.goto(`${base()}link.html?z=${encodeCompressed({ instrument: 'hitopsr', study: 'plant', module: { plant: true } })}`);
+    await expect(page.locator('#err')).toHaveText(message);
+    expect(await page.evaluate(() => window.plantThrew)).toBe(true);
+    await expect(page.locator('input[name="study"]')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  });
+}

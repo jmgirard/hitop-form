@@ -1154,6 +1154,9 @@
     // too deep for the indented write is refused with the form still empty.
     // The plain JSON.stringify() of the fingerprint goes deeper in Chromium
     // than the indented one, so a setup-file link reaches this refusal too.
+    // Chromium throws a RangeError there. MDN's "too much recursion" page
+    // gives Firefox's error as an InternalError and Safari's as a RangeError.
+    // No test runs Firefox, so L42 plants the InternalError.
     let moduleText;
     if (config.module !== undefined) {
       if (!stems.includes('hitopsr')) {
@@ -1164,7 +1167,7 @@
         try {
           moduleText = JSON.stringify(config.module, null, 2);
         } catch (e) {
-          if (!(e instanceof RangeError)) throw e;
+          if (!(e instanceof RangeError) && e?.name !== 'InternalError') throw e;
           refuse('holds a module nested too deeply for this browser to show.');
           return filled;
         }
