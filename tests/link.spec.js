@@ -71,8 +71,7 @@
 //       control at its no-c value, over nine values of c, two whose module
 //       makes the module box's write throw RangeError among them (one in
 //       a link that also holds a completion URL), refused as nested too
-//       deeply, and the
-//       submit handler still runs; a load with no c leaves
+//       deeply, and the submit handler still runs; a load with no c leaves
 //       #err empty; a c that decodes to 100,001 bytes is refused naming its
 //       size and the limit, and one of exactly 100,000 bytes fills the form
 //  L19: above the form, the intro asks for the required parts, names
@@ -714,11 +713,11 @@ test('a c carrying the instrument and a module fills the module textarea with th
 // RangeError, the ninth in a link that also holds a completion URL. The
 // page writes that text before it fills any field, so it refuses the link
 // by name with nothing filled and no address listed, and the script still
-// reaches its submit handler. A module nested past some six thousand levels throws that way
-// in V8, but its c runs to some 16 KB, past what the test server and a
-// page host accept in an address, so the throw is provoked by an init
-// script that makes JSON.stringify throw on a marked module instead. L41
-// opens a real one as a z link.
+// reaches its submit handler. A module nested past some six thousand
+// levels throws that way in V8, but its c runs to some 16 KB, past what
+// the test server and a page host accept in an address, so the throw is
+// provoked by an init script that makes JSON.stringify throw on a marked
+// module instead. L41 opens a real one as a z link.
 const COULD_NOT_BE_READ = 'could not be read.';
 const NOT_A_FORM = 'does not hold a form.';
 const TOO_DEEP = 'holds a module nested too deeply for this browser to show.';
