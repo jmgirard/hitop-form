@@ -1,10 +1,12 @@
 // The link builder: link.html makes a study link for each instrument.
 //
 //   L1: the instrument selector offers the five instruments, each with its
-//       item count, in this order
+//       item count, and "HiTOP-SR module (scales you choose)" right after the
+//       HiTOP-SR, in this order
 //   L2: a link built for each instrument opens that instrument's form, whose
 //       heading names the instrument and whose start screen counts its items
-//   L3: the module hint limits modules to the HiTOP-SR
+//   L3: the hint in a module row names where a module file comes from and
+//       links the Module Builder and the README's module section
 //   L4: a "Send responses to" address the form page would refuse is refused
 //       here, naming the fault, and no link is built; the web-address kind
 //       with an empty address is refused too; the file kind builds a link
@@ -161,13 +163,14 @@ const store = useStore();
 // either shows up as a failure.
 const OFFERED = [
   { value: 'hitopsr', label: 'HiTOP-SR (405 items)', title: 'HiTOP-SR', items: 405 },
+  { value: 'hitopsr-module', label: 'HiTOP-SR module (scales you choose)' },
   { value: 'hitopbr', label: 'HiTOP-BR (45 items)', title: 'HiTOP-BR', items: 45 },
   { value: 'pid5', label: 'PID-5 (220 items)', title: 'PID-5', items: 220 },
   { value: 'pid5sf', label: 'PID-5-SF (100 items)', title: 'PID-5-SF', items: 100 },
   { value: 'pid5bf', label: 'PID-5-BF (25 items)', title: 'PID-5-BF', items: 25 },
 ];
 
-test('the selector offers the five instruments with their item counts', async ({ page }) => {
+test('the selector offers the five instruments and the HiTOP-SR module, with their item counts', async ({ page }) => {
   await page.goto(`${base()}link.html`);
   const options = await page.$$eval('select[name="instrument"] option', (nodes) =>
     nodes.map((n) => ({ value: n.value, label: n.textContent })),
@@ -176,7 +179,9 @@ test('the selector offers the five instruments with their item counts', async ({
   expect(options).toEqual(OFFERED.map(({ value, label }) => ({ value, label })));
 });
 
-for (const o of OFFERED) {
+// The module entry names no form of its own: a module row opens the
+// HiTOP-SR, as the module tests below check.
+for (const o of OFFERED.filter(({ items }) => items !== undefined)) {
   test(`${o.value}: a built link opens the ${o.title} form`, async ({ page }) => {
     await page.goto(`${base()}link.html`);
     await page.locator('select[name="instrument"]').selectOption(o.value);
@@ -214,15 +219,13 @@ async function build(page, storeUrl) {
 // `shuffle` is set; returns the shown SQL too.
 async function buildSupabase(page, { instrument = 'hitopbr', module, shuffle = false, prolific = false, url, key, table }) {
   await page.goto(`${base()}link.html`);
-  await page.locator('select[name="instrument"]').selectOption(instrument);
+  // A module is the HiTOP-SR's, set as a HiTOP-SR module row holding it.
+  await page.locator('select[name="instrument"]').selectOption(module ? 'hitopsr-module' : instrument);
   await page.locator('input[name="study"]').fill('link');
   // Prolific as the recruiting site needs the participant field empty.
   await openSectionOf(page, 'participant');
   if (!prolific) await page.locator('input[name="participant"]').fill('l6');
-  if (module) {
-    await openSectionOf(page, 'module');
-    await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
-  }
+  if (module) await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
   if (shuffle) {
     await openSectionOf(page, 'shuffle');
     await page.locator('input[name="shuffle"]').check();
@@ -553,11 +556,18 @@ test('a link built with the address set opens a form whose Finish posts to it', 
   expect(Object.keys(row).slice(5)).toEqual(seen.map((s) => exp.items.find((it) => it.number === s.number).name));
 });
 
-test('the module hint limits modules to the HiTOP-SR', async ({ page }) => {
+// L3: a module is the HiTOP-SR's by its row's menu, so the hint no longer
+// says so; it says what to choose, what the form shows, and where to read more.
+test('the module hint in a module row names the file sources and links the builder and the README', async ({ page }) => {
   await page.goto(`${base()}link.html`);
-  // L3
-  const hint = page.locator('label:has(textarea[name="module"]) .hint');
-  await expect(hint).toContainText(/^HiTOP-SR only\. With several instruments/);
+  await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
+  const hint = page.locator('.instrument-row label:has(textarea[name="module"]) .hint');
+  await expect(hint).toHaveText(
+    'Choose or paste a module file from the Module Builder or write_module(). The online form shows only its items, in its printed order if any. More on modules.',
+  );
+  await expect(hint.locator('a')).toHaveCount(2);
+  await expect(hint.locator('a[href="https://jmgirard.github.io/hitop-builder/"]')).toHaveText('Module Builder');
+  await expect(hint.locator('a[href="https://github.com/jmgirard/hitop-form#a-hitop-sr-module"]')).toHaveText('More on modules');
 });
 
 // L15: a pasted descriptor whose items are not in ascending order is refused
@@ -566,11 +576,10 @@ for (const entry of NOT_ASCENDING) {
   test(`the builder refuses a descriptor whose items are ${entry.name}`, async ({ page }) => {
     const module = await notAscendingDescriptor(entry);
     await page.goto(`${base()}link.html`);
-    await page.locator('select[name="instrument"]').selectOption(module.instrument);
+    await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
     await page.locator('input[name="study"]').fill('link');
     await openSectionOf(page, 'participant');
     await page.locator('input[name="participant"]').fill('l15');
-    await openSectionOf(page, 'module');
     await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
     await page.getByRole('button', { name: 'Make the link' }).click();
     await expect(page.locator('#err')).toHaveText(NOT_ASCENDING_MESSAGE);
@@ -627,7 +636,8 @@ for (const w of PREFILL_STORES) {
     await expect(page.locator('#err')).toHaveText('');
 
     // Each control holds its field of the config.
-    await expect(page.locator('select[name="instrument"]')).toHaveValue(config.instrument);
+    // A config holding a module fills its HiTOP-SR as a module row.
+    await expect(page.locator('select[name="instrument"]')).toHaveValue('hitopsr-module');
     await expect(page.locator('input[name="study"]')).toHaveValue('prefill');
     await expect(page.locator('input[name="participant"]')).toHaveValue(w.participant ?? '');
     await expect(page.locator('input[name="shuffle"]')).toBeChecked();
@@ -678,7 +688,7 @@ test('a c carrying the instrument and a module fills the module textarea with th
   expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
   const filled = await controls(page);
   const untouched = (c) => c.name !== 'instrument' && c.name !== 'module';
-  expect(filled.find((c) => c.name === 'instrument').value).toBe(module.instrument);
+  expect(filled.find((c) => c.name === 'instrument').value).toBe('hitopsr-module');
   expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
 });
 
@@ -713,13 +723,13 @@ const BAD_C = [
   { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' }, message: 'names an instrument the Study Link Builder does not offer: "hitophsum".' },
   {
     name: 'a module that makes JSON.stringify throw after the study is filled',
-    config: { instrument: 'hitopbr', study: 'deep', module: { throwOnStringify: true } },
+    config: { instrument: 'hitopsr', study: 'deep', module: { throwOnStringify: true } },
     message: COULD_NOT_BE_READ,
     init: throwOnMarkedModule,
   },
   {
     name: 'a module that makes JSON.stringify throw after a completion URL is filled',
-    config: { instrument: 'hitopbr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
+    config: { instrument: 'hitopsr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
     message: COULD_NOT_BE_READ,
     init: throwOnMarkedModule,
   },
@@ -1331,10 +1341,9 @@ test('the form.js messages the builder shows name the online form', async ({ pag
 
   // A module file of another format.
   await openBuilder(page);
-  await page.locator('select[name="instrument"]').selectOption('hitopsr');
+  await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
   await page.locator('input[name="study"]').fill('l35');
   const module = { ...(await readDescriptor('module-plain.json')), format: '2.0' };
-  await openSectionOf(page, 'module');
   await page.locator('textarea[name="module"]').fill(JSON.stringify(module));
   await make.click();
   await expect(err).toHaveText('The module file could not be used: the online form reads format "1.0" and found format "2.0".');
