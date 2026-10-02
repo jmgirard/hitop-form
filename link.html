@@ -226,7 +226,7 @@
     <details class="optional" id="secQuestions">
       <summary><span class="sec-name">Your own questions</span> <span class="sec-state">Not used</span></summary>
     <div id="questionsBlock">
-      <p class="hint">Questions of your own, asked on a screen before or after the form. Each answer goes in a column named <code>q_</code> plus the question's name, after the item columns. Up to 50 questions. <a href="https://github.com/jmgirard/hitop-form#ask-your-own-questions">How answers are written</a>.</p>
+      <p class="hint">Questions of your own, asked on a screen before or after the form. Each answer goes in a column named <code>q_</code> plus the question's name, after the item columns. As many as the setup's size allows. <a href="https://github.com/jmgirard/hitop-form#ask-your-own-questions">How answers are written</a>.</p>
       <div id="questionList"></div>
       <p><button type="button" class="secondary" id="addQuestion">Add a question</button></p>
       <p class="hint">You can also write the questions in a spreadsheet. "Download a template" saves a CSV file with one example of each type. "Download these questions" saves the questions above.</p>
@@ -267,6 +267,7 @@
     </div>
     <p id="next"></p>
     <p id="open" class="muted"></p>
+    <p id="long" role="status" hidden></p>
   <div id="sqlBlock" hidden>
     <label>SQL for the table
       <span class="hint">Run this in the project's SQL editor. Its table has a column per item and question. The key can only add rows. After changing instruments, module, random order, Prolific or questions, make a new table. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-supabase">What the SQL does</a>.</span>
@@ -282,7 +283,7 @@
     consentTextFault, fetchExports, planStems, linkStems, storeSql, isWritableIdentifier, PROLIFIC_PARAMS, CONSENT_TEXT_MAX,
     CONSENT_DECLINED_MAX, checkQuestions, QUESTION_INT_MAX, readQuestionsCsv, writeQuestionsCsv, saveFile,
     checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
-    SETUP_FILE_MAX, FINGERPRINT,
+    SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX, MAX_LINK_BYTES,
   } from './form.js';
 
   // The three placeholders Prolific fills in, appended to a Prolific link
@@ -306,6 +307,19 @@
   const err = document.getElementById('err');
   const out = document.getElementById('out');
   const open = document.getElementById('open');
+  const long = document.getElementById('long');
+  // RFC 9110, section 4.1, recommends that senders and recipients support
+  // URIs of at least 8,000 octets. A study link is ASCII, so its length in
+  // characters is its length in octets. A longer link gets a warning.
+  const LINK_WARN_LENGTH = 8_000;
+  // Fastly, which serves GitHub Pages, answers "414 URI Too Long" for a URL
+  // over 8 KB. On 2026-10-01 GitHub Pages answered a path and query of 8,192
+  // characters and refused one of 8,193 (hitop's
+  // cairn/references/fastly2026limits.md). A longer link is refused.
+  const HOST_PATH_MAX = 8_192;
+  // Prolific's help gives its participant ID as 24 characters. Its study and
+  // session IDs are taken to be as long.
+  const PROLIFIC_ID_LENGTH = 24;
   const result = document.getElementById('result');
   // How many times hideResult() ran: a build reads it before and after
   // each wait.
@@ -826,9 +840,9 @@
     for (const list of ['before', 'after']) if (lists[list].length > 0) questions[list] = lists[list];
     // The check names each question as it reaches it, so the last group
     // named and the field key are the refused ones. The refusal carries
-    // that group's control for the field as `control`. A fault that names
-    // no question, or a field outside QUESTION_CONTROLS, carries none, and
-    // focus goes to the message.
+    // that group's control for the field as `control`. Every fault the
+    // editor can make names a question. A field outside QUESTION_CONTROLS
+    // carries no control, and focus goes to the message.
     let group;
     let key;
     try {
@@ -924,6 +938,14 @@
         return filled;
       }
     } else {
+      // The online form refuses a `c` that decodes to more than
+      // MAX_LINK_BYTES (decodeLink()), so the builder does not fill from one.
+      // Base64url text of n characters decodes to floor(3n / 4) bytes.
+      const bytes = Math.floor(param.length * 3 / 4);
+      if (/^[A-Za-z0-9_-]+$/.test(param) && bytes > MAX_LINK_BYTES) {
+        refuse(`holds a setup of ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads.`);
+        return filled;
+      }
       try {
         config = decodeConfig(param);
       } catch {
@@ -1200,6 +1222,8 @@
     result.hidden = true;
     out.textContent = '';
     open.textContent = '';
+    long.hidden = true;
+    long.textContent = '';
     next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
@@ -1270,6 +1294,11 @@
         refuseAt(STALE);
         return;
       }
+      const columns = storeColumns(items, config.shuffle === true, prolific, config.questions).length;
+      if (columns > POSTGRES_COLUMNS_MAX) {
+        refuseAt(`The Supabase table would have ${columns.toLocaleString('en-US')} columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.`);
+        return;
+      }
       sql.value = storeSql(config.store.table, items, config.shuffle === true, prolific, config.questions);
       sqlBlock.hidden = false;
     }
@@ -1298,13 +1327,27 @@
     // the site as it expects them.
     const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
     const href = url.href + suffix;
+    // The host sees the path and query, with each Prolific placeholder
+    // replaced by the ID Prolific puts in its place.
+    const sent = url.pathname.length + url.search.length
+      + (prolific ? suffix.replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH)) : suffix).length;
+    if (sent > HOST_PATH_MAX) {
+      sqlBlock.hidden = true;
+      sql.value = '';
+      refuseAt(`This link is ${href.length.toLocaleString('en-US')} characters long, longer than the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
+      return;
+    }
     out.textContent = href;
     const a = document.createElement('a');
     a.href = href;
     a.textContent = 'Open the link';
     a.target = '_blank';
     a.rel = 'noopener';
-    open.replaceChildren(a, ` (${href.length} characters)`);
+    open.replaceChildren(a, ` (${href.length.toLocaleString('en-US')} characters)`);
+    if (href.length > LINK_WARN_LENGTH) {
+      long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.`;
+      long.hidden = false;
+    }
     next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;
     copySql.hidden = !navigator.clipboard;

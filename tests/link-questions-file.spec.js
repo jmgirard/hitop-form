@@ -8,7 +8,8 @@
 //        the file with the two lists interleaved; the editor shows the
 //        before list first, and "Make the link" builds those questions
 //   LF2: a file with no byte-order mark, LF line ends, only the four required
-//        columns and no line end after its last row loads
+//        columns and no line end after its last row loads; files of 51 and
+//        of 200 questions load and build
 //   LF3: a load takes the place of the questions the editor held
 //   LF4: each fault is refused with its message, and the editor keeps the
 //        questions it held: a file that is not UTF-8, a file in UTF-16 with
@@ -307,8 +308,24 @@ const REFUSED = [
     content: file('before,two,Two,number,,,10,5'),
     message: bad('row 2, column min: its min 10 is above its max 5.'),
   },
-  { name: '51 questions', content: file(...many(51)), message: bad('it has 51 questions, more than the 50 it may hold.') },
 ];
+
+// LF2: the count of questions has no limit of its own.
+for (const n of [51, 200]) {
+  test(`LF2: a file of ${n} questions loads, and "Make the link" builds them`, async ({ page }) => {
+    await openBuilder(page);
+    await load(page, file(...many(n)));
+    await expect(page.locator('#questionsStatus')).toHaveText(`Loaded ${n} questions from questions.csv.`);
+    await expect(page.locator('#questionsErr')).toHaveText('');
+    await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
+    await page.locator('input[name="study"]').fill('file');
+    await page.getByRole('button', { name: 'Make the link' }).click();
+    await expect(page.locator('#out')).not.toHaveText('');
+    expect(decodeLinkParam(await page.locator('#out').textContent()).questions).toEqual({
+      before: Array.from({ length: n }, (_, k) => ({ name: `q${k}`, text: 'Fine', type: 'text' })),
+    });
+  });
+}
 
 for (const probe of REFUSED) {
   test(`LF4: the builder refuses ${probe.name} and keeps the editor's questions`, async ({ page }) => {

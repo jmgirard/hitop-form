@@ -69,7 +69,8 @@
 //       control at its no-c value, over eight values of c, two that throw
 //       past the three checks among them (one after a completion URL is
 //       filled), and the submit handler still runs; a load with no c leaves
-//       #err empty
+//       #err empty; a c that decodes to 100,001 bytes is refused naming its
+//       size and the limit, and one of exactly 100,000 bytes fills the form
 //  L19: above the form, the intro asks for the required parts, names
 //       "Make the link" and links the online-collection tutorial; the module
 //       hint links the Module Builder
@@ -140,12 +141,17 @@
 //       bytes, bytes that are not UTF-8, text that is not JSON, and JSON
 //       that holds no form. The form's elements, the instrument rows and
 //       the question list equal those of a load with no link
+//  L37: a link of exactly 8,000 characters shows no long-link warning, and
+//       one of 8,001 shows it naming the length, as a status a screen reader
+//       announces; the line beside "Open the link" writes the length with
+//       the same comma; the study name and the participant-parameter name
+//       are padded at run time to reach each length
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
-  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed,
+  NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -747,6 +753,29 @@ test('a load with no c leaves #err empty', async ({ page }) => {
   await expect(page.locator('#err')).toBeHidden();
 });
 
+// The study name pads the config's JSON to `n` bytes, and the c is that
+// JSON as base64url, as encodeConfig() writes it.
+function paddedC(n) {
+  const config = { instrument: 'hitopbr', study: '' };
+  const study = 's'.repeat(n - Buffer.byteLength(JSON.stringify(config)));
+  const json = JSON.stringify({ ...config, study });
+  expect(Buffer.byteLength(json)).toBe(n);
+  return { study, c: Buffer.from(json, 'utf8').toString('base64url') };
+}
+
+test('a c that decodes to 100,001 bytes is refused naming its size, and one of 100,000 bytes fills the form', async ({ page }) => {
+  await openBuilder(page);
+  const plain = await controls(page);
+  await gotoLong(page, `${base()}link.html?c=${paddedC(100_001).c}`);
+  await expect(page.locator('#err')).toHaveText('The study link you opened holds a setup of 100,001 bytes, more than the 100,000 bytes the online form reads. Fill in the form above to make a new link.');
+  expect(await controls(page)).toEqual(plain);
+
+  const fits = paddedC(100_000);
+  await gotoLong(page, `${base()}link.html?c=${fits.c}`);
+  await expect(page.locator('input[name="study"]')).toHaveValue(fits.study);
+  await expect(page.locator('#err')).toHaveText('');
+});
+
 // L36: what the builder holds, as values: each of the form's elements, the
 // instrument rows' menus, and the question list's groups.
 function builderValues(page) {
@@ -1317,4 +1346,111 @@ test('the form.js messages the builder shows name the online form', async ({ pag
   }));
   const { err: exportErr } = await buildSupabase(page, { url: 'https://abc.supabase.co', key: 'sb_publishable_x', table: 'responses' });
   expect(exportErr).toBe('The online form reads format "1.0" of the instrument export and found format "2.0".');
+});
+
+// L37: RFC 9110, section 4.1, recommends support for URIs of at least 8,000
+// octets, and a study link is ASCII. The link is ?c=, the base64url of the
+// setup's JSON with no padding, so `n` bytes take the length below; a
+// length of 4k + 1 has no `n`. The address the page sits at sets the rest,
+// and both lengths are reachable when that part leaves 1 or 2 over 4.
+const LONG_AT = 8_000;
+const b64Length = (n) => Math.floor(n / 3) * 4 + [0, 2, 3][n % 3];
+
+async function buildPadded(page, study, param) {
+  if (param !== undefined) await page.locator('input[name="participantParam"]').fill(param);
+  await page.locator('input[name="study"]').fill(study);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out')).not.toHaveText('');
+  return page.locator('#out').textContent();
+}
+
+for (const length of [LONG_AT, LONG_AT + 1]) {
+  test(`L37: a link of ${length.toLocaleString('en-US')} characters ${length > LONG_AT ? 'shows' : 'shows no'} long-link warning`, async ({ page }) => {
+    await openBuilder(page);
+    await openSectionOf(page, 'site');
+    await page.locator('select[name="site"]').selectOption('other');
+    const first = await buildPadded(page, 's', 'p');
+    const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
+    const rest = first.length - b64Length(bytes);
+    const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => rest + b64Length(k) === length);
+    expect(n, `a setup of some size makes a link of ${length} characters`).not.toBeUndefined();
+    // The padding the setup needs, up to 63 characters of it in the
+    // parameter name, which holds at most 64, and the rest in the study name.
+    const pad = n - bytes;
+    const param = `p${'x'.repeat(Math.min(63, pad))}`;
+    const href = await buildPadded(page, `s${'x'.repeat(pad - Math.min(63, pad))}`, param);
+    expect(href.length).toBe(length);
+    expect(decodeLinkParam(href).participantParam).toBe(param);
+    expect(param).toHaveLength(64);
+    await expect(page.locator('#open')).toHaveText(`Open the link (${length.toLocaleString('en-US')} characters)`);
+    if (length > LONG_AT) {
+      await expect(page.getByRole('status').filter({ hasText: 'This link is' })).toHaveText('This link is 8,001 characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.');
+    } else {
+      await expect(page.locator('#long')).toBeHidden();
+      await expect(page.locator('#long')).toHaveText('');
+    }
+  });
+}
+
+test('L37: the warning goes when a shorter link is made', async ({ page }) => {
+  await openBuilder(page);
+  // A ?c= of some 8,050 characters: past the warning, within the host's
+  // 8,192 (L38).
+  await buildPadded(page, 'x'.repeat(6_000));
+  await expect(page.locator('#long')).toBeVisible();
+  await buildPadded(page, 's');
+  await expect(page.locator('#long')).toBeHidden();
+  await expect(page.locator('#long')).toHaveText('');
+});
+
+// L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
+// and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
+// and refused 8,193. The count here is made apart from the builder: the link
+// after its origin, with each Prolific placeholder as 24 characters, the
+// length Prolific's help gives for the participant ID. Which lengths a ?c= link can reach depends on
+// the page's address and the site's ending (L37), so each length is tried
+// with no ending, SONA's and Prolific's, and each must be reached by one.
+const HOST_AT = 8_192;
+const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
+const HOST_REFUSED = (n) => `This link is ${n.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`;
+
+// Presses "Make the link" with the study name given, and waits for a link
+// or a refusal.
+async function press(page, study) {
+  await page.locator('input[name="study"]').fill(study);
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await expect(page.locator('#out').or(page.locator('#err')).filter({ hasText: /./ })).toHaveCount(1);
+}
+
+test('L38: a link counting 8,192 characters after its origin is made, and one counting 8,193 is refused', async ({ page }) => {
+  const reached = { [HOST_AT]: [], [HOST_AT + 1]: [] };
+  for (const site of ['', 'sona', 'prolific']) {
+    await openBuilder(page);
+    await openSectionOf(page, 'site');
+    await page.locator('select[name="site"]').selectOption(site);
+    await press(page, 's');
+    const first = await page.locator('#out').textContent();
+    const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
+    const restCount = hostCount(first) - b64Length(bytes);
+    const restLength = first.length - b64Length(bytes);
+    for (const target of [HOST_AT, HOST_AT + 1]) {
+      const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => restCount + b64Length(k) === target);
+      if (n === undefined) continue;
+      reached[target].push(site);
+      await press(page, `s${'x'.repeat(n - bytes)}`);
+      if (target <= HOST_AT) {
+        await expect(page.locator('#err')).toHaveText('');
+        const href = await page.locator('#out').textContent();
+        expect(hostCount(href), `${site || 'no site'} at ${target}`).toBe(target);
+      } else {
+        await expect(page.locator('#err')).toHaveText(HOST_REFUSED(restLength + b64Length(n)));
+        await expect(page.locator('#result')).toBeHidden();
+        await expect(page.locator('#out')).toHaveText('');
+      }
+    }
+  }
+  expect(reached[HOST_AT].length, 'some site reaches 8,192').toBeGreaterThan(0);
+  expect(reached[HOST_AT + 1].length, 'some site reaches 8,193').toBeGreaterThan(0);
+  expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
+  expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
 });

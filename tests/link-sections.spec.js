@@ -74,9 +74,9 @@
 //       the message when it passes none. A call whose control is chosen
 //       at run time is fired once per control: the instrument row at fault
 //       (a repeat and a second PID-5 form, each at rows 2 and 3), each
-//       question field in the page's control map and a fault with no
-//       question, and the four store fields. The fetch failure, the encode
-//       failure and the four stale-build refusals are among them, and so
+//       question field in the page's control map, and the four store
+//       fields. The fetch failure, a Supabase table of 1,601 columns, a
+//       link longer than the online form's host accepts, the encode failure and the four stale-build refusals are among them, and so
 //       are the setup file's: no address, an http:// address, no
 //       crypto.subtle, a failed fetch, a field changed while it fails and
 //       while it succeeds, a file that does not match, and a download over
@@ -1308,8 +1308,8 @@ const REFUSE_AT = [
     focus: field('completeDeclined'),
     section: 'secConsent',
   },
-  // The question call: each control in the page's map, and a fault that
-  // names no question.
+  // The question call: each control in the page's map. The editor makes no
+  // fault that names no question.
   {
     name: 'question: a bad name',
     call: ['e.message, e.control'],
@@ -1354,17 +1354,6 @@ const REFUSE_AT = [
     message: /^The questions could not be used: question 1: its max is not a whole number/,
     focus: inQuestion('qMax'),
     section: 'secQuestions',
-  },
-  {
-    name: 'question: 51 questions, a fault in no one question',
-    call: ['e.message, e.control'],
-    query: () => `?z=${encodeCompressed({
-      instrument: 'hitopbr',
-      study: 'refusals',
-      questions: { before: Array.from({ length: 51 }, (_, k) => ({ name: `q${k + 1}`, text: `Question ${k + 1}`, type: 'text' })) },
-    })}`,
-    message: 'The questions could not be used: it has 51 questions, more than the 50 it may hold.',
-    focus: null,
   },
   {
     name: 'a module that is not JSON',
@@ -1461,6 +1450,28 @@ const REFUSE_AT = [
     },
     press: (page, hold) => changeDuringWait(page, () => hold.asked, () => hold.release('fulfill')),
     message: STALE,
+    focus: null,
+  },
+  {
+    // 5 lead columns, the HiTOP-BR's 45 items and 1,551 questions.
+    name: 'a Supabase table of more than 1,600 columns',
+    call: ['The Supabase table would have'],
+    query: () => `?z=${encodeCompressed({
+      instrument: 'hitopbr',
+      study: 'refusals',
+      questions: { before: Array.from({ length: 1_551 }, (_, k) => ({ name: `q${k}`, text: 't', type: 'text' })) },
+    })}`,
+    fill: (page) => supabase(page),
+    message: 'The Supabase table would have 1,601 columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.',
+    focus: null,
+  },
+  {
+    // A ?c= of some 9,400 characters. link.spec.js L38 checks the length
+    // the message names.
+    name: 'a link longer than the online form\'s host accepts',
+    call: ['longer than the online form'],
+    study: 'x'.repeat(7_000),
+    message: /^This link is [\d,]+ characters long, longer than the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
     focus: null,
   },
   {

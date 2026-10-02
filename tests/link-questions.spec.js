@@ -21,17 +21,23 @@
 //        a whole number, a maximum outside the range with and without a
 //        leading zero, a bound of more digits than a JavaScript number holds,
 //        each out-of-range bound quoted as typed, and a minimum above the
-//        maximum; 51 questions are refused naming the count
+//        maximum; 51 and 200 short questions are built, and the links open
+//        on their questions
 //   LQ5: blank lines in the options box are skipped, a type that takes no
 //        options or bounds leaves the hidden ones out of the link, and with
 //        no question the builder writes ?c= and no questions field; in a
 //        browser without CompressionStream a link with questions, consent
 //        text, or both is refused naming what it holds; a setup whose JSON
-//        is over 100,000 bytes is refused with its size, and one of exactly
-//        100,000 bytes is built and opens; the min and max boxes ask for no
+//        is over 100,000 bytes is refused with its size; one of exactly
+//        100,000 bytes is built and opens as a z setup, and as a c setup
+//        with no consent text and no questions it passes the size check and
+//        is refused for its length; the min and max boxes ask for no
 //        numeric keypad, so a minus sign can be typed
 //   LQ6: Move up, Move down and Remove change the editor's order and its
 //        numbers, and the link follows the order
+//   LQ7: with a Supabase table, a setup whose table has 1,600 columns is
+//        built and its SQL holds 1,600 columns; one of 1,601 is refused
+//        naming the count, and no link or SQL shows
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -198,21 +204,22 @@ for (const probe of REFUSED) {
   });
 }
 
-test('the editor refuses 51 questions and builds 50', async ({ page }) => {
-  await openBuilder(page);
-  // Filled from a prefilled link, since adding 51 groups by hand is slow.
-  const questions = { before: many(51, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
-  await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
-  await expect(page.locator('fieldset.question-edit')).toHaveCount(51);
-  await openSectionOf(page, '#addQuestion');
-  await make(page);
-  await expect(page.locator('#err')).toHaveText(bad('it has 51 questions, more than the 50 it may hold.'));
-  await expect(page.locator('#out')).toHaveText('');
-  await group(page, 51).getByRole('button', { name: 'Remove' }).click();
-  await make(page);
-  await expect(page.locator('#err')).toHaveText('');
-  expect(decodeLinkParam(await page.locator('#out').textContent()).questions.before).toHaveLength(50);
-});
+for (const n of [51, 200]) {
+  test(`the editor builds ${n} short questions, and the link opens`, async ({ page }) => {
+    // Filled from a prefilled link, since adding the groups by hand is slow.
+    const questions = { before: many(n, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
+    await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
+    await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
+    await openSectionOf(page, '#addQuestion');
+    await make(page);
+    await expect(page.locator('#err')).toHaveText('');
+    const href = await page.locator('#out').textContent();
+    expect(decodeLinkParam(href).questions).toEqual(questions);
+    await page.goto(href);
+    await expect(page.getByRole('heading', { name: 'Before you begin' })).toBeVisible();
+    await expect(page.locator('.question')).toHaveCount(n);
+  });
+}
 
 // LQ5
 test('blank option lines are skipped, hidden fields stay out, and no question writes c', async ({ page }) => {
@@ -306,6 +313,32 @@ test('a setup over 100,000 bytes is refused with its size, and one of exactly 10
   await expect(page.locator('#out')).toHaveText('');
 });
 
+test('a c setup over 100,000 bytes is refused with its size, and one of exactly 100,000 bytes passes that check and is refused for its length', async ({ page }) => {
+  // No consent text and no questions, so the link is ?c=. The study name
+  // sets the total byte for byte. A ?c= of n bytes is base64url with no
+  // padding, so its length is b64Length(n).
+  const b64Length = (n) => Math.floor(n / 3) * 4 + [0, 2, 3][n % 3];
+  await openBuilder(page);
+  await make(page, 's');
+  await expect(page.locator('#err')).toHaveText('');
+  const first = await page.locator('#out').textContent();
+  expect([...new URL(first).searchParams.keys()]).toEqual(['c']);
+  const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
+  const study = (bytes) => 's'.repeat(1 + bytes - base1);
+
+  // The online form's host takes 8,192 characters of path and query (link.spec.js
+  // L38), so the size check passes and the length check refuses.
+  const length = first.length - b64Length(base1) + b64Length(100_000);
+  await make(page, study(100_000));
+  await expect(page.locator('#err')).toHaveText(`This link is ${length.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`);
+  await expect(page.locator('#out')).toHaveText('');
+
+  await openBuilder(page);
+  await make(page, study(100_001));
+  await expect(page.locator('#err')).toHaveText("This link's setup is 100,001 bytes, more than the 100,000 bytes the online form reads.");
+  await expect(page.locator('#out')).toHaveText('');
+});
+
 test('the min and max boxes ask for no numeric keypad, and negative bounds are built', async ({ page }) => {
   await openBuilder(page);
   await openSectionOf(page, '#addQuestion');
@@ -340,3 +373,37 @@ test('Move up, Move down and Remove reorder and renumber the questions', async (
   await make(page);
   expect(decodeLinkParam(await page.locator('#out').textContent()).questions.before.map((q) => q.name)).toEqual(['c', 'b']);
 });
+
+// LQ7: PostgreSQL allows 1,600 columns in a table. The HiTOP-BR has 45
+// items and the row has 5 lead columns, so 1,550 questions make 1,600
+// columns.
+const PG_MAX = 1_600;
+const HITOPBR_ITEMS = 45;
+const LEAD = 5;
+for (const columns of [PG_MAX, PG_MAX + 1]) {
+  test(`a Supabase table of ${columns.toLocaleString('en-US')} columns is ${columns > PG_MAX ? 'refused, naming the count' : 'built'}`, async ({ page }) => {
+    const n = columns - LEAD - HITOPBR_ITEMS;
+    const questions = { before: many(n, (i) => ({ name: `q${i}`, text: 't', type: 'text' })) };
+    await openBuilder(page, `?z=${encodeCompressed({ instrument: 'hitopbr', study: 's', questions })}`);
+    await expect(page.locator('fieldset.question-edit')).toHaveCount(n);
+    await page.locator('select[name="storeKind"]').selectOption('supabase');
+    await page.locator('input[name="supabaseUrl"]').fill('https://abc.supabase.co');
+    await page.locator('input[name="supabaseKey"]').fill('sb_publishable_x');
+    await page.locator('input[name="supabaseTable"]').fill('hitopbr_responses');
+    await make(page, 'columns');
+    if (columns > PG_MAX) {
+      await expect(page.locator('#err')).toHaveText('The Supabase table would have 1,601 columns, more than the 1,600 a PostgreSQL table can have. Use fewer questions or instruments.');
+      await expect(page.locator('#out')).toHaveText('');
+      await expect(page.locator('#sqlBlock')).toBeHidden();
+      return;
+    }
+    await expect(page.locator('#err')).toHaveText('');
+    // The shown SQL's column lines: the lead columns, one integer column per
+    // item and one text column per question.
+    const sql = await page.locator('#sql').inputValue();
+    const lines = sql.slice(sql.indexOf('(\n') + 2, sql.indexOf('\n);')).split(',\n');
+    expect(lines).toHaveLength(PG_MAX);
+    expect(lines.filter((l) => l.endsWith(' integer'))).toHaveLength(HITOPBR_ITEMS);
+    expect(lines.filter((l) => l.startsWith('  "q_'))).toHaveLength(n);
+  });
+}

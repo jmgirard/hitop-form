@@ -172,15 +172,16 @@ export function decodeConfig(param) {
 //
 // The query of a study link, without its `?`: `z=…` for a config that carries
 // `consent` or `questions`, and `c=…` as before for any other. link.html
-// builds its links with it. It refuses a `z` config whose JSON is over
-// MAX_LINK_BYTES, which the page would refuse to read.
+// builds its links with it. It refuses a config whose JSON is over
+// MAX_LINK_BYTES, as `c` or as `z`, which the page would refuse to read.
 export async function encodeLink(config) {
   const json = JSON.stringify(config);
-  if (config.consent === undefined && config.questions === undefined) return `c=${utf8ToBase64url(json)}`;
+  const carries = config.consent !== undefined || config.questions !== undefined;
   const bytes = new TextEncoder().encode(json).length;
   if (bytes > MAX_LINK_BYTES) {
-    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads. Shorten the consent text or the questions.`);
+    throw new Error(`This link's setup is ${bytes.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads.${carries ? ' Shorten the consent text or the questions.' : ''}`);
   }
+  if (!carries) return `c=${utf8ToBase64url(json)}`;
   if (typeof CompressionStream !== 'function') {
     const parts = [config.consent === undefined ? null : 'consent text', config.questions === undefined ? null : 'questions'];
     throw new Error(`This browser cannot make a link with ${parts.filter((p) => p !== null).join(' and ')}, because it cannot compress the link. Use a current version of Chrome, Edge, Firefox or Safari.`);
@@ -189,8 +190,9 @@ export async function encodeLink(config) {
   return `z=${bytesToBase64url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
 }
 
-// The most bytes a `z` parameter may decompress to. The page stops reading
-// there, so a small link cannot make it inflate without end.
+// The most bytes a `z` parameter may decompress to, and a `c` parameter
+// decode to. The page stops reading a `z` there, so a small link cannot make
+// it inflate without end.
 export const MAX_LINK_BYTES = 100_000;
 
 // Whether this browser can read a `z` parameter. Some older Chromium
@@ -418,7 +420,8 @@ async function readSetupFile(params) {
 // Reads the link's `c` or `z` parameter, or the setup file its `setup` and
 // `sha256` name, into the object it holds, or throws with a message the
 // participant can pass on to the study team. A link with both `c` and `z`
-// is refused, since the two could hold different forms.
+// is refused, since the two could hold different forms, as is a setup over
+// MAX_LINK_BYTES in either.
 export async function decodeLink(search) {
   const params = new URLSearchParams(search);
   if (params.has('setup') || params.has('sha256')) return readSetupFile(params);
@@ -437,10 +440,20 @@ export async function decodeLink(search) {
     }
     config = await inflateConfig(z, (why) => new Error(`The study link could not be read: it ${why}. Ask the study team for a new link.`));
   } else if (c) {
+    const unreadable = () => new Error('The study link could not be read. Ask the study team for a new link.');
+    let bytes;
     try {
-      config = decodeConfig(c);
+      bytes = base64urlToBytes(c);
     } catch {
-      throw new Error('The study link could not be read. Ask the study team for a new link.');
+      throw unreadable();
+    }
+    if (bytes.length > MAX_LINK_BYTES) {
+      throw new Error(`The study link could not be read: its setup is ${bytes.length.toLocaleString('en-US')} bytes, more than the 100,000 bytes the online form reads. Ask the study team for a new link.`);
+    }
+    try {
+      config = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      throw unreadable();
     }
   } else {
     throw new Error('This page needs a study link. The link you opened carries no form.');
@@ -527,7 +540,6 @@ export function textParagraphs(text) {
 export const QUESTION_LISTS = ['before', 'after'];
 export const QUESTION_TYPES = ['text', 'number', 'choice', 'multi'];
 export const QUESTION_KEYS = ['name', 'text', 'type', 'required', 'options', 'min', 'max'];
-export const QUESTIONS_MAX = 50;
 export const QUESTION_TEXT_MAX = 1_000;
 export const OPTIONS_MIN = 2;
 export const OPTIONS_MAX = 20;
@@ -581,10 +593,6 @@ export function checkQuestions(
   for (const list of lists) {
     if (!Array.isArray(questions[list])) throw bad(`its ${list} list is not a list.`);
     if (questions[list].length === 0) throw bad(`its ${list} list is empty, and a list holds 1 or more questions.`);
-  }
-  const total = lists.reduce((n, list) => n + questions[list].length, 0);
-  if (total > QUESTIONS_MAX) {
-    throw bad(`it has ${total} questions, more than the ${QUESTIONS_MAX} it may hold.`);
   }
   const seen = new Map();
   const out = {};
@@ -1280,6 +1288,21 @@ function isIntegerArray(x) {
   return Array.isArray(x) && x.every((v) => Number.isInteger(v));
 }
 
+// The most columns a PostgreSQL table can have (PostgreSQL documentation,
+// Appendix K). A row must also fit in one 8,192-byte page, so a table under
+// this limit can still refuse a row of long answers. link.html refuses a
+// Supabase setup whose table would have more columns.
+export const POSTGRES_COLUMNS_MAX = 1_600;
+
+// The columns storeSql() creates, in its order, each as [name, type].
+export function storeColumns(items, shuffle = false, prolific = false, questions = undefined) {
+  return [
+    ...leadColumns({ shuffle, prolific }).map((c) => [c, 'text']),
+    ...items.map((it) => [it.name, 'integer']),
+    ...questionColumns({ questions }).map((c) => [c, 'text']),
+  ];
+}
+
 // The SQL that makes the table a supabase store names, for `items` in the
 // order the row keeps them (the `items` of each planStems() plan, one group
 // per instrument in the link's order, joined into one list): the five study
@@ -1293,12 +1316,7 @@ function isIntegerArray(x) {
 export function storeSql(table, items, shuffle = false, prolific = false, questions = undefined) {
   const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
   const t = q(table);
-  const lead = leadColumns({ shuffle, prolific });
-  const columns = [
-    ...lead.map((c) => `  ${q(c)} text`),
-    ...items.map((it) => `  ${q(it.name)} integer`),
-    ...questionColumns({ questions }).map((c) => `  ${q(c)} text`),
-  ];
+  const columns = storeColumns(items, shuffle, prolific, questions).map(([name, type]) => `  ${q(name)} ${type}`);
   return [
     `create table ${t} (`,
     columns.join(',\n'),

@@ -41,6 +41,10 @@
 //        100,000 bytes is refused in the builder's refusal pattern; one
 //        whose file has not arrived after 30 seconds is refused at the
 //        limit, and "Make the link" then works
+//   LF9: a setup-file link counting 8,192 characters after its origin is
+//        made, and one counting 8,193 is refused naming its length, with no
+//        advice to host a file; with Prolific chosen, each placeholder
+//        counts as 24 characters
 //
 // Every refusal checked here holds none of the retired terms.
 
@@ -515,5 +519,39 @@ for (const fault of FETCH_FAULTS) {
     await expectRefused(page, refusal(`names the setup file ${SETUP_URL}, which ${fault.why}.`));
     await expect(page.locator('input[name="study"]')).toHaveValue('');
     await expect(page.locator('#setupChanged')).toBeHidden();
+  });
+}
+
+// LF9: the count is made apart from the builder, as in link.spec.js L38: the
+// link after its origin, each Prolific placeholder as 24 characters. The
+// address's path sets the length one character at a time.
+const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
+const longAddress = (k) => `https://setup.example.org/${'a'.repeat(k)}.json`;
+
+for (const prolific of [false, true]) {
+  test(`a setup-file link${prolific ? ' for Prolific' : ''} counting 8,192 characters is made, and one counting 8,193 is refused naming its length`, async ({ page }) => {
+    await serveSetup(page, pretty(prolific ? { ...PLAIN, prolific: true } : PLAIN), { url: (u) => u.hostname === 'setup.example.org' });
+    await openBuilder(page);
+    await fillPlain(page);
+    if (prolific) {
+      await openSectionOf(page, 'site');
+      await page.locator('select[name="site"]').selectOption('prolific');
+    }
+    await chooseFile(page, longAddress(1));
+    await make(page).click();
+    await expect(page.locator('#result')).toBeVisible();
+    const first = await page.locator('#out').textContent();
+
+    const k = 1 + 8_192 - hostCount(first);
+    await addressField(page).fill(longAddress(k));
+    await make(page).click();
+    await expect(page.locator('#result')).toBeVisible();
+    await expect(err(page)).toHaveText('');
+    expect(hostCount(await page.locator('#out').textContent())).toBe(8_192);
+
+    await addressField(page).fill(longAddress(k + 1));
+    await make(page).click();
+    await expectRefused(page, `This link is ${(first.length + k).toLocaleString('en-US')} characters long, longer than the online form's host accepts.`);
+    await expect(page.locator('#out')).toHaveText('');
   });
 }

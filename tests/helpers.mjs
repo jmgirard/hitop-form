@@ -236,6 +236,21 @@ export function formUrl(base, config, extra = '', param = 'c') {
   return `${base}?${param}=${value}${extra}`;
 }
 
+// Opens `href`, an address too long for any host: the deployed page's host
+// answers 414 past 8,192 characters of path and query, and the local server
+// refuses a request line past Node's 16 KiB. The browser asks for `href`, and
+// the answer is the page fetched at the same address with no query, so the
+// page still reads the long query from its own location.
+export async function gotoLong(page, href) {
+  const long = new URL(href);
+  const short = new URL(href);
+  short.search = '';
+  await page.route((url) => url.href === long.href, async (route) => {
+    await route.fulfill({ response: await route.fetch({ url: short.href }) });
+  });
+  await page.goto(href);
+}
+
 // The three values a Prolific study fills in, of the shape its example ID
 // has (24 hexadecimal characters), and the query that carries them.
 export const PROLIFIC = {
