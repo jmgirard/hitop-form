@@ -148,9 +148,9 @@ export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
 }
 
 // An init script that sets window.armed when the Study Link Builder's
-// prefill starts: at prefill()'s first statement, which asks the page's
-// own address for `setup`. Nothing asks the address for `setup` before
-// that. A plant that throws only while window.armed is set throws at no
+// prefill starts: at prefill()'s first call, `opened.has('setup')`, made on
+// the URLSearchParams of the page's own address. Nothing asks that for
+// `setup` before then. A plant that throws only while window.armed is set throws at no
 // earlier call.
 export function armOnAddress() {
   const Real = URLSearchParams;

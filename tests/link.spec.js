@@ -1530,12 +1530,11 @@ test('L39: a normal load shows neither message', async ({ page }) => {
   await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
   // With JavaScript on, the browser keeps a <noscript>'s content as text and
   // shows none of it. The element and its message are asserted present
-  // first, so the hidden check is not of an absent element.
+  // first, so the noscript's hidden check is not of an absent element.
   const noscript = page.locator('noscript');
   await expect(noscript).toHaveCount(1);
   expect(await noscript.evaluate((el) => el.textContent)).toContain(NO_SCRIPT);
   await expect(noscript).toBeHidden();
-  await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeHidden();
 });
 
 // L40: the form takes no input while a z link unpacks. The unpacked bytes
@@ -1580,11 +1579,12 @@ test('L41: a z link whose module is nested too deeply to show is refused by name
   expect(errors).toEqual([]);
 });
 
-// L42: Firefox throws an InternalError ("too much recursion"), not a
-// RangeError, where Chromium's indented write runs out of stack. No test
-// runs Firefox, so a plant makes the module box's indented write throw an
-// error of each name. An InternalError is refused as nested too deeply. A
-// TypeError is not, and the link "could not be read".
+// L42: MDN gives Firefox's error for too much recursion as an
+// InternalError, not a RangeError, so the indented write can throw one
+// there if Firefox's stack runs out. Its depth limit is not tested, and no
+// test runs Firefox, so a plant makes the module box's indented write throw
+// an error of each name. An InternalError is refused as nested too deeply.
+// An error named TypeError is not, and the link "could not be read".
 for (const [name, message] of [
   ['InternalError', DEEP_MODULE_REFUSAL],
   ['TypeError', 'The study link you opened could not be read. Fill in the form above to make a new link.'],
