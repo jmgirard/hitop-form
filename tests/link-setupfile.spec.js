@@ -422,6 +422,10 @@ test('pressing the offer empties the file controls\' messages and drops a module
   await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
   await expect(page.locator('input[name="study"]')).toHaveValue('edited');
   await expect(page.locator('#questionsStatus')).toHaveText('');
+  // A link made from the filled form while the read is still held. A read
+  // that went on to fill its old row would count as a change and hide it.
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
   // The read's own continuation runs once the promise settles, within the
   // next task, so one task later it has dropped its text or written it.
   await page.evaluate(() => { window.releaseRead(); return new Promise((r) => setTimeout(r, 50)); });
@@ -429,6 +433,7 @@ test('pressing the offer empties the file controls\' messages and drops a module
   // list and the row now first holds nothing from the read.
   await expect(page.locator('.instrument-row .module-status')).toHaveText('');
   await expect(page.locator('.instrument-row textarea[name="module"]')).toHaveValue('');
+  await expect(page.locator('#result')).toBeVisible();
 });
 
 // A setup file this browser cannot write back out as JSON, such as one

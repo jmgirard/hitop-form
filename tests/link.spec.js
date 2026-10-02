@@ -68,7 +68,7 @@
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
 //       naming an instrument the select does not offer each write their
 //       fault's message, naming the c parameter, into #err and leave every
-//       control at its no-c value, over eight values of c, two that throw
+//       control at its no-c value, over nine values of c, two that throw
 //       past the three checks among them (one after a completion URL is
 //       filled), and the submit handler still runs; a load with no c leaves
 //       #err empty; a c that decodes to 100,001 bytes is refused naming its
@@ -692,11 +692,11 @@ test('a c carrying the instrument and a module fills the module textarea with th
   expect(filled.filter(untouched)).toEqual(plain.filter(untouched));
 });
 
-// L18: eight bad values of c over the three faults, and a load with no c.
+// L18: nine bad values of c over the three faults, and a load with no c.
 // Each bad value writes its fault's message, naming the c parameter, and
-// leaves every control as the no-c load leaves it. The seventh and eighth
+// leaves every control as the no-c load leaves it. The eighth and ninth
 // pass the three checks and make JSON.stringify throw while the module is
-// written, the eighth after a completion URL is filled,
+// written, the ninth after a completion URL is filled,
 // which the page turns into the first message with the form reset, so the
 // script still reaches its submit handler. A module nested some six
 // thousand deep throws that way in V8, but its c runs to 16 KB, past what
@@ -721,6 +721,9 @@ const BAD_C = [
   { name: 'JSON null', config: null, message: NOT_A_FORM },
   { name: 'a JSON string', config: 'x', message: NOT_A_FORM },
   { name: 'an instrument the page does not offer', config: { instrument: 'hitophsum' }, message: 'names an instrument the Study Link Builder does not offer: "hitophsum".' },
+  // The menu's value for a HiTOP-SR module, which no link carries: a link
+  // writes that row as hitopsr.
+  { name: 'the menu value of the HiTOP-SR module', config: { instrument: 'hitopsr-module' }, message: 'names an instrument the Study Link Builder does not offer: "hitopsr-module".' },
   {
     name: 'a module that makes JSON.stringify throw after the study is filled',
     config: { instrument: 'hitopsr', study: 'deep', module: { throwOnStringify: true } },

@@ -903,10 +903,11 @@
   // page names in a `z`, a config that is not a plain object, an instrument
   // the menu does not offer, an `instruments` list beside an
   // `instrument` or refused by the form page's check, and a `module` beside
-  // no HiTOP-SR. A list fills one row per entry, and a `module` sets its
-  // HiTOP-SR row to a HiTOP-SR module. A field of a type its control does not take
-  // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched for a `c` or a `z`.
+  // no HiTOP-SR. A list fills one row per entry, and a `module` of any type
+  // sets its HiTOP-SR row to a HiTOP-SR module, its box left empty when the
+  // module is not an object. Any other field of a type its control does not
+  // take is skipped and the rest are filled; the form page's own checks
+  // refuse such a link when it is opened. Nothing is fetched for a `c` or a `z`.
   //
   // A link's `setup` and `sha256` are refused by name for each fault the
   // form page names in their shape. The file is then fetched as the form
