@@ -69,9 +69,11 @@ items are not, and name the fault.
 
 The link writes a module row as the HiTOP-SR with the module file. So a
 list holds one HiTOP-SR row or one module row, not both, and the builder
-refuses a second one as a repeated instrument. When you change a module
-row to another instrument, the box keeps its text out of view, and the
-link leaves the module out. Change the row back, and the text shows again.
+refuses a second one as a repeated instrument. Its message says why: a
+HiTOP-SR module is the HiTOP-SR, or a list holds one HiTOP-SR module. When
+you change a module row to another instrument, the box keeps its text out
+of view, and the link leaves the module out. Change the row back, and the
+text shows again.
 "Add an instrument" skips both HiTOP-SR entries when either one is listed.
 
 ### Where responses go

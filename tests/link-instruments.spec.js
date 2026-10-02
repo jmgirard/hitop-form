@@ -40,7 +40,8 @@
 //        list, and a module under the random order
 //   LI8: a HiTOP-SR row beside a module row, in either order, is refused as
 //        a repeat with a sentence saying the module is the HiTOP-SR; two
-//        module rows are refused as a repeat without it; both focus the
+//        module rows are refused as a repeat with "A list holds one HiTOP-SR
+//        module."; two HiTOP-SR rows get neither sentence; each focuses the
 //        later row's menu. A module row with an empty box or one holding
 //        only spaces is refused naming its row, and focuses its box
 //   LI9: a `c`, a `z` and a setup file each fill a module row with the
@@ -424,16 +425,20 @@ for (const probe of [
 // LI8
 const CLASH = 'A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
 const TWICE = 'The instruments could not be used: it names HiTOP-SR twice, as instrument 1 and instrument 2.';
+const ONE_MODULE = 'A list holds one HiTOP-SR module.';
 
 for (const probe of [
   { stems: ['hitopsr', 'hitopsr-module'], why: `${TWICE} ${CLASH}` },
   { stems: ['hitopsr-module', 'hitopsr'], why: `${TWICE} ${CLASH}` },
-  { stems: ['hitopsr-module', 'hitopsr-module'], why: TWICE },
+  { stems: ['hitopsr-module', 'hitopsr-module'], why: `${TWICE} ${ONE_MODULE}` },
+  // Two plain HiTOP-SR rows get neither sentence.
+  { stems: ['hitopsr', 'hitopsr'], why: TWICE },
 ]) {
   test(`the rows ${probe.stems.join(', ')} are refused as a repeat, focusing row 2's menu`, async ({ page }) => {
     await page.goto(`${base()}link.html`);
     const text = await readFixture('module-plain.json');
-    const { err, href } = await build(page, probe.stems, { moduleText: text });
+    const moduleText = probe.stems.includes('hitopsr-module') ? text : undefined;
+    const { err, href } = await build(page, probe.stems, { moduleText });
     expect(err).toBe(probe.why);
     expect(href).toBe('');
     await expect(menus(page).nth(1)).toBeFocused();

@@ -59,7 +59,9 @@
 //       or setup file, and that an opened study link holding it, on either
 //       page, puts it in GitHub Pages' logs; the setup-file hint says anyone
 //       can then read where responses go; the intro says the builder keeps
-//       nothing you type, and no longer that it sends nothing
+//       nothing you type, and no longer that it sends nothing; the
+//       Instruments hint allows at most one PID-5 form and at most one
+//       HiTOP-SR, whole or as a module
 //  S10: with "Another site" chosen and one question of each type, 50
 //       characters put into each text input and box in the sections
 //       (typed where the field shows, sent as input events where the
@@ -988,6 +990,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
   await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
+  await expect(page.locator('#instrumentsBlock > .hint')).toContainText('At most one PID-5 form. At most one HiTOP-SR, whole or as a module.');
   const sqlHint = page.locator('#sqlBlock .hint');
   await expect(sqlHint).toContainText('Its table has a column per item and question.');
   await expect(sqlHint).toContainText('After changing instruments, module, random order, Prolific or questions, make a new table.');
@@ -1263,6 +1266,7 @@ const row = (n) => `#instrumentList .instrument-row:nth-child(${n}) select`;
 const moduleBox = (n) => `#instrumentList .instrument-row:nth-child(${n}) textarea[name="module"]`;
 const inQuestion = (name) => `#questionList fieldset:nth-child(1) ${field(name)}`;
 const MODULE_CLASH = 'A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
+const ONE_MODULE = 'A list holds one HiTOP-SR module.';
 const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
 const SUPABASE = { url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_test', table: 'responses' };
 
@@ -1344,9 +1348,11 @@ const REFUSE_AT = [
     // HiTOP-SR row, in either order, name the HiTOP-SR twice.
     { what: 'a HiTOP-SR row then a module row, with the added sentence', stems: ['hitopsr', 'hitopsr-module'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
     { what: 'a module row then a HiTOP-SR row, with the added sentence', stems: ['hitopsr-module', 'hitopsr'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
+    // Two module rows add the other sentence.
+    { what: 'two module rows, with the one-module sentence', stems: ['hitopsr-module', 'hitopsr-module'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${ONE_MODULE}` },
   ].map((c) => ({
     name: `instruments: ${c.what}`,
-    call: ['e.message, at);'],
+    call: ['${why}`, at);'],
     fill: (page) => setRows(page, c.stems),
     message: `The instruments could not be used: ${c.why}`,
     focus: row(c.at),

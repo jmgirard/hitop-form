@@ -123,7 +123,7 @@
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
+      <p class="hint">Choose one to three. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. At most one HiTOP-SR, whole or as a module. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
@@ -1523,12 +1523,17 @@
       } catch (e) {
         // The row at fault: the later of a repeated instrument, or the
         // second PID-5 form. A fault with no row focuses the first. A repeat
-        // of a HiTOP-SR row and a module row says why the two clash.
+        // of a HiTOP-SR row and a module row says why the two clash, and a
+        // repeat of two module rows says a list holds one.
         const at = menus[e.index] ?? menus[0];
-        const first = stems.indexOf('hitopsr');
-        const clash = e.index !== undefined && stems[e.index] === 'hitopsr'
-          && (menus[first].value === MODULE) !== (at.value === MODULE);
-        refuseAt(clash ? `${e.message} A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.` : e.message, at);
+        let why = '';
+        if (e.index !== undefined && stems[e.index] === 'hitopsr') {
+          const firstModule = menus[stems.indexOf('hitopsr')].value === MODULE;
+          const atModule = at.value === MODULE;
+          if (firstModule !== atModule) why = ' A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
+          else if (atModule) why = ' A list holds one HiTOP-SR module.';
+        }
+        refuseAt(`${e.message}${why}`, at);
         return;
       }
     }
