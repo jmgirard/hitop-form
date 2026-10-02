@@ -632,15 +632,18 @@
     a.target = '_blank';
     a.rel = 'noopener';
   }
-  // A field's label as the page shows it: the text of the label's own
-  // children, less its hint and its controls. It is read in place, since
-  // the summaries are drawn again on every keystroke.
+  // A field's label as the page shows it: the text inside the label, less
+  // any hint or control at any depth. It is read in place, since the
+  // summaries are drawn again on every keystroke.
   function labelText(control) {
     let text = '';
-    for (const n of control.closest('label').childNodes) {
-      if (n.nodeType === Node.TEXT_NODE) text += n.data;
-      else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) text += n.textContent;
-    }
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === Node.TEXT_NODE) text += n.data;
+        else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) walk(n);
+      }
+    };
+    walk(control.closest('label'));
     return text.replace(/\s+/g, ' ').trim();
   }
   function heldLabels(section) {

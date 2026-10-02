@@ -94,6 +94,9 @@
 //       steps on a load with no link says the builder did not start, and
 //       a build then works; a throw in the setup steps after a refusal by
 //       name from prefill(), openSetupFile() or fill() keeps that refusal
+//  S14: a hint, a menu and a box, each put two and three levels inside the
+//       Participant label, stay out of the participants section's summary,
+//       which lists "Participant" once the field holds a value
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -1209,6 +1212,43 @@ for (const [source, query, message] of [
     await expect(page.locator('#err')).toHaveText(message);
     expect(await page.evaluate(() => window.showThrew)).toBe(true);
   });
+}
+
+// S14: a hint, a menu or a box two or three levels inside a section's label
+// is left out of the summary. Each is put in the Participant label inside
+// that many wrappers, with text the summary must not show. The menu's one
+// option and the box's value are empty, so neither is a field that holds a
+// value and adds a label of its own.
+const NESTED = {
+  hint: '<span class="hint">NESTED-HINT</span>',
+  select: '<select><option value="">NESTED-OPTION</option></select>',
+  textarea: '<textarea>NESTED-BOX</textarea>',
+};
+for (const [kind, html] of Object.entries(NESTED)) {
+  for (const depth of [2, 3]) {
+    test(`a ${kind} ${depth} levels inside a label stays out of the section summary`, async ({ page }) => {
+      await page.goto(`${base()}link.html`);
+      await openSection(page, 'secParticipants');
+      const nested = await page.locator('input[name="participant"]').evaluate((input, [inner, levels]) => {
+        let node = document.createRange().createContextualFragment(inner).firstChild;
+        if (node.tagName === 'TEXTAREA') node.value = '';
+        const placed = node;
+        for (let k = 1; k < levels; k++) {
+          const wrapper = document.createElement('span');
+          wrapper.append(node);
+          node = wrapper;
+        }
+        input.closest('label').append(node);
+        let depthFound = 0;
+        for (let n = placed; n !== input.closest('label'); n = n.parentElement) depthFound += 1;
+        return { depth: depthFound, text: placed.textContent };
+      }, [html, depth]);
+      expect(nested.depth).toBe(depth);
+      expect(nested.text).toMatch(/^NESTED-/);
+      await page.locator('input[name="participant"]').fill('p1');
+      await expect(state(page, 'secParticipants')).toHaveText('Participant');
+    });
+  }
 }
 
 // S12: one entry per refusal. `call` names the refuseAt() line the entry
