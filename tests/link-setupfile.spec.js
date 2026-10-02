@@ -45,14 +45,20 @@
 //        made, and one counting 8,193 is refused naming its length, with no
 //        advice to host a file; with Prolific chosen, each placeholder
 //        counts as 24 characters
+//  LF10: while an opened link's setup file is fetched, typing in the study
+//        box and pressing "Add an instrument" change nothing; once the
+//        file arrives, the box holds the file's study name and takes
+//        typed text
 //
-// Every refusal checked here holds none of the retired terms.
+// LF7 also holds a throw in the offer's fill and a second throw in
+// emptying the form, which still leave a message and an enabled "Make the
+// link". Every refusal checked here holds none of the retired terms.
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
-  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress,
+  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -592,3 +598,25 @@ for (const prolific of [false, true]) {
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+// LF10: the file's answer is held until the test releases it.
+test('LF10: while the setup file is fetched, typing and "Add an instrument" change nothing', async ({ page }) => {
+  let release;
+  const released = new Promise((r) => { release = r; });
+  let requested;
+  const seen = new Promise((r) => { requested = r; });
+  await page.route(SETUP_URL, async (route) => {
+    requested();
+    await released;
+    await route.fulfill({
+      status: 200,
+      headers: { 'access-control-allow-origin': '*', 'content-type': 'text/plain; charset=utf-8' },
+      body: pretty(FILLED),
+    });
+  });
+  await page.goto(`${base()}link.html?${setupQuery({ sha256: SHA })}`, { waitUntil: 'commit' });
+  await seen;
+  await expectHeldInput(page);
+  release();
+  await expectReleasedInput(page, 'prefilled');
+});

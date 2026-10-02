@@ -160,6 +160,33 @@ export function armOnAddress() {
   };
 }
 
+// While the Study Link Builder's form is held during a prefill wait: types
+// into the study box and presses "Add an instrument". An inert target makes
+// Playwright wait, so both clicks are forced and the text goes in by
+// keyboard. Then asserts that the box is still empty, that one instrument
+// row is listed, and that the form is marked busy.
+export async function expectHeldInput(page) {
+  const study = page.locator('input[name="study"]');
+  await study.click({ force: true });
+  await page.keyboard.type('typed during the wait');
+  await page.getByRole('button', { name: 'Add an instrument' }).click({ force: true });
+  await expect(study).toHaveValue('');
+  await expect(page.locator('#instrumentList .instrument-row')).toHaveCount(1);
+  await expect(page.locator('#f')).toHaveAttribute('aria-busy', 'true');
+}
+
+// After the hold ends: the study box holds `value` from the opened link, the
+// form is no longer busy, and the box takes typed text.
+export async function expectReleasedInput(page, value) {
+  const study = page.locator('input[name="study"]');
+  await expect(study).toHaveValue(value);
+  await expect(page.locator('#f')).not.toHaveAttribute('aria-busy');
+  await study.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' typed after');
+  await expect(study).toHaveValue(`${value} typed after`);
+}
+
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
 // getter for its base URL (always ending in a slash).
 export function useTarget() {

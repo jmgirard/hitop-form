@@ -158,6 +158,7 @@ import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
+  expectHeldInput, expectReleasedInput,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1513,4 +1514,33 @@ test('L39: a normal load shows neither message', async ({ page }) => {
   await expect(page.getByText(LOAD_FAILED, { exact: true })).toHaveCount(1);
   await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
   await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeHidden();
+});
+
+// L40: the form takes no input while a z link unpacks. The unpacked bytes
+// are held, as in L34, until releaseUnpack() runs.
+test('L40: while a z link unpacks, typing and "Add an instrument" change nothing', async ({ page }) => {
+  await page.addInitScript(() => {
+    const Real = DecompressionStream;
+    let release;
+    const released = new Promise((r) => { release = r; });
+    window.releaseUnpack = release;
+    window.DecompressionStream = class {
+      constructor(format) {
+        const real = new Real(format);
+        this.writable = real.writable;
+        this.readable = real.readable.pipeThrough(new TransformStream({
+          async transform(chunk, c) {
+            await released;
+            c.enqueue(chunk);
+          },
+        }));
+        window.unpackHeld = true;
+      }
+    };
+  });
+  await page.goto(`${base()}link.html?z=${encodeCompressed({ instrument: 'hitopbr', study: 'held link' })}`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.unpackHeld === true);
+  await expectHeldInput(page);
+  await page.evaluate(() => window.releaseUnpack());
+  await expectReleasedInput(page, 'held link');
 });

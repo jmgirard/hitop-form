@@ -949,12 +949,26 @@
   const refuse = (what) => {
     err.textContent = `The study link you opened ${what} Fill in the form above to make a new link.`;
   };
+  // The form takes no input while the prefill waits on a `z` unpack or a
+  // setup-file fetch, so nothing typed or added meanwhile is overwritten by
+  // the fill. It is inert and marked busy for the wait, and both are cleared
+  // however the wait ends.
+  async function held(wait) {
+    f.inert = true;
+    f.setAttribute('aria-busy', 'true');
+    try {
+      return await wait;
+    } finally {
+      f.inert = false;
+      f.removeAttribute('aria-busy');
+    }
+  }
   // Returns the addresses filled, each as [label, the field's value] in the
   // form's order, the label named as the form shows it.
   async function prefill() {
     const filled = [];
     if (opened.has('setup') || opened.has('sha256')) {
-      const hosted = await openSetupFile();
+      const hosted = await held(openSetupFile());
       if (hosted === undefined) return filled;
       if (hosted.found !== hosted.sha256) {
         offerCurrent(hosted);
@@ -975,7 +989,7 @@
         return filled;
       }
       try {
-        config = await inflateConfig(param, (why) => new Error(why));
+        config = await held(inflateConfig(param, (why) => new Error(why)));
       } catch (e) {
         refuse(`${e.message}.`);
         return filled;
