@@ -49,6 +49,16 @@
 //        no module; a module with no HiTOP-SR among the instruments is
 //        refused by name, leaving the form as a load with no link leaves it.
 //        A `c` of the shape the Module Builder writes fills a module row
+//  LI10: with two module rows, each row's box, file control, message and
+//        status are named "Module file for instrument N", "Choose the
+//        module file for instrument N", "Module file message for
+//        instrument N" and "Module file status for instrument N", N its
+//        number, and the names follow the rows after a move; the box and
+//        the file control keep their hints as descriptions
+//  LI11: a row set away from the module empties a finished read's status
+//        and a failed read's message, which stay empty when it is set back;
+//        a read running when the row is set away and back drops its text,
+//        so message, status and box are then empty
 
 import { test, expect } from '@playwright/test';
 import {
@@ -528,4 +538,92 @@ test('a c link of the shape the Module Builder writes fills a module row', async
   expect(await menuValues(page)).toEqual(['hitopsr-module']);
   await expect(boxOf(page, 1)).toHaveValue(JSON.stringify(module, null, 2));
   await expect(page.locator('input[name="study"]')).toHaveValue('');
+});
+
+// LI10: each module row's four controls are named for the row's number, as
+// its Move buttons are. Each box is marked with its own text first, so the
+// check after the move follows each row, not each position. An empty
+// message or status is not shown, and a control not shown has no name, so
+// each is given text first.
+async function expectModuleNames(page, k, n) {
+  const row = rowOf(page, k);
+  await expect(row.locator('textarea[name="module"]')).toHaveAccessibleName(`Module file for instrument ${n}`);
+  await expect(row.locator('input.module-file')).toHaveAccessibleName(`Choose the module file for instrument ${n}`);
+  await expect(row.locator('.module-err')).toHaveAccessibleName(`Module file message for instrument ${n}`);
+  await expect(row.locator('.module-status')).toHaveAccessibleName(`Module file status for instrument ${n}`);
+}
+
+test('LI10: a module row\'s box, file control, message and status are named for its number, and follow a move', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await chooseInstruments(page, ['hitopsr-module', 'hitopsr-module']);
+  await boxOf(page, 1).fill('first row');
+  await boxOf(page, 2).fill('second row');
+  await page.locator('.module-err, .module-status').evaluateAll((ns) => ns.forEach((n) => { n.textContent = 'shown'; }));
+  await expect(page.locator('.module-err:visible, .module-status:visible')).toHaveCount(4);
+  await expectModuleNames(page, 1, 1);
+  await expectModuleNames(page, 2, 2);
+  // The hints still describe the box and the file control.
+  await expect(boxOf(page, 1)).toHaveAccessibleDescription(/^Choose or paste a module file from the Module Builder or write_module\(\)\./);
+  await expect(rowOf(page, 1).locator('input.module-file')).toHaveAccessibleDescription('This browser reads the file and sends it nowhere.');
+
+  await page.getByRole('button', { name: 'Move up instrument 2' }).click();
+  await expect(boxOf(page, 1)).toHaveValue('second row');
+  await expect(boxOf(page, 2)).toHaveValue('first row');
+  await expectModuleNames(page, 1, 1);
+  await expectModuleNames(page, 2, 2);
+});
+
+// LI11: a row set away from the module empties its message and status. A
+// finished read's status and a failed read's message are each emptied, and
+// stay empty when the row is set back. File.prototype.text() fails for
+// bad.json.
+test('LI11: setting a module row to another instrument empties its message and its status', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name === 'bad.json') return Promise.reject(new Error('planted read failure'));
+      return real.call(this);
+    };
+  });
+  await page.goto(`${base()}link.html`);
+  const row = rowOf(page, 1);
+  const file = row.locator('input.module-file');
+  for (const [name, part, text] of [
+    ['good.json', '.module-status', 'Read the module file good.json.'],
+    ['bad.json', '.module-err', 'The module file could not be read.'],
+  ]) {
+    await menus(page).first().selectOption('hitopsr-module');
+    await file.setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from('{}') });
+    await expect(row.locator(part)).toHaveText(text);
+    await menus(page).first().selectOption('hitopbr');
+    await expect(row.locator(part)).toHaveText('');
+    await menus(page).first().selectOption('hitopsr-module');
+    await expect(row.locator(part)).toHaveText('');
+  }
+});
+
+// LI11: a read still running when the row is set away drops its text, even
+// after the row is set back. The read of late.json is held open by
+// File.prototype.text() until the test lets it go.
+test('LI11: a module file read running when the row is set away and back drops its text', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'late.json') return real.call(this);
+      return new Promise((resolve) => { window.releaseRead = () => resolve('{"late": true}'); });
+    };
+  });
+  await page.goto(`${base()}link.html`);
+  const row = rowOf(page, 1);
+  await menus(page).first().selectOption('hitopsr-module');
+  await row.locator('input.module-file').setInputFiles({ name: 'late.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  await page.waitForFunction(() => typeof window.releaseRead === 'function');
+  await menus(page).first().selectOption('hitopbr');
+  await menus(page).first().selectOption('hitopsr-module');
+  // The read's own continuation runs once the promise settles, within the
+  // next task, so one task later it has dropped its text or written it.
+  await page.evaluate(() => { window.releaseRead(); return new Promise((r) => setTimeout(r, 50)); });
+  await expect(row.locator('.module-err')).toHaveText('');
+  await expect(row.locator('.module-status')).toHaveText('');
+  await expect(boxOf(page, 1)).toHaveValue('');
 });

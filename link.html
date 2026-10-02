@@ -402,6 +402,7 @@
       const n = k + 1;
       row.querySelector('.label').textContent = `Instrument ${n}`;
       setMoves(row, `instrument ${n}`, k === 0, k === rows.length - 1);
+      moduleFieldsOf.get(row).name(n);
       row.querySelector('.remove').disabled = rows.length === 1;
     });
     addInstrument.disabled = rows.length >= INSTRUMENTS_MAX;
@@ -440,11 +441,13 @@
     }
     if (stem !== undefined) select.value = stem;
     label.append(text, select);
-    const moduleFields = addModuleFields(row);
+    const module = addModuleFields(row);
+    moduleFieldsOf.set(row, module);
     select.addEventListener('change', () => {
-      moduleFields.hidden = select.value !== MODULE;
+      if (select.value !== MODULE) module.leave();
+      module.fields.hidden = select.value !== MODULE;
     });
-    moduleFields.hidden = select.value !== MODULE;
+    module.fields.hidden = select.value !== MODULE;
     const moves = control('p', { class: 'moves' });
     const up = button('Move up', () => {
       if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
@@ -466,7 +469,7 @@
     down.classList.add('down');
     remove.classList.add('remove');
     moves.append(up, down, remove);
-    row.append(label, moduleFields, moves);
+    row.append(label, module.fields, moves);
     instrumentList.append(row);
     renumberInstruments();
     return row;
@@ -491,7 +494,16 @@
   // file whose read ends last does not overwrite a later choice. An edit to
   // the box counts as a later choice too: a read still running when the
   // researcher types drops its text. So does a read whose row has left the
-  // list, as when the form is filled again from a setup file.
+  // list, as when the form is filled again from a setup file, and a read
+  // whose row is set away from MODULE, even when it is set back.
+  //
+  // Returns the fields, name(n), which names the box, the file control,
+  // the message and the status for the row's number n, and leave(), run when
+  // the menu is set away from MODULE, which empties the message and the
+  // status and drops a read still running. The box and the file control
+  // keep their hints as descriptions.
+  let moduleHints = 0;
+  const moduleFieldsOf = new WeakMap();
   function addModuleFields(row) {
     const fields = control('div', { class: 'module-fields' });
     const box = control('textarea', { name: 'module', spellcheck: 'false' });
@@ -511,6 +523,12 @@
     const fault = control('p', { role: 'alert', class: 'module-err', tabindex: '-1' });
     const status = control('p', { role: 'status', class: 'module-status muted' });
     fields.append(boxLabel, fileLabel, fault, status);
+    moduleHints += 1;
+    hint.id = `moduleHint${moduleHints}`;
+    box.setAttribute('aria-describedby', hint.id);
+    const fileHint = fileLabel.querySelector('.hint');
+    fileHint.id = `moduleFileHint${moduleHints}`;
+    file.setAttribute('aria-describedby', fileHint.id);
     let reads = 0;
     box.addEventListener('input', () => {
       reads += 1;
@@ -535,7 +553,18 @@
         file.value = '';
       }
     });
-    return fields;
+    const name = (n) => {
+      box.setAttribute('aria-label', `Module file for instrument ${n}`);
+      file.setAttribute('aria-label', `Choose the module file for instrument ${n}`);
+      fault.setAttribute('aria-label', `Module file message for instrument ${n}`);
+      status.setAttribute('aria-label', `Module file status for instrument ${n}`);
+    };
+    const leave = () => {
+      reads += 1;
+      fault.textContent = '';
+      status.textContent = '';
+    };
+    return { fields, name, leave };
   }
 
   // The list as it stands: one row holding each stem of `stems`.
