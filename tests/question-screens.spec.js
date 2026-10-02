@@ -32,8 +32,7 @@
 //        asks for none, so a phone keypad offers a minus sign, and a text
 //        question asks for none
 
-import { test, expect } from '@playwright/test';
-import { useTarget, openForm, begin, walkAll, currentPage, answerPage, nextButton } from './helpers.mjs';
+import { test, expect, useTarget, openForm, begin, walkAll, currentPage, answerPage, nextButton } from './helpers.mjs';
 
 const base = useTarget();
 

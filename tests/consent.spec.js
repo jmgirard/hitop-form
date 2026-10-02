@@ -45,10 +45,9 @@
 //   C7: the saved file's header, the posted row's keys, and the SQL the
 //       builder shows for a Supabase table are the same under both links
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
+  test, expect, useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
   leadColumns, refusalText, CONTINUE,
 } from './helpers.mjs';
 

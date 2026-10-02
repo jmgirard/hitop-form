@@ -39,9 +39,8 @@
 //   N8: link.html opened with a Supabase config in its c requests only
 //       link.html and form.js from navigation to the first network idle
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
+  test, expect, useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
   exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig, refusalText,
   serveSetup, setupQuery, setupFingerprint, SETUP_URL,
 } from './helpers.mjs';

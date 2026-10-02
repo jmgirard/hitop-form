@@ -103,11 +103,10 @@
 //       Participant label, stay out of the participants section's summary,
 //       which lists "Participant" once the field holds a value
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE, retiredIn,
+  test, expect, useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE, retiredIn,
   setupFingerprint, setupQuery, SETUP_URL, armOnAddress, markAnswered, isAnswered, fulfillExport,
 } from './helpers.mjs';
 

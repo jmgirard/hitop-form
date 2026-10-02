@@ -68,9 +68,8 @@
 // The altered exports are copies of the live export served in its place, so
 // nothing but the one field differs.
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, begin, walkAll, awaitDownload, fetchExport, readDescriptor, JWT_SHAPED_KEY,
+  test, expect, useTarget, openForm, begin, walkAll, awaitDownload, fetchExport, readDescriptor, JWT_SHAPED_KEY,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, refusalText,
 } from './helpers.mjs';
 

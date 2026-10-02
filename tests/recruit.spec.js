@@ -54,10 +54,9 @@
 //       as three U+FFFD characters, and the sent screen links to the
 //       address filled with them
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
+  test, expect, useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
   prolificQuery, COMPLETE_URL, CONTINUE,
 } from './helpers.mjs';
 import { readParticipantParam, fillParticipant } from '../form.js';

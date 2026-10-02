@@ -39,9 +39,8 @@
 //        built and its SQL holds 1,600 columns; one of 1,601 is refused
 //        naming the count, and no link or SQL shows
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { useTarget, openSectionOf, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
+import { test, expect, useTarget, openSectionOf, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
 
 const base = useTarget();
 

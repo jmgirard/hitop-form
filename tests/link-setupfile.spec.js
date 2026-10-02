@@ -60,10 +60,9 @@
 // emptying the form, which still leave a message and an enabled "Make the
 // link". Every refusal checked here holds none of the retired terms.
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
-  useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
+  test, expect, useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
   SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
   deepModuleText, textFingerprint, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';

@@ -19,9 +19,8 @@
 //
 // Each probe fails at the link check, before any export is fetched.
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, EXPORT_BASE, refusalText,
+  test, expect, useTarget, openForm, readDescriptor, NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, EXPORT_BASE, refusalText,
 } from './helpers.mjs';
 
 const base = useTarget();

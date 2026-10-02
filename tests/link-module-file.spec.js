@@ -25,10 +25,9 @@
 //        names itself in that row's status, and the first row's box and
 //        status stay as they were
 
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useTarget, decodeLinkParam, fetchExport, FIXTURES } from './helpers.mjs';
+import { test, expect, useTarget, decodeLinkParam, fetchExport, FIXTURES } from './helpers.mjs';
 
 const base = useTarget();
 

@@ -5,8 +5,13 @@
 // this checkout served on localhost. FORM_REQUIRE_TARGET makes a missing
 // FORM_TARGET an error rather than a fallback, so the scheduled run can never
 // quietly test the checkout instead.
+//
+// The instrument exports come from the copies in fixtures/exports/ when
+// FORM_TARGET is empty, and from the package's site when it is set. Every
+// spec takes `test` and `expect` from here rather than from
+// '@playwright/test', so the `exportCopies` fixture below runs in each test.
 
-import { test, expect } from '@playwright/test';
+import { test as baseTest, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,14 +30,19 @@ export function exportUrl(instrument) {
   return `${EXPORT_BASE}${instrument}.json`;
 }
 
-// Fetches the export the page will fetch, so a test's expectations come from
-// the same file and not from a copy that could drift. link-sections.spec.js
-// is the exception: it answers the page's export requests from the copies
-// in fixtures/exports/, which can fall behind the site.
-export async function fetchExport(instrument) {
-  const res = await fetch(exportUrl(instrument));
-  if (!res.ok) throw new Error(`fetching ${exportUrl(instrument)}: HTTP ${res.status}`);
-  return res.json();
+// The export the page gets, so a test's expectations come from the same
+// file: the copy in fixtures/exports/ when FORM_TARGET is empty, as the
+// `exportCopies` fixture answers the page from it, and the site's file
+// when FORM_TARGET is set. With `text`, the file's text rather than its
+// parsed JSON.
+export async function fetchExport(instrument, { text = false } = {}) {
+  if (process.env.FORM_TARGET?.trim()) {
+    const res = await fetch(exportUrl(instrument));
+    if (!res.ok) throw new Error(`fetching ${exportUrl(instrument)}: HTTP ${res.status}`);
+    return text ? res.text() : res.json();
+  }
+  const body = await readFile(path.join(FIXTURES, 'exports', `${instrument}.json`), 'utf8');
+  return text ? body : JSON.parse(body);
 }
 
 // The requests a test's routes answered. A route marks its request before
@@ -61,6 +71,62 @@ export async function fulfillExport(route) {
     return route.abort();
   }
   return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body });
+}
+
+// Routes the page's request for an instrument's export to `handle`, the
+// request marked as answered before `handle` runs. A test that serves its
+// own export, or refuses one, routes it here, so `exportCopies` counts it
+// as answered.
+export function routeExport(page, instrument, handle) {
+  return page.route(exportUrl(instrument), (route) => {
+    markAnswered(route.request());
+    return handle(route);
+  });
+}
+
+// With FORM_TARGET empty, every page of the test's browser context gets the
+// exports from the copies in fixtures/exports/, and the test fails on each
+// export request that no route marked as answered. A page's own route for an
+// export runs first, and route.fallback() passes the request on to the
+// copies. With FORM_TARGET set, the exports come from the site.
+export const test = baseTest.extend({
+  exportCopies: [async ({ context }, use) => {
+    if (process.env.FORM_TARGET?.trim()) {
+      await use();
+      return;
+    }
+    const asked = [];
+    context.on('request', (req) => {
+      if (req.url().startsWith(EXPORT_BASE)) asked.push(req);
+    });
+    await startExportCopies(context);
+    await use();
+    const unanswered = asked.filter((req) => !isAnswered(req)).map((req) => `${req.method()} ${req.url()}`);
+    expect(unanswered, 'export requests that no route answered').toEqual([]);
+  }, { auto: true }],
+});
+export { expect };
+
+// Sets the copies route on the test's browser context, once, when
+// FORM_TARGET is empty. The fixture calls it as the test starts, and
+// openForm() before each load.
+export async function startExportCopies(context) {
+  if (process.env.FORM_TARGET?.trim()) return;
+  await context.unroute(`${EXPORT_BASE}**`, fulfillExport);
+  await context.route(`${EXPORT_BASE}**`, fulfillExport);
+}
+
+// Takes the copies route off the test's browser context. While a route is
+// set on the context, the recording endpoint receives no CORS preflight: on
+// 2026-10-02, with Playwright 1.56.1, the four Supabase sends of
+// send.spec.js reached it with no OPTIONS before their POST. begin() calls
+// this, since the online form shows its start screen only after every
+// export of the link has loaded, and a walk fetches no export after it. An
+// export request made later with no route is still recorded, and fails the
+// test, so a test that loads a form again after begin() loads it through
+// openForm() or calls startExportCopies() first.
+export async function stopExportCopies(context) {
+  await context.unroute(`${EXPORT_BASE}**`, fulfillExport);
 }
 
 export async function readFixture(name) {
@@ -416,8 +482,9 @@ export async function serveComplete(page, url = COMPLETE_URL) {
 // send. Either way the request still leaves the page and is seen by any
 // request listener. `extra` and `param` are formUrl()'s.
 export async function openForm(page, base, config, { exportBody, exportJson, extra, param } = {}) {
+  await startExportCopies(page.context());
   if (exportBody !== undefined || exportJson !== undefined) {
-    await page.route(exportUrl(config.instrument), (route) =>
+    await routeExport(page, config.instrument, (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json; charset=utf-8',
@@ -438,11 +505,15 @@ export function refusalText(page) {
 }
 
 // Presses Begin on the start screen, entering a participant identifier first
-// when the screen asks for one.
+// when the screen asks for one. Once Begin shows, the exports are loaded, so
+// the copies route comes off (stopExportCopies()).
 export async function begin(page, participant) {
+  const press = page.getByRole('button', { name: 'Begin' });
+  await expect(press).toBeVisible();
+  await stopExportCopies(page.context());
   const input = page.locator('input[name="participant"]');
   if (participant !== undefined) await input.fill(participant);
-  await page.getByRole('button', { name: 'Begin' }).click();
+  await press.click();
   await expect(page.locator('.progress')).toBeVisible();
 }
 

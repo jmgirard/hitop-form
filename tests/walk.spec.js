@@ -12,9 +12,8 @@
 // Walked for the full HiTOP-BR (45 items, three full pages) and the shuffled
 // module fixture (21 items: one full page and a last page of six).
 
-import { test, expect } from '@playwright/test';
 import {
-  useTarget, openForm, begin, answerPage, readItems, nextButton, currentPage,
+  test, expect, useTarget, openForm, begin, answerPage, readItems, nextButton, currentPage,
   fetchExport, readDescriptor, PAGE_SIZE,
 } from './helpers.mjs';
 

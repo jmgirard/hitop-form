@@ -74,11 +74,10 @@
 // the three PID-5 forms, then the HiTOP-BR and the module under shuffle, and
 // the HiTOP-BR under prolific with and without shuffle.
 
-import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
+  test, expect, useTarget, openForm, begin, walkAll, fetchExport, readDescriptor, chosenIndex, FIXTURES, awaitDownload, parseCsv,
   expectShuffled, readFixture, leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
   SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder, CONTINUE,
 } from './helpers.mjs';
