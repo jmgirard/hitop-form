@@ -45,14 +45,26 @@
 //        made, and one counting 8,193 is refused naming its length, with no
 //        advice to host a file; with Prolific chosen, each placeholder
 //        counts as 24 characters
+//  LF10: while an opened link's setup file is fetched, typing in the study
+//        box and pressing "Add an instrument" change nothing; once the
+//        file arrives, the box holds the file's study name and takes
+//        typed text
+//  LF11: an opened link to a matching file whose module is an object
+//        holding an array nested 20,000 deep is refused by name, with
+//        nothing filled, the file not chosen and no uncaught error; the
+//        test first checks that the browser throws on the module's
+//        indented write
 //
-// Every refusal checked here holds none of the retired terms.
+// LF7 also holds a throw in the offer's fill and a second throw in
+// emptying the form, which still leave a message and an enabled "Make the
+// link". Every refusal checked here holds none of the retired terms.
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
-  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS,
+  SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
+  deepModuleText, textFingerprint, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -436,6 +448,34 @@ test('pressing the offer empties the file controls\' messages and drops a module
   await expect(page.locator('#result')).toBeVisible();
 });
 
+// LF7: a throw in the offer's fill, then a second throw in emptying the
+// form, still leaves a message. fillFromCurrent() and resetForm() each start
+// with f.reset(), and the plant throws at every call once armed
+// (armOnAddress()). The load calls no f.reset().
+test('a throw in the offer\'s fill and in emptying the form still leaves a message and an enabled button', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(() => {
+    const reset = HTMLFormElement.prototype.reset;
+    window.resets = 0;
+    HTMLFormElement.prototype.reset = function () {
+      if (window.armed) {
+        window.resets += 1;
+        throw new Error('planted reset throw');
+      }
+      return reset.call(this);
+    };
+  });
+  await serveSetup(page, pretty({ ...FILLED, study: 'edited' }));
+  await openBuilder(page, `?${setupQuery({ sha256: SHA })}`);
+  const offer = page.locator('#setupChanged');
+  await expect(offer).toBeVisible();
+  expect(await page.evaluate(() => window.resets)).toBe(0);
+  await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
+  await expect(err(page)).toHaveText(refusal('could not be read.'));
+  expect(await page.evaluate(() => window.resets)).toBe(2);
+  await expect(make(page)).toBeEnabled();
+});
+
 // A setup file this browser cannot write back out as JSON, such as one
 // nested deeper than its JSON.stringify() goes. Chromium writes the
 // deepest file that fits in 100,000 bytes, so JSON.stringify() is made to
@@ -564,3 +604,42 @@ for (const prolific of [false, true]) {
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+// LF10: the file's answer is held until the test releases it.
+test('LF10: while the setup file is fetched, typing and "Add an instrument" change nothing', async ({ page }) => {
+  let release;
+  const released = new Promise((r) => { release = r; });
+  let requested;
+  const seen = new Promise((r) => { requested = r; });
+  await page.route(SETUP_URL, async (route) => {
+    requested();
+    await released;
+    await route.fulfill({
+      status: 200,
+      headers: { 'access-control-allow-origin': '*', 'content-type': 'text/plain; charset=utf-8' },
+      body: pretty(FILLED),
+    });
+  });
+  await page.goto(`${base()}link.html?${setupQuery({ sha256: SHA })}`, { waitUntil: 'commit' });
+  await seen;
+  await expectHeldInput(page);
+  release();
+  await expectReleasedInput(page, 'prefilled');
+});
+
+// LF11: a matching setup file whose module is nested too deeply for the
+// module box is refused by name, with nothing filled, the file not chosen,
+// and no uncaught error.
+test('LF11: an opened setup-file link whose module is nested too deeply to show is refused by name', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const text = deepModuleText();
+  await serveSetup(page, text);
+  await openBuilder(page, `?${setupQuery({ sha256: textFingerprint(text) })}`);
+  await expectIndentThrows(page);
+  await expectRefused(page, DEEP_MODULE_REFUSAL);
+  await expect(page.locator('input[name="study"]')).toHaveValue('');
+  await expect(page.getByLabel('In the study link', { exact: true })).toBeChecked();
+  await expect(page.locator('#setupChanged')).toBeHidden();
+  expect(errors).toEqual([]);
+});

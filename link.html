@@ -108,6 +108,11 @@
   <nav class="upnav">
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
+  <!-- The two messages for a builder that cannot start: JavaScript off, and
+       form.js not loaded or not parsed. The second is shown by the plain
+       script after </main>. -->
+  <noscript><p role="alert">The Study Link Builder needs JavaScript. Turn on JavaScript in this browser, then reload the page.</p></noscript>
+  <p role="alert" id="loadFail" tabindex="-1" hidden>The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.</p>
   <h1>Study Link Builder</h1>
   <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps nothing you type. Opening a study link on either page puts its setup, or its setup file's address, in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
@@ -118,7 +123,7 @@
   <form id="f" novalidate>
     <fieldset id="instrumentsBlock">
       <legend>Instruments</legend>
-      <p class="hint">Choose one instrument, or add up to two more. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
+      <p class="hint">Choose one to three. The online form gives them one after another, and the responses hold their item columns, in this order. At most one PID-5 form. At most one HiTOP-SR, whole or as a module. <a href="https://github.com/jmgirard/hitop-form#give-more-than-one-instrument">How several instruments work</a>.</p>
       <div id="instrumentList"></div>
       <p><button type="button" class="secondary" id="addInstrument">Add an instrument</button></p>
     </fieldset>
@@ -269,6 +274,21 @@
   </div>
   </section>
 </main>
+<script>
+  // The module script below sets window.linkBuilderStarted as its first
+  // statement. It never runs when form.js does not load or does not parse,
+  // or in a browser that runs no module script. The load event fires after
+  // the module script has started, so an unset flag there means the
+  // builder did not start. Written without newer syntax, so a browser too
+  // old for form.js still runs it. The message is shown at load, when its
+  // live region's own announcement is not relied on, so it takes focus.
+  window.addEventListener('load', function () {
+    if (window.linkBuilderStarted === true) return;
+    var loadFail = document.getElementById('loadFail');
+    loadFail.hidden = false;
+    loadFail.focus();
+  });
+</script>
 <script type="module">
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
@@ -277,6 +297,8 @@
     checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
     SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX, MAX_LINK_BYTES,
   } from './form.js';
+  // Read by the plain script above on the load event.
+  window.linkBuilderStarted = true;
 
   // The three placeholders Prolific fills in, appended to a Prolific link
   // after the page's own parameter.
@@ -384,6 +406,7 @@
       const n = k + 1;
       row.querySelector('.label').textContent = `Instrument ${n}`;
       setMoves(row, `instrument ${n}`, k === 0, k === rows.length - 1);
+      moduleFieldsOf.get(row).name(n);
       row.querySelector('.remove').disabled = rows.length === 1;
     });
     addInstrument.disabled = rows.length >= INSTRUMENTS_MAX;
@@ -422,11 +445,13 @@
     }
     if (stem !== undefined) select.value = stem;
     label.append(text, select);
-    const moduleFields = addModuleFields(row);
+    const module = addModuleFields(row);
+    moduleFieldsOf.set(row, module);
     select.addEventListener('change', () => {
-      moduleFields.hidden = select.value !== MODULE;
+      if (select.value !== MODULE) module.leave();
+      module.fields.hidden = select.value !== MODULE;
     });
-    moduleFields.hidden = select.value !== MODULE;
+    module.fields.hidden = select.value !== MODULE;
     const moves = control('p', { class: 'moves' });
     const up = button('Move up', () => {
       if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
@@ -448,7 +473,7 @@
     down.classList.add('down');
     remove.classList.add('remove');
     moves.append(up, down, remove);
-    row.append(label, moduleFields, moves);
+    row.append(label, module.fields, moves);
     instrumentList.append(row);
     renumberInstruments();
     return row;
@@ -473,7 +498,16 @@
   // file whose read ends last does not overwrite a later choice. An edit to
   // the box counts as a later choice too: a read still running when the
   // researcher types drops its text. So does a read whose row has left the
-  // list, as when the form is filled again from a setup file.
+  // list, as when the form is filled again from a setup file, and a read
+  // whose row is set away from MODULE, even when it is set back.
+  //
+  // Returns the fields, name(n), which names the box, the file control,
+  // the message and the status for the row's number n, and leave(), run when
+  // the menu is set away from MODULE, which empties the message and the
+  // status and drops a read still running. The box and the file control
+  // keep their hints as descriptions.
+  let moduleHints = 0;
+  const moduleFieldsOf = new WeakMap();
   function addModuleFields(row) {
     const fields = control('div', { class: 'module-fields' });
     const box = control('textarea', { name: 'module', spellcheck: 'false' });
@@ -493,6 +527,12 @@
     const fault = control('p', { role: 'alert', class: 'module-err', tabindex: '-1' });
     const status = control('p', { role: 'status', class: 'module-status muted' });
     fields.append(boxLabel, fileLabel, fault, status);
+    moduleHints += 1;
+    hint.id = `moduleHint${moduleHints}`;
+    box.setAttribute('aria-describedby', hint.id);
+    const fileHint = fileLabel.querySelector('.hint');
+    fileHint.id = `moduleFileHint${moduleHints}`;
+    file.setAttribute('aria-describedby', fileHint.id);
     let reads = 0;
     box.addEventListener('input', () => {
       reads += 1;
@@ -517,7 +557,18 @@
         file.value = '';
       }
     });
-    return fields;
+    const name = (n) => {
+      box.setAttribute('aria-label', `Module file for instrument ${n}`);
+      file.setAttribute('aria-label', `Choose the module file for instrument ${n}`);
+      fault.setAttribute('aria-label', `Module file message for instrument ${n}`);
+      status.setAttribute('aria-label', `Module file status for instrument ${n}`);
+    };
+    const leave = () => {
+      reads += 1;
+      fault.textContent = '';
+      status.textContent = '';
+    };
+    return { fields, name, leave };
   }
 
   // The list as it stands: one row holding each stem of `stems`.
@@ -614,15 +665,18 @@
     a.target = '_blank';
     a.rel = 'noopener';
   }
-  // A field's label as the page shows it: the text of the label's own
-  // children, less its hint and its controls. It is read in place, since
-  // the summaries are drawn again on every keystroke.
+  // A field's label as the page shows it: the text inside the label, less
+  // any hint or control at any depth. It is read in place, since the
+  // summaries are drawn again on every keystroke.
   function labelText(control) {
     let text = '';
-    for (const n of control.closest('label').childNodes) {
-      if (n.nodeType === Node.TEXT_NODE) text += n.data;
-      else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) text += n.textContent;
-    }
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === Node.TEXT_NODE) text += n.data;
+        else if (n.nodeType === Node.ELEMENT_NODE && !n.matches('.hint, input, select, textarea')) walk(n);
+      }
+    };
+    walk(control.closest('label'));
     return text.replace(/\s+/g, ' ').trim();
   }
   function heldLabels(section) {
@@ -917,11 +971,10 @@
   // it differs, the form stays empty and a message offers to fill it from
   // the file as it is now, after which a new link must be made.
   //
-  // A throw past these
-  // checks (a module nested deep enough to stop JSON.stringify), or in the
-  // setup steps that follow the prefill, is the first refusal with the form
-  // reset, so the script reaches its submit handler and no field keeps a
-  // part of the config. A `c` accepted here can
+  // A throw past these checks, or in the setup steps that follow the
+  // prefill, empties the form and writes a message (reportThrow()), so the
+  // script reaches its submit handler and no field keeps a part of the
+  // config. A `c` accepted here can
   // come from anyone who sends a link, so each address it fills (where the
   // responses go, where the participant is sent or pointed at the end) is
   // listed in a notice above the form, as text, for the researcher to check.
@@ -932,12 +985,26 @@
   const refuse = (what) => {
     err.textContent = `The study link you opened ${what} Fill in the form above to make a new link.`;
   };
+  // The form takes no input while the prefill waits on a `z` unpack or a
+  // setup-file fetch, so nothing typed or added meanwhile is overwritten by
+  // the fill. It is inert and marked busy for the wait, and both are cleared
+  // however the wait ends.
+  async function held(wait) {
+    f.inert = true;
+    f.setAttribute('aria-busy', 'true');
+    try {
+      return await wait;
+    } finally {
+      f.inert = false;
+      f.removeAttribute('aria-busy');
+    }
+  }
   // Returns the addresses filled, each as [label, the field's value] in the
   // form's order, the label named as the form shows it.
   async function prefill() {
     const filled = [];
     if (opened.has('setup') || opened.has('sha256')) {
-      const hosted = await openSetupFile();
+      const hosted = await held(openSetupFile());
       if (hosted === undefined) return filled;
       if (hosted.found !== hosted.sha256) {
         offerCurrent(hosted);
@@ -958,7 +1025,7 @@
         return filled;
       }
       try {
-        config = await inflateConfig(param, (why) => new Error(why));
+        config = await held(inflateConfig(param, (why) => new Error(why)));
       } catch (e) {
         refuse(`${e.message}.`);
         return filled;
@@ -1087,10 +1154,27 @@
       stems = [config.instrument];
     }
     const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    // The module box's text, written before any field is filled, so a module
+    // too deep for the indented write is refused with the form still empty.
+    // The plain JSON.stringify() of the fingerprint goes deeper in Chromium
+    // than the indented one, so a setup-file link reaches this refusal too.
+    // Chromium throws a RangeError there. MDN's "too much recursion" page
+    // gives Firefox's error as an InternalError and Safari's as a RangeError.
+    // No test runs Firefox, so L42 plants the InternalError.
+    let moduleText;
     if (config.module !== undefined) {
       if (!stems.includes('hitopsr')) {
         err.textContent = 'The link holds a module file but no HiTOP-SR. Fill in the form above to make a new link.';
         return filled;
+      }
+      if (isPlainObject(config.module)) {
+        try {
+          moduleText = JSON.stringify(config.module, null, 2);
+        } catch (e) {
+          if (!(e instanceof RangeError) && e?.name !== 'InternalError') throw e;
+          refuse('holds a module nested too deeply for this browser to show.');
+          return filled;
+        }
       }
       setInstruments(stems.map((s) => (s === 'hitopsr' ? MODULE : s)));
     } else {
@@ -1139,8 +1223,8 @@
     // it moved into the row, after the study and the completion URLs. A
     // module that is not an object leaves the box empty, and "Make the link"
     // asks for the file.
-    if (isPlainObject(config.module)) {
-      instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = JSON.stringify(config.module, null, 2);
+    if (moduleText !== undefined) {
+      instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = moduleText;
     }
     const store = config.store;
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
@@ -1194,12 +1278,28 @@
     changedOffer.hidden = true;
     changedOffer.replaceChildren();
   }
+  // After a throw in the prefill, the setup steps or the offer's fill: the
+  // form emptied, and a message written straight into #err. A refusal
+  // already written by name stays. Otherwise an opened link "could not be
+  // read", and a load with no link says the page did not start. The message
+  // is written even when emptying the form throws too, so the page never
+  // ends a throw with no message.
+  function reportThrow() {
+    try {
+      resetForm();
+    } catch {
+      // The message below still shows.
+    }
+    if (err.textContent !== '') return;
+    err.textContent = ['c', 'z', 'setup', 'sha256'].some((p) => opened.has(p))
+      ? 'The study link you opened could not be read. Fill in the form above to make a new link.'
+      : 'The Study Link Builder did not start correctly. Reload the page.';
+  }
   // The setup steps run inside the same guard as the prefill.
   try {
     showFilled(await prefill());
   } catch {
-    resetForm();
-    refuse('could not be read.');
+    reportThrow();
   }
   // "Fill in the form from the current file" empties the form, fills it
   // from the file as fetched, and shows the notice. A built link goes, so
@@ -1220,8 +1320,7 @@
       noticeList.replaceChildren();
       showFilled(fillFromFile(hosted, []));
     } catch {
-      resetForm();
-      refuse('could not be read.');
+      reportThrow();
     }
     if (err.textContent !== '') err.focus();
     else notice.focus();
@@ -1431,12 +1530,17 @@
       } catch (e) {
         // The row at fault: the later of a repeated instrument, or the
         // second PID-5 form. A fault with no row focuses the first. A repeat
-        // of a HiTOP-SR row and a module row says why the two clash.
+        // of a HiTOP-SR row and a module row says why the two clash, and a
+        // repeat of two module rows says a list holds one.
         const at = menus[e.index] ?? menus[0];
-        const first = stems.indexOf('hitopsr');
-        const clash = e.index !== undefined && stems[e.index] === 'hitopsr'
-          && (menus[first].value === MODULE) !== (at.value === MODULE);
-        refuseAt(clash ? `${e.message} A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.` : e.message, at);
+        let why = '';
+        if (e.index !== undefined && stems[e.index] === 'hitopsr') {
+          const firstModule = menus[stems.indexOf('hitopsr')].value === MODULE;
+          const atModule = at.value === MODULE;
+          if (firstModule !== atModule) why = ' A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
+          else if (atModule) why = ' A list holds one HiTOP-SR module.';
+        }
+        refuseAt(`${e.message}${why}`, at);
         return;
       }
     }

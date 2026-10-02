@@ -75,7 +75,11 @@ export function encodeConfig(config) {
 // base64url with no padding, written here with Node's zlib rather than the
 // browser's CompressionStream that link.html uses.
 export function encodeCompressed(config) {
-  return deflateRawSync(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64url');
+  return encodeCompressedText(JSON.stringify(config));
+}
+// The same from JSON text written by the caller.
+export function encodeCompressedText(text) {
+  return deflateRawSync(Buffer.from(text, 'utf8')).toString('base64url');
 }
 
 // A study link's config back from its `c` or `z` parameter, in Node.
@@ -104,7 +108,11 @@ export function retiredIn(s) {
 // SHA-256 of the UTF-8 bytes of JSON.stringify of the parsed setup, as
 // base64url without padding.
 export function setupFingerprint(setup) {
-  return createHash('sha256').update(JSON.stringify(setup), 'utf8').digest('base64url');
+  return textFingerprint(JSON.stringify(setup));
+}
+// The same from the JSON.stringify() text of a setup, written by the caller.
+export function textFingerprint(text) {
+  return createHash('sha256').update(text, 'utf8').digest('base64url');
 }
 
 // The address the setup-file tests name. Nothing is served there: the
@@ -146,6 +154,82 @@ export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
   if (sha256 !== null && sha256 !== undefined) q.set('sha256', sha256);
   return q.toString();
 }
+
+// An init script that sets window.armed when the Study Link Builder's
+// prefill starts: at prefill()'s first call, `opened.has('setup')`, made on
+// the URLSearchParams of the page's own address. Nothing asks that for
+// `setup` before then. A plant that throws only while window.armed is set
+// throws at no earlier call.
+export function armOnAddress() {
+  const Real = URLSearchParams;
+  window.URLSearchParams = class extends Real {
+    constructor(init) {
+      super(init);
+      if (init !== window.location.search) return;
+      const has = this.has.bind(this);
+      this.has = (name) => {
+        if (name === 'setup') window.armed = true;
+        return has(name);
+      };
+    }
+  };
+}
+
+// While the Study Link Builder's form is held during a prefill wait: types
+// into the study box and presses "Add an instrument". An inert target makes
+// Playwright wait, so both clicks are forced and the text goes in by
+// keyboard. Then asserts that the box is still empty, that one instrument
+// row is listed, and that the form is marked busy.
+export async function expectHeldInput(page) {
+  const study = page.locator('input[name="study"]');
+  await study.click({ force: true });
+  await page.keyboard.type('typed during the wait');
+  await page.getByRole('button', { name: 'Add an instrument' }).click({ force: true });
+  await expect(study).toHaveValue('');
+  await expect(page.locator('#instrumentList .instrument-row')).toHaveCount(1);
+  await expect(page.locator('#f')).toHaveAttribute('aria-busy', 'true');
+}
+
+// After the hold ends: the study box holds `value` from the opened link, the
+// form is no longer busy, and the box takes typed text.
+export async function expectReleasedInput(page, value) {
+  const study = page.locator('input[name="study"]');
+  await expect(study).toHaveValue(value);
+  await expect(page.locator('#f')).not.toHaveAttribute('aria-busy');
+  await study.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' typed after');
+  await expect(study).toHaveValue(`${value} typed after`);
+}
+
+// A setup whose module is an object holding an array nested 20,000 deep,
+// 40,000 bytes as JSON. Chromium writes it with plain JSON.stringify(), as
+// the fingerprint does, and throws RangeError for the indented write the
+// module box takes. On 2026-10-01, Chromium 141 in this suite threw on that
+// write from a depth of about 6,150. The Study Link Builder refuses such a
+// link with DEEP_MODULE_REFUSAL. expectIndentThrows() checks the browser
+// still throws there, so a pass is not a module that fit. The JSON text
+// is written here directly, as JSON.stringify() writes it, because on
+// 2026-10-01 the CI's Node 20 threw RangeError stringifying this setup.
+export const DEEP_MODULE_DEPTH = 20_000;
+export function deepModuleText() {
+  const deep = '['.repeat(DEEP_MODULE_DEPTH) + ']'.repeat(DEEP_MODULE_DEPTH);
+  return `{"instrument":"hitopsr","study":"deep","module":{"deep":${deep}}}`;
+}
+export async function expectIndentThrows(page) {
+  const thrown = await page.evaluate((n) => {
+    let deep = [];
+    for (let k = 1; k < n; k++) deep = [deep];
+    try {
+      JSON.stringify({ deep }, null, 2);
+      return 'nothing';
+    } catch (e) {
+      return e.constructor.name;
+    }
+  }, DEEP_MODULE_DEPTH);
+  expect(thrown, 'the indented write of the deep module').toBe('RangeError');
+}
+export const DEEP_MODULE_REFUSAL = 'The study link you opened holds a module nested too deeply for this browser to show. Fill in the form above to make a new link.';
 
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
 // getter for its base URL (always ending in a slash).

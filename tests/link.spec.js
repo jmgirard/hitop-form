@@ -68,9 +68,10 @@
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
 //       naming an instrument the select does not offer each write their
 //       fault's message, naming the c parameter, into #err and leave every
-//       control at its no-c value, over nine values of c, two that throw
-//       past the three checks among them (one after a completion URL is
-//       filled), and the submit handler still runs; a load with no c leaves
+//       control at its no-c value, over nine values of c, two whose module
+//       makes the module box's write throw RangeError among them (one in
+//       a link that also holds a completion URL), refused as nested too
+//       deeply, and the submit handler still runs; a load with no c leaves
 //       #err empty; a c that decodes to 100,001 bytes is refused naming its
 //       size and the limit, and one of exactly 100,000 bytes fills the form
 //  L19: above the form, the intro asks for the required parts, names
@@ -148,12 +149,25 @@
 //       announces; the line beside "Open the link" writes the length with
 //       the same comma; the study name and the participant-parameter name
 //       are padded at run time to reach each length
+//  L39: form.js answered with HTTP 404, and form.js served with a syntax
+//       error, each show the load-failure message, with "Make the link"
+//       disabled; with JavaScript off, the noscript message shows; a
+//       normal load shows neither
+//  L40: while a z link unpacks, typing in the study box and pressing "Add
+//       an instrument" change nothing, and the form is marked busy; once
+//       it unpacks, the box holds the link's study name and takes typed
+//       text
+//  L41: a z link whose module is an object holding an array nested 20,000
+//       deep is refused by name, with nothing filled and no uncaught error;
+//       the test first checks that the browser throws on the module's
+//       indented write
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
+  expectHeldInput, expectReleasedInput, deepModuleText, encodeCompressedText, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -695,16 +709,18 @@ test('a c carrying the instrument and a module fills the module textarea with th
 // L18: nine bad values of c over the three faults, and a load with no c.
 // Each bad value writes its fault's message, naming the c parameter, and
 // leaves every control as the no-c load leaves it. The eighth and ninth
-// pass the three checks and make JSON.stringify throw while the module is
-// written, the ninth after a completion URL is filled,
-// which the page turns into the first message with the form reset, so the
-// script still reaches its submit handler. A module nested some six
-// thousand deep throws that way in V8, but its c runs to 16 KB, past what
+// pass the three checks and make the module box's indented write throw
+// RangeError, the ninth in a link that also holds a completion URL. The
+// page writes that text before it fills any field, so it refuses the link
+// by name with nothing filled and no address listed, and the script still
+// reaches its submit handler. A module nested past some six thousand
+// levels throws that way in V8, but its c runs to some 16 KB, past what
 // the test server and a page host accept in an address, so the throw is
 // provoked by an init script that makes JSON.stringify throw on a marked
-// module instead.
+// module instead. L41 opens a real one as a z link.
 const COULD_NOT_BE_READ = 'could not be read.';
 const NOT_A_FORM = 'does not hold a form.';
+const TOO_DEEP = 'holds a module nested too deeply for this browser to show.';
 const throwOnMarkedModule = () => {
   const stringify = JSON.stringify;
   JSON.stringify = (value, ...rest) => {
@@ -725,15 +741,15 @@ const BAD_C = [
   // writes that row as hitopsr.
   { name: 'the menu value of the HiTOP-SR module', config: { instrument: 'hitopsr-module' }, message: 'names an instrument the Study Link Builder does not offer: "hitopsr-module".' },
   {
-    name: 'a module that makes JSON.stringify throw after the study is filled',
+    name: 'a module that makes JSON.stringify throw RangeError',
     config: { instrument: 'hitopsr', study: 'deep', module: { throwOnStringify: true } },
-    message: COULD_NOT_BE_READ,
+    message: TOO_DEEP,
     init: throwOnMarkedModule,
   },
   {
-    name: 'a module that makes JSON.stringify throw after a completion URL is filled',
+    name: 'a module that makes JSON.stringify throw RangeError, in a link that also holds a completion URL',
     config: { instrument: 'hitopsr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
-    message: COULD_NOT_BE_READ,
+    message: TOO_DEEP,
     init: throwOnMarkedModule,
   },
 ];
@@ -746,7 +762,7 @@ for (const bad of BAD_C) {
     await openBuilder(page, bad.raw !== undefined ? { raw: bad.raw } : { config: bad.config });
     await expect(page.locator('#err')).toHaveText(`The study link you opened ${bad.message} Fill in the form above to make a new link.`);
     expect(await controls(page)).toEqual(plain);
-    // L20: a refused c lists no address, even one filled before a throw.
+    // L20: a refused c lists no address, even one the link holds.
     await expect(page.locator('#prefilled')).toBeHidden();
     await expect(page.locator('#prefilled li')).toHaveCount(0);
     // L23: focus is on the refusal.
@@ -1466,3 +1482,129 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
 });
+
+// L39: when form.js does not load or does not parse, the builder says so.
+// With JavaScript off, a <noscript> message says to turn it on. Each
+// message is asserted visible by its whole text, and a normal load shows
+// neither.
+const LOAD_FAILED = 'The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.';
+const NO_SCRIPT = 'The Study Link Builder needs JavaScript. Turn on JavaScript in this browser, then reload the page.';
+for (const [name, answer] of [
+  ['answered with HTTP 404', { status: 404, contentType: 'text/plain', body: 'Not found' }],
+  ['served with a syntax error', { status: 200, contentType: 'text/javascript', body: 'export const = ;\n' }],
+]) {
+  test(`L39: form.js ${name} shows the load-failure message`, async ({ page }) => {
+    const served = [];
+    await page.route('**/form.js', (route) => {
+      served.push(route.request().url());
+      return route.fulfill(answer);
+    });
+    await page.goto(`${base()}link.html`);
+    await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeVisible();
+    // Shown at load, so focus moves to it rather than resting on its live
+    // region's own announcement.
+    await expect(page.locator('#loadFail')).toBeFocused();
+    expect(served).toHaveLength(1);
+    await expect(page.getByRole('button', { name: 'Make the link' })).toBeDisabled();
+  });
+}
+
+test('L39: with JavaScript off, the noscript message shows', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(`${base()}link.html`);
+  await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeVisible();
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
+  await context.close();
+});
+
+test('L39: a normal load shows neither message', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  // The load event has fired, so the check that shows the message has run.
+  await page.waitForFunction(() => document.readyState === 'complete');
+  // The message is in the page, hidden, so the check below is not of an
+  // absent element.
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toHaveCount(1);
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
+  // With JavaScript on, the browser keeps a <noscript>'s content as text and
+  // shows none of it. The element and its message are asserted present
+  // first, so the noscript's hidden check is not of an absent element.
+  const noscript = page.locator('noscript');
+  await expect(noscript).toHaveCount(1);
+  expect(await noscript.evaluate((el) => el.textContent)).toContain(NO_SCRIPT);
+  await expect(noscript).toBeHidden();
+});
+
+// L40: the form takes no input while a z link unpacks. The unpacked bytes
+// are held, as in L34, until releaseUnpack() runs.
+test('L40: while a z link unpacks, typing and "Add an instrument" change nothing', async ({ page }) => {
+  await page.addInitScript(() => {
+    const Real = DecompressionStream;
+    let release;
+    const released = new Promise((r) => { release = r; });
+    window.releaseUnpack = release;
+    window.DecompressionStream = class {
+      constructor(format) {
+        const real = new Real(format);
+        this.writable = real.writable;
+        this.readable = real.readable.pipeThrough(new TransformStream({
+          async transform(chunk, c) {
+            await released;
+            c.enqueue(chunk);
+          },
+        }));
+        window.unpackHeld = true;
+      }
+    };
+  });
+  await page.goto(`${base()}link.html?z=${encodeCompressed({ instrument: 'hitopbr', study: 'held link' })}`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.unpackHeld === true);
+  await expectHeldInput(page);
+  await page.evaluate(() => window.releaseUnpack());
+  await expectReleasedInput(page, 'held link');
+});
+
+// L41: a z link whose module is nested too deeply for the module box is
+// refused by name, with nothing filled and no uncaught error.
+test('L41: a z link whose module is nested too deeply to show is refused by name', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${base()}link.html?z=${encodeCompressedText(deepModuleText())}`);
+  await expectIndentThrows(page);
+  await expect(page.locator('#err')).toHaveText(DEEP_MODULE_REFUSAL);
+  await expect(page.locator('input[name="study"]')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+// L42: MDN gives Firefox's error for too much recursion as an
+// InternalError, not a RangeError, so the indented write can throw one
+// there if Firefox's stack runs out. Its depth limit is not tested, and no
+// test runs Firefox, so a plant makes the module box's indented write throw
+// an error of each name. An InternalError is refused as nested too deeply.
+// An error named TypeError is not, and the link "could not be read".
+for (const [name, message] of [
+  ['InternalError', DEEP_MODULE_REFUSAL],
+  ['TypeError', 'The study link you opened could not be read. Fill in the form above to make a new link.'],
+]) {
+  test(`L42: a module box write that throws ${name} gets its own message`, async ({ page }) => {
+    await page.addInitScript((errorName) => {
+      const real = JSON.stringify;
+      JSON.stringify = function (value, replacer, space) {
+        if (space === 2 && value !== null && typeof value === 'object' && 'plant' in value) {
+          window.plantThrew = true;
+          const e = new Error('too much recursion');
+          e.name = errorName;
+          throw e;
+        }
+        return real.apply(this, arguments);
+      };
+    }, name);
+    await page.goto(`${base()}link.html?z=${encodeCompressed({ instrument: 'hitopsr', study: 'plant', module: { plant: true } })}`);
+    await expect(page.locator('#err')).toHaveText(message);
+    expect(await page.evaluate(() => window.plantThrew)).toBe(true);
+    await expect(page.locator('input[name="study"]')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  });
+}

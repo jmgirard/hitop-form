@@ -59,7 +59,9 @@
 //       or setup file, and that an opened study link holding it, on either
 //       page, puts it in GitHub Pages' logs; the setup-file hint says anyone
 //       can then read where responses go; the intro says the builder keeps
-//       nothing you type, and no longer that it sends nothing
+//       nothing you type, and no longer that it sends nothing; the
+//       Instruments hint allows at most one PID-5 form and at most one
+//       HiTOP-SR, whole or as a module
 //  S10: with "Another site" chosen and one question of each type, 50
 //       characters put into each text input and box in the sections
 //       (typed where the field shows, sent as input events where the
@@ -88,13 +90,22 @@
 //       crypto.subtle, a failed fetch, a field changed while it fails and
 //       while it succeeds, a file that does not match, and a download over
 //       100,000 bytes
+//  S13: a throw in the prefill path ends with "Make the link" enabled and
+//       a message: a throw in a c link's fill and a second throw in
+//       emptying the form say the link was not read; a throw in the setup
+//       steps on a load with no link says the builder did not start, and
+//       a build then works; a throw in the setup steps after a refusal by
+//       name from prefill(), openSetupFile() or fill() keeps that refusal
+//  S14: a hint, a menu and a box, each put two and three levels inside the
+//       Participant label, stay out of the participants section's summary,
+//       which lists "Participant" once the field holds a value
 
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE, retiredIn,
-  setupFingerprint, setupQuery, SETUP_URL,
+  setupFingerprint, setupQuery, SETUP_URL, armOnAddress,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -979,6 +990,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
   await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
+  await expect(page.locator('#instrumentsBlock > .hint')).toContainText('At most one PID-5 form. At most one HiTOP-SR, whole or as a module.');
   const sqlHint = page.locator('#sqlBlock .hint');
   await expect(sqlHint).toContainText('Its table has a column per item and question.');
   await expect(sqlHint).toContainText('After changing instruments, module, random order, Prolific or questions, make a new table.');
@@ -1117,6 +1129,131 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
   await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
 });
 
+// S13: a throw in the prefill path, each plant armed when prefill()
+// starts (armOnAddress()). Each test asserts that its plants threw, so
+// a pass is not a load where nothing was thrown.
+const NOT_READ = 'The study link you opened could not be read. Fill in the form above to make a new link.';
+
+test('a throw in the fill, then a throw in emptying the form, still ends with a message and an enabled button', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(() => {
+    // fill() sets the shuffle box, and resetForm() starts with f.reset().
+    const checked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+    Object.defineProperty(HTMLInputElement.prototype, 'checked', {
+      configurable: true,
+      get() { return checked.get.call(this); },
+      set(value) {
+        if (window.armed && this.name === 'shuffle') {
+          window.fillThrew = true;
+          throw new Error('planted fill throw');
+        }
+        checked.set.call(this, value);
+      },
+    });
+    const reset = HTMLFormElement.prototype.reset;
+    HTMLFormElement.prototype.reset = function () {
+      if (window.armed) {
+        window.resetThrew = true;
+        throw new Error('planted reset throw');
+      }
+      return reset.call(this);
+    };
+  });
+  await page.goto(`${base()}link.html?c=${encodeConfig({ instrument: 'hitopbr', study: 'thrown' })}`);
+  await expect(make(page)).toBeEnabled();
+  await expect(page.locator('#err')).toHaveText(NOT_READ);
+  expect(await page.evaluate(() => [window.fillThrew, window.resetThrew])).toEqual([true, true]);
+});
+
+// The last statement of showFilled() hides or shows the notice. The plant
+// throws there once, so resetForm() can hide the notice after it.
+function throwInShowFilled() {
+  const hidden = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'hidden');
+  let thrown = false;
+  Object.defineProperty(HTMLElement.prototype, 'hidden', {
+    configurable: true,
+    get() { return hidden.get.call(this); },
+    set(value) {
+      if (window.armed && !thrown && this.id === 'prefilled') {
+        thrown = true;
+        window.showThrew = true;
+        throw new Error('planted showFilled throw');
+      }
+      hidden.set.call(this, value);
+    },
+  });
+}
+
+test('a throw in the setup steps on a load with no link says the builder did not start, and it still builds', async ({ page }) => {
+  await page.addInitScript(armOnAddress);
+  await page.addInitScript(throwInShowFilled);
+  await page.goto(`${base()}link.html`);
+  await expect(make(page)).toBeEnabled();
+  await expect(page.locator('#err')).toHaveText('The Study Link Builder did not start correctly. Reload the page.');
+  expect(await page.evaluate(() => window.showThrew)).toBe(true);
+  await page.locator('input[name="study"]').fill('after the throw');
+  await make(page).click();
+  await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
+});
+
+// One refusal by name from each of prefill(), openSetupFile() and fill().
+const opened = (what) => `The study link you opened ${what} Fill in the form above to make a new link.`;
+for (const [source, query, message] of [
+  [
+    'prefill()',
+    `c=${encodeConfig({ instrument: 'hitopbr', study: 'twice' })}&z=${encodeCompressed({ instrument: 'hitopbr', study: 'twice' })}`,
+    opened('holds its setup twice, in two forms, and a study link holds it once.'),
+  ],
+  ['openSetupFile()', setupQuery({ sha256: null }), opened('names a setup file and gives no fingerprint for it (sha256).')],
+  ['fill()', `c=${encodeConfig({ instrument: 'nope', study: 'unknown' })}`, opened('names an instrument the Study Link Builder does not offer: "nope".')],
+]) {
+  test(`a throw in the setup steps after a refusal from ${source} keeps that refusal`, async ({ page }) => {
+    await page.addInitScript(armOnAddress);
+    await page.addInitScript(throwInShowFilled);
+    await page.goto(`${base()}link.html?${query}`);
+    await expect(make(page)).toBeEnabled();
+    await expect(page.locator('#err')).toHaveText(message);
+    expect(await page.evaluate(() => window.showThrew)).toBe(true);
+  });
+}
+
+// S14: a hint, a menu or a box two or three levels inside a section's label
+// is left out of the summary. Each is put in the Participant label inside
+// that many wrappers, with text the summary must not show. The menu's one
+// option and the box's value are empty, so neither is a field that holds a
+// value and adds a label of its own.
+const NESTED = {
+  hint: '<span class="hint">NESTED-HINT</span>',
+  select: '<select><option value="">NESTED-OPTION</option></select>',
+  textarea: '<textarea>NESTED-BOX</textarea>',
+};
+for (const [kind, html] of Object.entries(NESTED)) {
+  for (const depth of [2, 3]) {
+    test(`a ${kind} ${depth} levels inside a label stays out of the section summary`, async ({ page }) => {
+      await page.goto(`${base()}link.html`);
+      await openSection(page, 'secParticipants');
+      const nested = await page.locator('input[name="participant"]').evaluate((input, [inner, levels]) => {
+        let node = document.createRange().createContextualFragment(inner).firstChild;
+        if (node.tagName === 'TEXTAREA') node.value = '';
+        const placed = node;
+        for (let k = 1; k < levels; k++) {
+          const wrapper = document.createElement('span');
+          wrapper.append(node);
+          node = wrapper;
+        }
+        input.closest('label').append(node);
+        let depthFound = 0;
+        for (let n = placed; n !== input.closest('label'); n = n.parentElement) depthFound += 1;
+        return { depth: depthFound, text: placed.textContent };
+      }, [html, depth]);
+      expect(nested.depth).toBe(depth);
+      expect(nested.text).toMatch(/^NESTED-/);
+      await page.locator('input[name="participant"]').fill('p1');
+      await expect(state(page, 'secParticipants')).toHaveText('Participant');
+    });
+  }
+}
+
 // S12: one entry per refusal. `call` names the refuseAt() line the entry
 // fires, by a piece of its text and, where two lines read the same, which
 // of them in page order. `query` is the page's address parameters, `init`
@@ -1129,6 +1266,7 @@ const row = (n) => `#instrumentList .instrument-row:nth-child(${n}) select`;
 const moduleBox = (n) => `#instrumentList .instrument-row:nth-child(${n}) textarea[name="module"]`;
 const inQuestion = (name) => `#questionList fieldset:nth-child(1) ${field(name)}`;
 const MODULE_CLASH = 'A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
+const ONE_MODULE = 'A list holds one HiTOP-SR module.';
 const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
 const SUPABASE = { url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_test', table: 'responses' };
 
@@ -1210,9 +1348,11 @@ const REFUSE_AT = [
     // HiTOP-SR row, in either order, name the HiTOP-SR twice.
     { what: 'a HiTOP-SR row then a module row, with the added sentence', stems: ['hitopsr', 'hitopsr-module'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
     { what: 'a module row then a HiTOP-SR row, with the added sentence', stems: ['hitopsr-module', 'hitopsr'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
+    // Two module rows add the other sentence.
+    { what: 'two module rows, with the one-module sentence', stems: ['hitopsr-module', 'hitopsr-module'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${ONE_MODULE}` },
   ].map((c) => ({
     name: `instruments: ${c.what}`,
-    call: ['e.message, at);'],
+    call: ['${why}`, at);'],
     fill: (page) => setRows(page, c.stems),
     message: `The instruments could not be used: ${c.why}`,
     focus: row(c.at),
