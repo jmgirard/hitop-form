@@ -167,7 +167,7 @@ import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
-  expectHeldInput, expectReleasedInput, deepModuleConfig, DEEP_MODULE_REFUSAL, expectIndentThrows,
+  expectHeldInput, expectReleasedInput, deepModuleText, encodeCompressedText, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1570,7 +1570,7 @@ test('L40: while a z link unpacks, typing and "Add an instrument" change nothing
 test('L41: a z link whose module is nested too deeply to show is refused by name', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`${base()}link.html?z=${encodeCompressed(deepModuleConfig())}`);
+  await page.goto(`${base()}link.html?z=${encodeCompressedText(deepModuleText())}`);
   await expectIndentThrows(page);
   await expect(page.locator('#err')).toHaveText(DEEP_MODULE_REFUSAL);
   await expect(page.locator('input[name="study"]')).toHaveValue('');

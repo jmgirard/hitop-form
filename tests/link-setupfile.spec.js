@@ -64,7 +64,7 @@ import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
   SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
-  deepModuleConfig, DEEP_MODULE_REFUSAL, expectIndentThrows,
+  deepModuleText, textFingerprint, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -633,9 +633,9 @@ test('LF10: while the setup file is fetched, typing and "Add an instrument" chan
 test('LF11: an opened setup-file link whose module is nested too deeply to show is refused by name', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  const config = deepModuleConfig();
-  await serveSetup(page, JSON.stringify(config));
-  await openBuilder(page, `?${setupQuery({ sha256: setupFingerprint(config) })}`);
+  const text = deepModuleText();
+  await serveSetup(page, text);
+  await openBuilder(page, `?${setupQuery({ sha256: textFingerprint(text) })}`);
   await expectIndentThrows(page);
   await expectRefused(page, DEEP_MODULE_REFUSAL);
   await expect(page.locator('input[name="study"]')).toHaveValue('');

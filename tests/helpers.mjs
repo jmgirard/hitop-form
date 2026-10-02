@@ -75,7 +75,11 @@ export function encodeConfig(config) {
 // base64url with no padding, written here with Node's zlib rather than the
 // browser's CompressionStream that link.html uses.
 export function encodeCompressed(config) {
-  return deflateRawSync(Buffer.from(JSON.stringify(config), 'utf8')).toString('base64url');
+  return encodeCompressedText(JSON.stringify(config));
+}
+// The same from JSON text written by the caller.
+export function encodeCompressedText(text) {
+  return deflateRawSync(Buffer.from(text, 'utf8')).toString('base64url');
 }
 
 // A study link's config back from its `c` or `z` parameter, in Node.
@@ -104,7 +108,11 @@ export function retiredIn(s) {
 // SHA-256 of the UTF-8 bytes of JSON.stringify of the parsed setup, as
 // base64url without padding.
 export function setupFingerprint(setup) {
-  return createHash('sha256').update(JSON.stringify(setup), 'utf8').digest('base64url');
+  return textFingerprint(JSON.stringify(setup));
+}
+// The same from the JSON.stringify() text of a setup, written by the caller.
+export function textFingerprint(text) {
+  return createHash('sha256').update(text, 'utf8').digest('base64url');
 }
 
 // The address the setup-file tests name. Nothing is served there: the
@@ -200,12 +208,13 @@ export async function expectReleasedInput(page, value) {
 // module box takes. On 2026-10-01, Chromium 141 in this suite threw on that
 // write from a depth of about 6,150. The Study Link Builder refuses such a
 // link with DEEP_MODULE_REFUSAL. expectIndentThrows() checks the browser
-// still throws there, so a pass is not a module that fit.
+// still throws there, so a pass is not a module that fit. The JSON text
+// is written here directly, as JSON.stringify() writes it, because on
+// 2026-10-01 the CI's Node 20 threw RangeError stringifying this setup.
 export const DEEP_MODULE_DEPTH = 20_000;
-export function deepModuleConfig() {
-  let deep = [];
-  for (let k = 1; k < DEEP_MODULE_DEPTH; k++) deep = [deep];
-  return { instrument: 'hitopsr', study: 'deep', module: { deep } };
+export function deepModuleText() {
+  const deep = '['.repeat(DEEP_MODULE_DEPTH) + ']'.repeat(DEEP_MODULE_DEPTH);
+  return `{"instrument":"hitopsr","study":"deep","module":{"deep":${deep}}}`;
 }
 export async function expectIndentThrows(page) {
   const thrown = await page.evaluate((n) => {
