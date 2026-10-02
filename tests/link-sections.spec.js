@@ -8,14 +8,17 @@
 //   S2: a section's summary lists the labels of its fields that hold a
 //       value, joined by ", ", and reads "Not used" again once they are
 //       emptied
-//   S3: one refusal in each section, made with the section closed, opens
-//       the section and moves focus to the refused field
+//   S3: one refusal in each section that holds a field a refusal names,
+//       made with the section closed, opens the section and moves focus to
+//       the refused field. "Item order" holds only the shuffle box, which no
+//       refusal names, so it has none; the module box's refusals are in S12
 //   S4: at 375px and 1280px wide, with every section open, no element is
 //       wider than the page or reaches past its right edge
 //   S5: a study link that sets one optional field opens the section that
 //       holds it, whose summary lists the field's label; the other sections
 //       stay closed. A link that sets no optional field leaves every
-//       section closed
+//       section closed. A link that sets only a module opens no section and
+//       fills a HiTOP-SR module row
 //   S6: on the instrument rows and the question groups, Move up is disabled
 //       on the first and Move down on the last; a single instrument row has
 //       all three buttons disabled; each button's accessible name begins
@@ -34,7 +37,8 @@
 //       to its right, and the long link scrolls in the box
 //   S8: with every section open and one question of each type, under each
 //       recruiting-site choice, each where-responses-go choice and after a
-//       Supabase build: every .hint and .site-hint, shown or not, holds at
+//       Supabase build, and with the first row set to the HiTOP-SR module,
+//       so its hint shows: every .hint and .site-hint, shown or not, holds at
 //       most 40 words; the intro (all text between the h1 and the first
 //       form part) holds at most 60; the page's text, placeholders and
 //       aria-labels hold none of the retired terms, the built link exempt
@@ -50,8 +54,8 @@
 //       "Completion URL" field; the decline address takes {participant}
 //       after its ? or #; the saved-file hint names the two cases that save
 //       a file; the completion hint gives Prolific's study-page URL; the
-//       module hint says a module applies to the HiTOP-SR among several
-//       instruments; the key hint says the key goes into every study link
+//       module hint, in its instrument row, says the online form shows
+//       only the module's items, in its printed order if any; the key hint says the key goes into every study link
 //       or setup file, and that an opened study link holding it, on either
 //       page, puts it in GitHub Pages' logs; the setup-file hint says anyone
 //       can then read where responses go; the intro says the builder keeps
@@ -73,7 +77,10 @@
 //       focus is on the control the call passes, its section open, or on
 //       the message when it passes none. A call whose control is chosen
 //       at run time is fired once per control: the instrument row at fault
-//       (a repeat and a second PID-5 form, each at rows 2 and 3), each
+//       (a repeat and a second PID-5 form, each at rows 2 and 3, and a
+//       HiTOP-SR row beside a module row in either order, whose message adds
+//       a sentence), a module row's box (empty, not JSON, with no format; in
+//       no section, so every section stays closed), each
 //       question field in the page's control map, and the four store
 //       fields. The fetch failure, a Supabase table of 1,601 columns, a
 //       link longer than the online form's host accepts, the encode failure and the four stale-build refusals are among them, and so
@@ -137,7 +144,7 @@ test.afterEach(() => {
 // label shows up as a failure.
 const SECTIONS = [
   { id: 'secParticipants', name: 'Participants and recruiting site' },
-  { id: 'secOrder', name: 'Item order and HiTOP-SR module' },
+  { id: 'secOrder', name: 'Item order' },
   { id: 'secConsent', name: 'Consent' },
   { id: 'secFinish', name: 'When the participant finishes' },
   { id: 'secQuestions', name: 'Your own questions' },
@@ -212,10 +219,11 @@ test('a summary lists the labels of the fields that hold a value', async ({ page
   await expect(state(page, 'secParticipants')).toHaveText('Not used');
 
   await openSection(page, 'secOrder');
-  await page.locator('textarea[name="module"]').fill('{}');
   await page.locator('input[name="shuffle"]').check();
-  await expect(state(page, 'secOrder')).toHaveText('Module file, Show the items in a random order');
-  await page.locator('textarea[name="module"]').fill('   ');
+  await expect(state(page, 'secOrder')).toHaveText('Show the items in a random order');
+  // The module box sits in its instrument row, so the section never lists it.
+  await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
+  await page.locator('textarea[name="module"]').fill('{}');
   await expect(state(page, 'secOrder')).toHaveText('Show the items in a random order');
   await page.locator('input[name="shuffle"]').uncheck();
   await expect(state(page, 'secOrder')).toHaveText('Not used');
@@ -269,12 +277,6 @@ const REFUSALS = [
     },
     field: 'input[name="participant"]',
     message: /^The participant field must be empty when recruiting through Prolific/,
-  },
-  {
-    id: 'secOrder',
-    fill: (page) => page.locator('textarea[name="module"]').fill('not json'),
-    field: 'textarea[name="module"]',
-    message: /is not JSON\.$/,
   },
   {
     id: 'secConsent',
@@ -375,7 +377,6 @@ const ONE_FIELD = [
   { name: 'participantParam of SONA', patch: { participantParam: 'id' }, id: 'secParticipants', labels: 'Recruiting site' },
   { name: 'participantParam of CloudResearch Connect', patch: { participantParam: 'participantId' }, id: 'secParticipants', labels: 'Recruiting site', site: 'connect' },
   { name: 'participantParam of another site', patch: { participantParam: 'workerId' }, id: 'secParticipants', labels: 'Recruiting site, Address parameter' },
-  { name: 'module', patch: 'module', id: 'secOrder', labels: 'Module file' },
   { name: 'shuffle', patch: { shuffle: true }, id: 'secOrder', labels: 'Show the items in a random order' },
   { name: 'consent text', patch: { consent: { text: 'I agree.' } }, z: true, id: 'secConsent', labels: 'Consent text' },
   { name: 'declined text', patch: { consent: { declined: 'Bye.' } }, z: true, id: 'secConsent', labels: 'Declined text' },
@@ -393,8 +394,7 @@ const ONE_FIELD = [
 
 for (const one of ONE_FIELD) {
   test(`a link setting only ${one.name} opens ${one.id} alone`, async ({ page }) => {
-    const patch = one.patch === 'module' ? { module: await readDescriptor('module-plain.json') } : one.patch;
-    const config = { instrument: 'hitopsr', study: 'sections', ...patch };
+    const config = { instrument: 'hitopsr', study: 'sections', ...one.patch };
     const query = one.z ? `?z=${encodeCompressed(config)}` : `?c=${encodeConfig(config)}`;
     await page.goto(`${base()}link.html${query}`);
     await expect(page.locator('#err')).toHaveText('');
@@ -406,6 +406,20 @@ for (const one of ONE_FIELD) {
     }
   });
 }
+
+// S5: a module is in no section: it sets its HiTOP-SR row to a module row.
+test('a link setting only module opens no section and fills a module row', async ({ page }) => {
+  const module = await readDescriptor('module-plain.json');
+  const config = { instrument: 'hitopsr', study: 'sections', module };
+  await page.goto(`${base()}link.html?c=${encodeConfig(config)}`);
+  await expect(page.locator('#err')).toHaveText('');
+  await expect(page.locator('select[name="instrument"]')).toHaveValue('hitopsr-module');
+  expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
+  for (const s of SECTIONS) {
+    expect(await isOpen(page, s.id), `${s.id} open`).toBe(false);
+    await expect(state(page, s.id)).toHaveText('Not used');
+  }
+});
 
 // S6: the expected state of every button in a list of n rows or groups,
 // stated from the rule, not read from the page.
@@ -723,6 +737,10 @@ async function expectText(page, state) {
 
 test('hints stay under 40 words, the intro under 60, and no retired term shows', async ({ page }) => {
   await page.goto(`${base()}link.html`);
+  // The module hint is in the first row's module fields, shown while its
+  // menu is set to the module.
+  await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
+  await expect(page.locator('.instrument-row .module-fields')).toBeVisible();
   for (const s of SECTIONS) await openSection(page, s.id);
   for (const type of ['text', 'number', 'choice', 'multi']) {
     await page.getByRole('button', { name: 'Add a question' }).click();
@@ -745,6 +763,8 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
     await page.locator('input[name="qText"]').nth(k).fill(`Question ${k + 1}`);
   }
   for (const k of [2, 3]) await page.locator('textarea[name="qOptions"]').nth(k).fill('Yes\nNo');
+  // A module row builds only with a module file in its box.
+  await page.locator('textarea[name="module"]').fill(JSON.stringify(await readDescriptor('module-plain.json')));
   await page.locator('input[name="study"]').fill('text');
   await make(page).click();
   await expect(page.locator('#err')).toHaveText('');
@@ -943,7 +963,8 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(hintOf('completeSaved')).toContainText('Arrived responses still use the completion URL.');
   await expect(hintOf('complete')).toContainText('sends the participant to after showing their responses arrived');
   await expect(hintOf('complete')).toContainText('For Prolific, the study page\'s completion URL.');
-  await expect(hintOf('module')).toContainText('With several instruments, it applies to the HiTOP-SR among them.');
+  await page.locator('select[name="instrument"]').selectOption('hitopsr-module');
+  await expect(hintOf('module')).toContainText('The online form shows only its items, in its printed order if any.');
   const keyHint = hintOf('supabaseKey');
   await expect(keyHint).toContainText('It goes into every study link or setup file, so use no other key.');
   await expect(keyHint).toContainText('A study link holding it, opened on either page, puts it in GitHub Pages\' logs.');
@@ -987,10 +1008,10 @@ test('a link setting no optional field leaves every section closed', async ({ pa
 
 // S10: the summaries are drawn with no copy of a control. Every
 // cloneNode() call on the page is counted from before its script runs.
-// The fields typed into: 5 text inputs and 3 boxes in the sections, and
+// The fields typed into: 5 text inputs and 2 boxes in the sections, and
 // 4 text inputs and 1 box per question, stated here rather than read from
 // the page.
-const TYPED_FIELDS = 5 + 3 + 4 * 5;
+const TYPED_FIELDS = 5 + 2 + 4 * 5;
 test('typing in the sections copies no control', async ({ page }) => {
   await page.addInitScript(() => {
     const real = Node.prototype.cloneNode;
@@ -1030,7 +1051,7 @@ test('typing in the sections copies no control', async ({ page }) => {
   expect(await page.evaluate(() => window.clones)).toBe(0);
 
   await expect(state(page, 'secParticipants')).toHaveText('Participant, Recruiting site, Address parameter');
-  await expect(state(page, 'secOrder')).toHaveText('Module file');
+  await expect(state(page, 'secOrder')).toHaveText('Not used');
   await expect(state(page, 'secConsent')).toHaveText('Consent text, Declined text, Completion URL after a decline');
   await expect(state(page, 'secFinish')).toHaveText('Completion URL, Completion URL after a saved file');
   await expect(state(page, 'secQuestions')).toHaveText('Question 1, Question 2, Question 3, Question 4');
@@ -1105,7 +1126,9 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
 // and a `focus` of null means the message.
 const field = (name) => `[name="${name}"]`;
 const row = (n) => `#instrumentList .instrument-row:nth-child(${n}) select`;
+const moduleBox = (n) => `#instrumentList .instrument-row:nth-child(${n}) textarea[name="module"]`;
 const inQuestion = (name) => `#questionList fieldset:nth-child(1) ${field(name)}`;
+const MODULE_CLASH = 'A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.';
 const STALE = 'A field changed while the link was being made. Press "Make the link" again.';
 const SUPABASE = { url: 'https://abcdefghijkl.supabase.co', key: 'sb_publishable_test', table: 'responses' };
 
@@ -1183,9 +1206,13 @@ const REFUSE_AT = [
     { what: 'a repeat at row 3', stems: ['hitopbr', 'pid5bf', 'hitopbr'], at: 3, why: 'it names HiTOP-BR twice, as instrument 1 and instrument 3.' },
     { what: 'a second PID-5 form at row 2', stems: ['pid5', 'pid5bf'], at: 2, why: 'it names PID-5 and PID-5-BF, two forms of the PID-5, and a list holds one.' },
     { what: 'a second PID-5 form at row 3', stems: ['hitopbr', 'pid5', 'pid5sf'], at: 3, why: 'it names PID-5 and PID-5-SF, two forms of the PID-5, and a list holds one.' },
+    // The same call, with its added sentence: a HiTOP-SR module row and a
+    // HiTOP-SR row, in either order, name the HiTOP-SR twice.
+    { what: 'a HiTOP-SR row then a module row, with the added sentence', stems: ['hitopsr', 'hitopsr-module'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
+    { what: 'a module row then a HiTOP-SR row, with the added sentence', stems: ['hitopsr-module', 'hitopsr'], at: 2, why: `it names HiTOP-SR twice, as instrument 1 and instrument 2. ${MODULE_CLASH}` },
   ].map((c) => ({
     name: `instruments: ${c.what}`,
-    call: ['rows[e.index]'],
+    call: ['e.message, at);'],
     fill: (page) => setRows(page, c.stems),
     message: `The instruments could not be used: ${c.why}`,
     focus: row(c.at),
@@ -1355,32 +1382,33 @@ const REFUSE_AT = [
     focus: inQuestion('qMax'),
     section: 'secQuestions',
   },
+  // The module calls: a module row's box, which sits in no section.
+  {
+    name: 'a module row with an empty box',
+    call: ['has no module file'],
+    fill: (page) => page.locator(row(1)).selectOption('hitopsr-module'),
+    message: 'Instrument 1 is a HiTOP-SR module and has no module file. Choose or paste the module file, or choose the full HiTOP-SR.',
+    focus: moduleBox(1),
+  },
   {
     name: 'a module that is not JSON',
     call: ['it is not JSON'],
-    fill: (page) => inSection(page, 'secOrder', () => page.locator(field('module')).fill('not json')),
-    message: 'The module file could not be used: it is not JSON.',
-    focus: field('module'),
-    section: 'secOrder',
-  },
-  {
-    name: 'a module beside a list without the HiTOP-SR',
-    call: ['needs the HiTOP-SR among the instruments'],
     fill: async (page) => {
-      await setRows(page, ['hitopbr', 'pid5bf']);
-      await inSection(page, 'secOrder', () => page.locator(field('module')).fill('{}'));
+      await page.locator(row(1)).selectOption('hitopsr-module');
+      await page.locator(moduleBox(1)).fill('not json');
     },
-    message: 'The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.',
-    focus: field('module'),
-    section: 'secOrder',
+    message: 'The module file could not be used: it is not JSON.',
+    focus: moduleBox(1),
   },
   {
     name: 'a module with no format',
-    call: ['e.message, f.elements.module'],
-    fill: (page) => inSection(page, 'secOrder', () => page.locator(field('module')).fill('{}')),
+    call: ['e.message, box'],
+    fill: async (page) => {
+      await page.locator(row(1)).selectOption('hitopsr-module');
+      await page.locator(moduleBox(1)).fill('{}');
+    },
     message: 'The module file could not be used: the online form reads format "1.0" and found no format field.',
-    focus: field('module'),
-    section: 'secOrder',
+    focus: moduleBox(1),
   },
   // The store call: each of the four store fields.
   {

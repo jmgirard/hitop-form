@@ -88,7 +88,9 @@
   .instrument-row .moves button.secondary { margin-left: 0; }
   /* After the rules above, so a hidden label or range row stays hidden. */
   .question-edit [hidden] { display: none; }
-  #questionsStatus:empty, #moduleFileStatus:empty { display: none; }
+  #questionsStatus:empty, .module-status:empty { display: none; }
+  /* A module row's box and file control, between its menu and its moves. */
+  .instrument-row .module-fields label { margin: 0 0 var(--s3); }
   /* Lined up with "Add a question" above, with a gap when they wrap. */
   .file-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); padding-left: var(--s2); }
   .file-buttons button.secondary { margin-left: 0; }
@@ -180,17 +182,7 @@
     </div>
     </details>
     <details class="optional" id="secOrder">
-      <summary><span class="sec-name">Item order and HiTOP-SR module</span> <span class="sec-state">Not used</span></summary>
-    <label>Module file
-      <span class="hint">HiTOP-SR only. With several instruments, it applies to the HiTOP-SR among them. Choose or paste a module file from the <a href="https://jmgirard.github.io/hitop-builder/">Module Builder</a> or <code>write_module()</code>. The online form shows only its items, in its printed order if any. <a href="https://github.com/jmgirard/hitop-form#item-order-and-hitop-sr-module">More on modules</a>.</span>
-      <textarea name="module" spellcheck="false"></textarea>
-    </label>
-    <label>Choose the module file
-      <span class="hint">This browser reads the file and sends it nowhere.</span>
-      <input type="file" id="moduleFile" accept=".json,application/json">
-    </label>
-    <p role="alert" id="moduleFileErr" tabindex="-1"></p>
-    <p role="status" id="moduleFileStatus" class="muted"></p>
+      <summary><span class="sec-name">Item order</span> <span class="sec-state">Not used</span></summary>
     <label class="check">
       <input name="shuffle" type="checkbox" value="true">
       Show the items in a random order
@@ -363,17 +355,22 @@
   for (const radio of f.elements.setupWhere) radio.addEventListener('change', showWhere);
 
   // The instrument list: one row per instrument, in the order the page gives
-  // them, each a menu of the five instruments with Move up, Move down and
-  // Remove. "Add an instrument" adds a row, up to INSTRUMENTS_MAX, and is
-  // disabled at that count. Remove is disabled while one row is left. Each
-  // row's menu is named `instrument`.
+  // them, each a menu of the five instruments and a HiTOP-SR module with Move
+  // up, Move down and Remove. "Add an instrument" adds a row, up to
+  // INSTRUMENTS_MAX, and is disabled at that count. Remove is disabled while
+  // one row is left. Each row's menu is named `instrument`. A row set to
+  // MODULE is the HiTOP-SR in the link, with the module file its box holds.
+  const MODULE = 'hitopsr-module';
   const OFFERED = [
     ['hitopsr', 'HiTOP-SR (405 items)'],
+    [MODULE, 'HiTOP-SR module (scales you choose)'],
     ['hitopbr', 'HiTOP-BR (45 items)'],
     ['pid5', 'PID-5 (220 items)'],
     ['pid5sf', 'PID-5-SF (100 items)'],
     ['pid5bf', 'PID-5-BF (25 items)'],
   ];
+  // The instrument a menu value puts in the link.
+  const stemOf = (value) => (value === MODULE ? 'hitopsr' : value);
   const instrumentList = document.getElementById('instrumentList');
   const addInstrument = document.getElementById('addInstrument');
 
@@ -425,6 +422,11 @@
     }
     if (stem !== undefined) select.value = stem;
     label.append(text, select);
+    const moduleFields = addModuleFields(row);
+    select.addEventListener('change', () => {
+      moduleFields.hidden = select.value !== MODULE;
+    });
+    moduleFields.hidden = select.value !== MODULE;
     const moves = control('p', { class: 'moves' });
     const up = button('Move up', () => {
       if (row.previousElementSibling) instrumentList.insertBefore(row, row.previousElementSibling);
@@ -446,10 +448,76 @@
     down.classList.add('down');
     remove.classList.add('remove');
     moves.append(up, down, remove);
-    row.append(label, moves);
+    row.append(label, moduleFields, moves);
     instrumentList.append(row);
     renumberInstruments();
     return row;
+  }
+
+  // A row's "Module file" box and "Choose the module file" control, shown
+  // while its menu is set to MODULE. A row set away keeps the box's text out
+  // of view, and set back shows it again; only a shown box goes into the
+  // link (readForm()).
+  //
+  // "Choose the module file" reads the chosen file in this browser and puts
+  // its text in the row's box, as a paste would. "Make the link" checks the
+  // text there, so a file and a paste are refused alike. The control's
+  // change event hides a built link, as any change in the form does, and
+  // the control is emptied after each read, so choosing the same file again
+  // reads it again. The box is filled by script, which fires no event, so
+  // the fill counts as a change through hideResult(): a link made while the
+  // file was being read came from the box's old text, so it is hidden, or
+  // the build ends with its stale message. The status line under the
+  // control names the file read, and an edit to the box clears it. Each
+  // read is numbered, and only the latest one fills the box, so an earlier
+  // file whose read ends last does not overwrite a later choice. An edit to
+  // the box counts as a later choice too: a read still running when the
+  // researcher types drops its text. So does a read whose row has left the
+  // list, as when the form is filled again from a setup file.
+  function addModuleFields(row) {
+    const fields = control('div', { class: 'module-fields' });
+    const box = control('textarea', { name: 'module', spellcheck: 'false' });
+    const boxLabel = control('label');
+    const hint = control('span', { class: 'hint' });
+    const builder = control('a', { href: 'https://jmgirard.github.io/hitop-builder/', target: '_blank', rel: 'noopener' });
+    builder.textContent = 'Module Builder';
+    const writer = control('code');
+    writer.textContent = 'write_module()';
+    const more = control('a', { href: 'https://github.com/jmgirard/hitop-form#a-hitop-sr-module', target: '_blank', rel: 'noopener' });
+    more.textContent = 'More on modules';
+    hint.append('Choose or paste a module file from the ', builder, ' or ', writer,
+      '. The online form shows only its items, in its printed order if any. ', more, '.');
+    boxLabel.append('Module file', hint, box);
+    const file = control('input', { type: 'file', class: 'module-file', accept: '.json,application/json' });
+    const fileLabel = field('Choose the module file', 'This browser reads the file and sends it nowhere.', file);
+    const fault = control('p', { role: 'alert', class: 'module-err', tabindex: '-1' });
+    const status = control('p', { role: 'status', class: 'module-status muted' });
+    fields.append(boxLabel, fileLabel, fault, status);
+    let reads = 0;
+    box.addEventListener('input', () => {
+      reads += 1;
+      fault.textContent = '';
+      status.textContent = '';
+    });
+    file.addEventListener('change', async () => {
+      const chosen = file.files[0];
+      if (chosen === undefined) return;
+      const read = ++reads;
+      fault.textContent = '';
+      status.textContent = '';
+      try {
+        const text = await chosen.text();
+        if (read !== reads || !row.isConnected) return;
+        box.value = text;
+        hideResult();
+        status.textContent = `Read the module file ${chosen.name}.`;
+      } catch {
+        if (read === reads && row.isConnected) fault.textContent = 'The module file could not be read.';
+      } finally {
+        file.value = '';
+      }
+    });
+    return fields;
   }
 
   // The list as it stands: one row holding each stem of `stems`.
@@ -459,9 +527,10 @@
   }
 
   addInstrument.addEventListener('click', () => {
-    // The new row's menu starts at the first instrument not in the list.
-    const taken = [...instrumentList.querySelectorAll('select')].map((s) => s.value);
-    addInstrumentRow(OFFERED.map(([v]) => v).find((v) => !taken.includes(v))).querySelector('select').focus();
+    // The new row's menu starts at the first instrument not in the list. A
+    // HiTOP-SR module is the HiTOP-SR, so either one listed skips both.
+    const taken = [...instrumentList.querySelectorAll('select')].map((s) => stemOf(s.value));
+    addInstrumentRow(OFFERED.map(([v]) => v).find((v) => !taken.includes(stemOf(v)))).querySelector('select').focus();
   });
   setInstruments([OFFERED[0][0]]);
 
@@ -561,8 +630,7 @@
       return [...questionList.children].map((group) => group.querySelector('legend').textContent);
     }
     const held = [];
-    // A file input holds no setting of its own: the module file it reads
-    // lands in the "Module file" box, which is listed.
+    // A file input holds no setting of its own.
     for (const c of section.querySelectorAll('input:not([type=file]), select, textarea')) {
       if (c.closest('[hidden]') !== null) continue;
       const value = c.classList.contains('prose') ? c.value : c.value.trim();
@@ -683,50 +751,6 @@
   }
 
   addQuestion.addEventListener('click', () => addGroup().querySelector('select').focus());
-
-  // "Choose the module file" reads the chosen file in this browser and puts
-  // its text in the "Module file" box, as a paste would. "Make the link"
-  // checks the text there, so a file and a paste are refused alike. The
-  // control's change event hides a built link, as any change in the form
-  // does, and the control is emptied after each read, so choosing the same
-  // file again reads it again. The box is filled by script, which fires no
-  // event, so the section's summary is written again here, and the fill
-  // counts as a change through hideResult(): a link made while the file was
-  // being read came from the box's old text, so it is hidden, or the build
-  // ends with its stale message. The status line under the control names
-  // the file read, and an edit to the box clears it. Each read is numbered,
-  // and only the latest one fills the box, so an earlier file whose read
-  // ends last does not overwrite a later choice. An edit to the box counts
-  // as a later choice too: a read still running when the researcher types
-  // drops its text.
-  const moduleFile = document.getElementById('moduleFile');
-  const moduleFileErr = document.getElementById('moduleFileErr');
-  const moduleFileStatus = document.getElementById('moduleFileStatus');
-  let moduleReads = 0;
-  f.elements.module.addEventListener('input', () => {
-    moduleReads += 1;
-    moduleFileErr.textContent = '';
-    moduleFileStatus.textContent = '';
-  });
-  moduleFile.addEventListener('change', async () => {
-    const file = moduleFile.files[0];
-    if (file === undefined) return;
-    const read = ++moduleReads;
-    moduleFileErr.textContent = '';
-    moduleFileStatus.textContent = '';
-    try {
-      const text = await file.text();
-      if (read !== moduleReads) return;
-      f.elements.module.value = text;
-      hideResult();
-      showHeld();
-      moduleFileStatus.textContent = `Read the module file ${file.name}.`;
-    } catch {
-      if (read === moduleReads) moduleFileErr.textContent = 'The module file could not be read.';
-    } finally {
-      moduleFile.value = '';
-    }
-  });
 
   // "Load questions from a file" reads the chosen file in this browser with
   // readQuestionsCsv() and puts its questions in place of the editor's, the
@@ -877,11 +901,13 @@
   // form page decodes it, and these faults are refused by name: a link
   // with both parameters, a `c` that cannot be decoded, each fault the form
   // page names in a `z`, a config that is not a plain object, an instrument
-  // the menu does not offer, and an `instruments` list beside an
-  // `instrument` or refused by the form page's check. A list fills one row
-  // per entry. A field of a type its control does not take
-  // is skipped and the rest are filled; the form page's own checks refuse
-  // such a link when it is opened. Nothing is fetched for a `c` or a `z`.
+  // the menu does not offer, an `instruments` list beside an
+  // `instrument` or refused by the form page's check, and a `module` beside
+  // no HiTOP-SR. A list fills one row per entry, and a `module` of any type
+  // sets its HiTOP-SR row to a HiTOP-SR module, its box left empty when the
+  // module is not an object. Any other field of a type its control does not
+  // take is skipped and the rest are filled; the form page's own checks
+  // refuse such a link when it is opened. Nothing is fetched for a `c` or a `z`.
   //
   // A link's `setup` and `sha256` are refused by name for each fault the
   // form page names in their shape. The file is then fetched as the form
@@ -1037,7 +1063,9 @@
   function fill(config, filled) {
     // A list fills one row per entry, and takes the form page's own check,
     // since a row cannot hold an entry the menu does not offer and the list
-    // holds at most INSTRUMENTS_MAX rows.
+    // holds at most INSTRUMENTS_MAX rows. A link with a `module` fills its
+    // HiTOP-SR as a HiTOP-SR module row, and is refused with no HiTOP-SR.
+    let stems;
     if (config.instruments !== undefined) {
       if (config.instrument !== undefined) {
         refuse('carries both an instrument field and an instruments field.');
@@ -1049,13 +1077,24 @@
         refuse(`holds an instruments field that could not be used: ${e.message}`);
         return filled;
       }
-      setInstruments(config.instruments);
+      stems = config.instruments;
     } else {
-      if (!OFFERED.some(([v]) => v === config.instrument)) {
+      // Text first: Object.hasOwn() reads ["hitopbr"] as the key "hitopbr".
+      if (typeof config.instrument !== 'string' || !Object.hasOwn(INSTRUMENTS, config.instrument)) {
         refuse(`names an instrument the Study Link Builder does not offer: ${JSON.stringify(config.instrument)}.`);
         return filled;
       }
-      setInstruments([config.instrument]);
+      stems = [config.instrument];
+    }
+    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (config.module !== undefined) {
+      if (!stems.includes('hitopsr')) {
+        err.textContent = 'The link holds a module file but no HiTOP-SR. Fill in the form above to make a new link.';
+        return filled;
+      }
+      setInstruments(stems.map((s) => (s === 'hitopsr' ? MODULE : s)));
+    } else {
+      setInstruments(stems);
     }
     const text = (name, v) => {
       if (typeof v === 'string') f.elements[name].value = v;
@@ -1072,7 +1111,6 @@
     address('complete', 'Completion URL', config.complete);
     address('completeSaved', 'Completion URL after a saved file', config.completeSaved);
     // A box keeps the text's line breaks; it gives CR LF back as LF.
-    const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
     if (isPlainObject(config.consent)) {
       text('consentText', config.consent.text);
       text('declinedText', config.consent.declined);
@@ -1097,7 +1135,13 @@
       siteSelect.value = siteOf(config.participantParam);
       if (siteSelect.value === 'other') text('participantParam', config.participantParam);
     }
-    if (isPlainObject(config.module)) f.elements.module.value = JSON.stringify(config.module, null, 2);
+    // The module row's box, filled in the place the module box held before
+    // it moved into the row, after the study and the completion URLs. A
+    // module that is not an object leaves the box empty, and "Make the link"
+    // asks for the file.
+    if (isPlainObject(config.module)) {
+      instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = JSON.stringify(config.module, null, 2);
+    }
     const store = config.store;
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
       kindSelect.value = store.kind;
@@ -1159,16 +1203,16 @@
   }
   // "Fill in the form from the current file" empties the form, fills it
   // from the file as fetched, and shows the notice. A built link goes, so
-  // the next one is made from the filled form. A module file read still
-  // running drops its text, as when the researcher types in the module box,
-  // and the file controls' messages go with the fields they described.
+  // the next one is made from the filled form. The instrument rows are made
+  // again, so a module file read still running drops its text, as when the
+  // researcher types in the module box, and the file controls' messages go
+  // with the fields they described.
   function fillFromCurrent(hosted) {
     changedOffer.hidden = true;
     changedOffer.replaceChildren();
     err.textContent = '';
     hideResult();
-    moduleReads += 1;
-    for (const p of [moduleFileErr, moduleFileStatus, questionsErr, questionsStatus]) p.textContent = '';
+    for (const p of [questionsErr, questionsStatus]) p.textContent = '';
     try {
       f.reset();
       questionList.replaceChildren();
@@ -1369,7 +1413,11 @@
     // One row makes an `instrument` link, as before the list. Two or three
     // make an `instruments` list, which takes the form page's own check with
     // each row named by its number and each instrument by its menu name.
-    const stems = [...instrumentList.querySelectorAll('select')].map((s) => s.value);
+    // A HiTOP-SR module row writes `hitopsr`, so the check refuses it beside
+    // a HiTOP-SR row, or beside a second module row, as a repeat.
+    const rows = [...instrumentList.children];
+    const menus = rows.map((row) => row.querySelector('select'));
+    const stems = menus.map((s) => stemOf(s.value));
     const config = {};
     if (stems.length === 1) {
       config.instrument = stems[0];
@@ -1382,9 +1430,13 @@
         });
       } catch (e) {
         // The row at fault: the later of a repeated instrument, or the
-        // second PID-5 form. A fault with no row focuses the first.
-        const rows = instrumentList.querySelectorAll('select');
-        refuseAt(e.message, rows[e.index] ?? rows[0]);
+        // second PID-5 form. A fault with no row focuses the first. A repeat
+        // of a HiTOP-SR row and a module row says why the two clash.
+        const at = menus[e.index] ?? menus[0];
+        const first = stems.indexOf('hitopsr');
+        const clash = e.index !== undefined && stems[e.index] === 'hitopsr'
+          && (menus[first].value === MODULE) !== (at.value === MODULE);
+        refuseAt(clash ? `${e.message} A HiTOP-SR module is the HiTOP-SR, so a list holds one or the other.` : e.message, at);
         return;
       }
     }
@@ -1529,26 +1581,29 @@
       refuseAt(e.message, e.control);
       return;
     }
-    const text = data.get('module').trim();
-    if (text !== '') {
+    // The module row's box, the one row a passed instrument check leaves set
+    // to MODULE. A box in a row set away is not read.
+    const moduleRow = rows.find((row) => row.querySelector('select').value === MODULE);
+    if (moduleRow !== undefined) {
+      const box = moduleRow.querySelector('textarea[name="module"]');
+      const text = box.value.trim();
+      if (text === '') {
+        refuseAt(`Instrument ${rows.indexOf(moduleRow) + 1} is a HiTOP-SR module and has no module file. Choose or paste the module file, or choose the full HiTOP-SR.`, box);
+        return;
+      }
       let m;
       try {
         m = JSON.parse(text);
       } catch {
-        refuseAt('The module file could not be used: it is not JSON.', f.elements.module);
+        refuseAt('The module file could not be used: it is not JSON.', box);
         return;
       }
-      // The same checks the form page runs on the link, so a bad descriptor
-      // is refused here, at the researcher, and never at a participant.
-      // Under a list the module applies to its HiTOP-SR row.
-      if (config.instruments !== undefined && !config.instruments.includes('hitopsr')) {
-        refuseAt('The module file needs the HiTOP-SR among the instruments, because a module applies to the HiTOP-SR. Add the HiTOP-SR, or empty the "Module file" field.', f.elements.module);
-        return;
-      }
+      // The same checks the form page runs on the link, so a bad module
+      // file is refused here, at the researcher, and never at a participant.
       try {
-        checkModule(m, config.instruments !== undefined ? 'hitopsr' : config.instrument);
+        checkModule(m, 'hitopsr');
       } catch (e) {
-        refuseAt(e.message, f.elements.module);
+        refuseAt(e.message, box);
         return;
       }
       config.module = m;

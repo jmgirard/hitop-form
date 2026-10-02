@@ -415,16 +415,25 @@ test('pressing the offer empties the file controls\' messages and drops a module
     buffer: Buffer.from('list,name,text,type,options,required,min,max\nbefore,ok,Fine,text,,,,\n'),
   });
   await expect(page.locator('#questionsStatus')).toHaveText('Loaded 1 question from q.csv.');
-  await page.locator('#moduleFile').setInputFiles({ name: 'late.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  const row = page.locator('.instrument-row').first();
+  await row.locator('select[name="instrument"]').selectOption('hitopsr-module');
+  await row.locator('input.module-file').setInputFiles({ name: 'late.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
   await page.waitForFunction(() => typeof window.releaseRead === 'function');
   await offer.getByRole('button', { name: 'Fill in the form from the current file' }).click();
   await expect(page.locator('input[name="study"]')).toHaveValue('edited');
   await expect(page.locator('#questionsStatus')).toHaveText('');
+  // A link made from the filled form while the read is still held. A read
+  // that went on to fill its old row would count as a change and hide it.
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
   // The read's own continuation runs once the promise settles, within the
   // next task, so one task later it has dropped its text or written it.
   await page.evaluate(() => { window.releaseRead(); return new Promise((r) => setTimeout(r, 50)); });
-  await expect(page.locator('#moduleFileStatus')).toHaveText('');
-  await expect(page.locator('textarea[name="module"]')).toHaveValue('');
+  // The offer's press made the rows again, so the read's row has left the
+  // list and the row now first holds nothing from the read.
+  await expect(page.locator('.instrument-row .module-status')).toHaveText('');
+  await expect(page.locator('.instrument-row textarea[name="module"]')).toHaveValue('');
+  await expect(page.locator('#result')).toBeVisible();
 });
 
 // A setup file this browser cannot write back out as JSON, such as one
