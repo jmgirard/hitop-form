@@ -49,6 +49,11 @@
 //        box and pressing "Add an instrument" change nothing; once the
 //        file arrives, the box holds the file's study name and takes
 //        typed text
+//  LF11: an opened link to a matching file whose module is an object
+//        holding an array nested 20,000 deep is refused by name, with
+//        nothing filled, the file not chosen and no uncaught error; the
+//        test first checks that the browser throws on the module's
+//        indented write
 //
 // LF7 also holds a throw in the offer's fill and a second throw in
 // emptying the form, which still leave a message and an enabled "Make the
@@ -59,6 +64,7 @@ import { readFile } from 'node:fs/promises';
 import {
   useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
   SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
+  deepModuleConfig, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -619,4 +625,21 @@ test('LF10: while the setup file is fetched, typing and "Add an instrument" chan
   await expectHeldInput(page);
   release();
   await expectReleasedInput(page, 'prefilled');
+});
+
+// LF11: a matching setup file whose module is nested too deeply for the
+// module box is refused by name, with nothing filled, the file not chosen,
+// and no uncaught error.
+test('LF11: an opened setup-file link whose module is nested too deeply to show is refused by name', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const config = deepModuleConfig();
+  await serveSetup(page, JSON.stringify(config));
+  await openBuilder(page, `?${setupQuery({ sha256: setupFingerprint(config) })}`);
+  await expectIndentThrows(page);
+  await expectRefused(page, DEEP_MODULE_REFUSAL);
+  await expect(page.locator('input[name="study"]')).toHaveValue('');
+  await expect(page.getByLabel('In the study link', { exact: true })).toBeChecked();
+  await expect(page.locator('#setupChanged')).toBeHidden();
+  expect(errors).toEqual([]);
 });

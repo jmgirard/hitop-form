@@ -187,6 +187,34 @@ export async function expectReleasedInput(page, value) {
   await expect(study).toHaveValue(`${value} typed after`);
 }
 
+// A setup whose module is an object holding an array nested 20,000 deep,
+// 40,000 bytes as JSON. Chromium writes it with plain JSON.stringify(), as
+// the fingerprint does, and throws RangeError for the indented write the
+// module box takes. On 2026-10-01, Chromium 141 in this suite threw on that
+// write from a depth of about 6,150. The Study Link Builder refuses such a
+// link with DEEP_MODULE_REFUSAL. expectIndentThrows() checks the browser
+// still throws there, so a pass is not a module that fit.
+export const DEEP_MODULE_DEPTH = 20_000;
+export function deepModuleConfig() {
+  let deep = [];
+  for (let k = 1; k < DEEP_MODULE_DEPTH; k++) deep = [deep];
+  return { instrument: 'hitopsr', study: 'deep', module: { deep } };
+}
+export async function expectIndentThrows(page) {
+  const thrown = await page.evaluate((n) => {
+    let deep = [];
+    for (let k = 1; k < n; k++) deep = [deep];
+    try {
+      JSON.stringify({ deep }, null, 2);
+      return 'nothing';
+    } catch (e) {
+      return e.constructor.name;
+    }
+  }, DEEP_MODULE_DEPTH);
+  expect(thrown, 'the indented write of the deep module').toBe('RangeError');
+}
+export const DEEP_MODULE_REFUSAL = 'The study link you opened holds a module nested too deeply for this browser to show. Fill in the form above to make a new link.';
+
 // Registers beforeAll/afterAll hooks that resolve the target, and returns a
 // getter for its base URL (always ending in a slash).
 export function useTarget() {

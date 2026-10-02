@@ -68,9 +68,10 @@
 //  L18: a c that cannot be decoded, one that is not a plain object, and one
 //       naming an instrument the select does not offer each write their
 //       fault's message, naming the c parameter, into #err and leave every
-//       control at its no-c value, over nine values of c, two that throw
-//       past the three checks among them (one after a completion URL is
-//       filled), and the submit handler still runs; a load with no c leaves
+//       control at its no-c value, over nine values of c, two whose module
+//       makes the module box's write throw RangeError among them (one
+//       beside a completion URL), refused as nested too deeply, and the
+//       submit handler still runs; a load with no c leaves
 //       #err empty; a c that decodes to 100,001 bytes is refused naming its
 //       size and the limit, and one of exactly 100,000 bytes fills the form
 //  L19: above the form, the intro asks for the required parts, names
@@ -152,13 +153,21 @@
 //       error, each show the load-failure message, with "Make the link"
 //       disabled; with JavaScript off, the noscript message shows; a
 //       normal load shows neither
+//  L40: while a z link unpacks, typing in the study box and pressing "Add
+//       an instrument" change nothing, and the form is marked busy; once
+//       it unpacks, the box holds the link's study name and takes typed
+//       text
+//  L41: a z link whose module is an object holding an array nested 20,000
+//       deep is refused by name, with nothing filled and no uncaught error;
+//       the test first checks that the browser throws on the module's
+//       indented write
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import {
   useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, exportUrl, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
-  expectHeldInput, expectReleasedInput,
+  expectHeldInput, expectReleasedInput, deepModuleConfig, DEEP_MODULE_REFUSAL, expectIndentThrows,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -700,16 +709,18 @@ test('a c carrying the instrument and a module fills the module textarea with th
 // L18: nine bad values of c over the three faults, and a load with no c.
 // Each bad value writes its fault's message, naming the c parameter, and
 // leaves every control as the no-c load leaves it. The eighth and ninth
-// pass the three checks and make JSON.stringify throw while the module is
-// written, the ninth after a completion URL is filled,
-// which the page turns into the first message with the form reset, so the
-// script still reaches its submit handler. A module nested some six
-// thousand deep throws that way in V8, but its c runs to 16 KB, past what
-// the test server and a page host accept in an address, so the throw is
-// provoked by an init script that makes JSON.stringify throw on a marked
-// module instead.
+// pass the three checks and make the module box's indented write throw
+// RangeError, the ninth beside a completion URL. The page writes that text
+// before it fills any field, so it refuses the link by name with nothing
+// filled and no address listed, and the script still reaches its submit
+// handler. A module nested past some six thousand levels throws that way
+// in V8, but its c runs to some 16 KB, past what the test server and a
+// page host accept in an address, so the throw is provoked by an init
+// script that makes JSON.stringify throw on a marked module instead. L41
+// opens a real one as a z link.
 const COULD_NOT_BE_READ = 'could not be read.';
 const NOT_A_FORM = 'does not hold a form.';
+const TOO_DEEP = 'holds a module nested too deeply for this browser to show.';
 const throwOnMarkedModule = () => {
   const stringify = JSON.stringify;
   JSON.stringify = (value, ...rest) => {
@@ -730,15 +741,15 @@ const BAD_C = [
   // writes that row as hitopsr.
   { name: 'the menu value of the HiTOP-SR module', config: { instrument: 'hitopsr-module' }, message: 'names an instrument the Study Link Builder does not offer: "hitopsr-module".' },
   {
-    name: 'a module that makes JSON.stringify throw after the study is filled',
+    name: 'a module that makes JSON.stringify throw RangeError',
     config: { instrument: 'hitopsr', study: 'deep', module: { throwOnStringify: true } },
-    message: COULD_NOT_BE_READ,
+    message: TOO_DEEP,
     init: throwOnMarkedModule,
   },
   {
-    name: 'a module that makes JSON.stringify throw after a completion URL is filled',
+    name: 'a module that makes JSON.stringify throw RangeError beside a completion URL',
     config: { instrument: 'hitopsr', study: 'deep', complete: COMPLETE_URL, module: { throwOnStringify: true } },
-    message: COULD_NOT_BE_READ,
+    message: TOO_DEEP,
     init: throwOnMarkedModule,
   },
 ];
@@ -1543,4 +1554,17 @@ test('L40: while a z link unpacks, typing and "Add an instrument" change nothing
   await expectHeldInput(page);
   await page.evaluate(() => window.releaseUnpack());
   await expectReleasedInput(page, 'held link');
+});
+
+// L41: a z link whose module is nested too deeply for the module box is
+// refused by name, with nothing filled and no uncaught error.
+test('L41: a z link whose module is nested too deeply to show is refused by name', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${base()}link.html?z=${encodeCompressed(deepModuleConfig())}`);
+  await expectIndentThrows(page);
+  await expect(page.locator('#err')).toHaveText(DEEP_MODULE_REFUSAL);
+  await expect(page.locator('input[name="study"]')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  expect(errors).toEqual([]);
 });
