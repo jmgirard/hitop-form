@@ -108,6 +108,11 @@
   <nav class="upnav">
     <a href="https://jmgirard.github.io/hitop/"><span aria-hidden="true">←</span> <code>hitop</code> package documentation</a>
   </nav>
+  <!-- The two messages for a builder that cannot start: JavaScript off, and
+       form.js not loaded or not parsed. The second is shown by the plain
+       script after </main>. -->
+  <noscript><p role="alert">The Study Link Builder needs JavaScript. Turn on JavaScript in this browser, then reload the page.</p></noscript>
+  <p role="alert" id="loadFail" hidden>The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.</p>
   <h1>Study Link Builder</h1>
   <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps nothing you type. Opening a study link on either page puts its setup, or its setup file's address, in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
@@ -269,6 +274,17 @@
   </div>
   </section>
 </main>
+<script>
+  // The module script below sets window.linkBuilderStarted as its first
+  // statement. It never runs when form.js does not load or does not parse,
+  // or in a browser that runs no module script. The load event fires after
+  // the module script has started, so an unset flag there means the
+  // builder did not start. Written without newer syntax, so a browser too
+  // old for form.js still runs it.
+  window.addEventListener('load', function () {
+    if (window.linkBuilderStarted !== true) document.getElementById('loadFail').hidden = false;
+  });
+</script>
 <script type="module">
   import {
     encodeLink, decodeConfig, inflateConfig, canInflate, checkModule, checkStore, checkCompleteUrl, checkParticipantParam,
@@ -277,6 +293,8 @@
     checkInstruments, INSTRUMENTS, INSTRUMENTS_MAX, checkSetupAddress, fetchSetup, setupFingerprint, canFingerprint,
     SETUP_FILE_MAX, FINGERPRINT, storeColumns, POSTGRES_COLUMNS_MAX, MAX_LINK_BYTES,
   } from './form.js';
+  // Read by the plain script above on the load event.
+  window.linkBuilderStarted = true;
 
   // The three placeholders Prolific fills in, appended to a Prolific link
   // after the page's own parameter.

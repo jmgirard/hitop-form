@@ -148,6 +148,10 @@
 //       announces; the line beside "Open the link" writes the length with
 //       the same comma; the study name and the participant-parameter name
 //       are padded at run time to reach each length
+//  L39: form.js answered with HTTP 404, and form.js served with a syntax
+//       error, each show the load-failure message, with "Make the link"
+//       disabled; with JavaScript off, the noscript message shows; a
+//       normal load shows neither
 
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
@@ -1465,4 +1469,48 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
   expect(reached[HOST_AT + 1].length, 'some site reaches 8,193').toBeGreaterThan(0);
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
+});
+
+// L39: when form.js does not load or does not parse, the builder says so.
+// With JavaScript off, a <noscript> message says to turn it on. Each
+// message is asserted visible by its whole text, and a normal load shows
+// neither.
+const LOAD_FAILED = 'The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.';
+const NO_SCRIPT = 'The Study Link Builder needs JavaScript. Turn on JavaScript in this browser, then reload the page.';
+for (const [name, answer] of [
+  ['answered with HTTP 404', { status: 404, contentType: 'text/plain', body: 'Not found' }],
+  ['served with a syntax error', { status: 200, contentType: 'text/javascript', body: 'export const = ;\n' }],
+]) {
+  test(`L39: form.js ${name} shows the load-failure message`, async ({ page }) => {
+    const served = [];
+    await page.route('**/form.js', (route) => {
+      served.push(route.request().url());
+      return route.fulfill(answer);
+    });
+    await page.goto(`${base()}link.html`);
+    await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeVisible();
+    expect(served).toHaveLength(1);
+    await expect(page.getByRole('button', { name: 'Make the link' })).toBeDisabled();
+  });
+}
+
+test('L39: with JavaScript off, the noscript message shows', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(`${base()}link.html`);
+  await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeVisible();
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
+  await context.close();
+});
+
+test('L39: a normal load shows neither message', async ({ page }) => {
+  await page.goto(`${base()}link.html`);
+  await expect(page.getByRole('button', { name: 'Make the link' })).toBeEnabled();
+  // The load event has fired, so the check that shows the message has run.
+  await page.waitForFunction(() => document.readyState === 'complete');
+  // The message is in the page, hidden, so the check below is not of an
+  // absent element.
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toHaveCount(1);
+  await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
+  await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeHidden();
 });
