@@ -1,10 +1,11 @@
 // The Study Link Builder's layout: the required parts first, then the five
 // optional sections, each a closed <details>.
 //
-//   S1: with no address parameters, the form's top-level parts come in this
-//       order: instruments, study name, where responses go, the five
-//       optional sections by name, and "Make the link". Each section is a
-//       closed <details> whose summary reads "Not used"
+//   S1: with no address parameters, the form's top-level children come in
+//       this order: instruments, study name, where responses go, the five
+//       optional sections by name, where the setup is kept, the message,
+//       and "Make the link". A child of any other kind fails the test. Each
+//       section is a closed <details> whose summary reads "Not used"
 //   S2: a section's summary lists the labels of its fields that hold a
 //       value, joined by ", ", and reads "Not used" again once they are
 //       emptied
@@ -13,10 +14,12 @@
 //       the refused field. "Item order" holds only the shuffle box, which no
 //       refusal names, so it has none; the module box's refusals are in S12
 //   S4: at 375px and 1280px wide, with every section open, no element is
-//       wider than the page or reaches past its right edge
+//       wider than the page or reaches past its right edge, for each
+//       recruiting-site choice with each where-responses-go choice
 //   S5: a study link that sets one optional field opens the section that
-//       holds it, whose summary lists the field's label; the other sections
-//       stay closed. A link that sets no optional field leaves every
+//       holds it, whose summary lists the field's label, and sets the
+//       recruiting-site menu to the site the field implies; the other
+//       sections stay closed. A link that sets no optional field leaves every
 //       section closed. A link that sets only a module opens no section and
 //       fills a HiTOP-SR module row
 //   S6: on the instrument rows and the question groups, Move up is disabled
@@ -173,21 +176,23 @@ test('the required parts come first, then the five closed sections, then the but
   await page.goto(`${base()}link.html`);
   const parts = await page.evaluate(() => {
     const f = document.getElementById('f');
-    // The form's top-level children that hold a control or are a section,
-    // named by what they hold.
+    // The form's top-level children, each named by what it holds. A child
+    // of a kind not named here is listed by its tag, id and class.
     return [...f.children].map((node) => {
       if (node.id === 'instrumentsBlock') return 'instruments';
       if (node.querySelector?.('[name="study"]')) return 'study';
       if (node.querySelector?.('[name="storeKind"]')) return 'where responses go';
       if (node.matches('details')) return `section: ${node.querySelector('summary .sec-name').textContent}`;
+      if (node.querySelector?.('[name="setupWhere"]')) return 'where the setup is kept';
+      if (node.id === 'err') return 'message';
       if (node.querySelector?.('button[type="submit"]')) return 'make';
-      return null;
-    }).filter((x) => x !== null);
+      return `unknown: ${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.className ? `.${node.className}` : ''}`;
+    });
   });
   expect(parts).toEqual([
     'instruments', 'study', 'where responses go',
     ...SECTIONS.map((s) => `section: ${s.name}`),
-    'make',
+    'where the setup is kept', 'message', 'make',
   ]);
   for (const s of SECTIONS) {
     expect(await isOpen(page, s.id), `${s.name} starts closed`).toBe(false);
@@ -343,7 +348,9 @@ for (const probe of [
   });
 }
 
-// S4
+// S4: each recruiting site (SITES, at S7) with each destination (KINDS), in
+// turn on one page. Each pair maps to the shown elements wider than the
+// page or past its right edge, and to whether the page scrolls sideways.
 for (const width of [375, 1280]) {
   test(`at ${width}px wide with every section open, nothing is wider than the page`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -351,18 +358,29 @@ for (const width of [375, 1280]) {
     for (const s of SECTIONS) await openSection(page, s.id);
     await page.getByRole('button', { name: 'Add a question' }).click();
     await page.locator('select[name="qType"]').selectOption('number');
-    const over = await page.evaluate(() => {
-      const edge = document.documentElement.clientWidth;
-      return [...document.querySelectorAll('body *')]
-        .filter((n) => n.getClientRects().length > 0)
-        .filter((n) => {
-          const r = n.getBoundingClientRect();
-          return r.width > edge + 0.5 || r.right > edge + 0.5;
-        })
-        .map((n) => `${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : ''}${n.className ? `.${n.className}` : ''}`);
-    });
-    expect(over).toEqual([]);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const found = {};
+    for (const site of SITES) {
+      for (const kind of KINDS) {
+        await page.locator('select[name="site"]').selectOption(site);
+        await chooseDestination(page, kind);
+        await expect(page.locator('select[name="site"]')).toHaveValue(site);
+        await expect(page.locator('select[name="storeKind"]')).toHaveValue(kind);
+        found[`${site || 'none'} | ${kind || 'file'}`] = await page.evaluate(() => {
+          const edge = document.documentElement.clientWidth;
+          const over = [...document.querySelectorAll('body *')]
+            .filter((n) => n.getClientRects().length > 0)
+            .filter((n) => {
+              const r = n.getBoundingClientRect();
+              return r.width > edge + 0.5 || r.right > edge + 0.5;
+            })
+            .map((n) => `${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : ''}${n.className ? `.${n.className}` : ''}`);
+          return { over, scrolls: document.documentElement.scrollWidth > edge };
+        });
+      }
+    }
+    const fits = Object.fromEntries(Object.keys(found).map((pair) => [pair, { over: [], scrolls: false }]));
+    expect(Object.keys(found)).toHaveLength(SITES.length * KINDS.length);
+    expect(found).toEqual(fits);
   });
 }
 
@@ -370,23 +388,24 @@ for (const width of [375, 1280]) {
 // labels that section's summary then lists. The consent fields and the
 // questions travel in a z link, the rest in a c link.
 const ONE_FIELD = [
-  { name: 'participant', patch: { participant: 'p1' }, id: 'secParticipants', labels: 'Participant' },
-  { name: 'prolific', patch: { prolific: true }, id: 'secParticipants', labels: 'Recruiting site' },
-  { name: 'participantParam of SONA', patch: { participantParam: 'id' }, id: 'secParticipants', labels: 'Recruiting site' },
+  { name: 'participant', patch: { participant: 'p1' }, id: 'secParticipants', labels: 'Participant', site: '' },
+  { name: 'prolific', patch: { prolific: true }, id: 'secParticipants', labels: 'Recruiting site', site: 'prolific' },
+  { name: 'participantParam of SONA', patch: { participantParam: 'id' }, id: 'secParticipants', labels: 'Recruiting site', site: 'sona' },
   { name: 'participantParam of CloudResearch Connect', patch: { participantParam: 'participantId' }, id: 'secParticipants', labels: 'Recruiting site', site: 'connect' },
-  { name: 'participantParam of another site', patch: { participantParam: 'workerId' }, id: 'secParticipants', labels: 'Recruiting site, Address parameter' },
-  { name: 'shuffle', patch: { shuffle: true }, id: 'secOrder', labels: 'Show the items in a random order' },
-  { name: 'consent text', patch: { consent: { text: 'I agree.' } }, z: true, id: 'secConsent', labels: 'Consent text' },
-  { name: 'declined text', patch: { consent: { declined: 'Bye.' } }, z: true, id: 'secConsent', labels: 'Declined text' },
-  { name: 'completeDeclined', patch: { completeDeclined: COMPLETE }, z: true, id: 'secConsent', labels: 'Completion URL after a decline' },
-  { name: 'complete', patch: { complete: COMPLETE }, id: 'secFinish', labels: 'Completion URL' },
-  { name: 'completeSaved', patch: { completeSaved: COMPLETE }, id: 'secFinish', labels: 'Completion URL after a saved file' },
+  { name: 'participantParam of another site', patch: { participantParam: 'workerId' }, id: 'secParticipants', labels: 'Recruiting site, Address parameter', site: 'other' },
+  { name: 'shuffle', patch: { shuffle: true }, id: 'secOrder', labels: 'Show the items in a random order', site: '' },
+  { name: 'consent text', patch: { consent: { text: 'I agree.' } }, z: true, id: 'secConsent', labels: 'Consent text', site: '' },
+  { name: 'declined text', patch: { consent: { declined: 'Bye.' } }, z: true, id: 'secConsent', labels: 'Declined text', site: '' },
+  { name: 'completeDeclined', patch: { completeDeclined: COMPLETE }, z: true, id: 'secConsent', labels: 'Completion URL after a decline', site: '' },
+  { name: 'complete', patch: { complete: COMPLETE }, id: 'secFinish', labels: 'Completion URL', site: '' },
+  { name: 'completeSaved', patch: { completeSaved: COMPLETE }, id: 'secFinish', labels: 'Completion URL after a saved file', site: '' },
   {
     name: 'questions',
     patch: { questions: { before: [{ name: 'age', text: 'How old are you?', type: 'number' }] } },
     z: true,
     id: 'secQuestions',
     labels: 'Question 1',
+    site: '',
   },
 ];
 
@@ -397,7 +416,7 @@ for (const one of ONE_FIELD) {
     await page.goto(`${base()}link.html${query}`);
     await expect(page.locator('#err')).toHaveText('');
     await expect(state(page, one.id)).toHaveText(one.labels);
-    if (one.site) await expect(page.locator('select[name="site"]')).toHaveValue(one.site);
+    await expect(page.locator('select[name="site"]'), 'the recruiting site').toHaveValue(one.site);
     for (const s of SECTIONS) {
       expect(await isOpen(page, s.id), `${s.id} open`).toBe(s.id === one.id);
       if (s.id !== one.id) await expect(state(page, s.id)).toHaveText('Not used');
