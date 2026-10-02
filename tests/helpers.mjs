@@ -147,15 +147,22 @@ export function setupQuery({ setup = SETUP_URL, sha256 } = {}) {
   return q.toString();
 }
 
-// An init script that sets window.armed when the Study Link Builder reads
-// its own address, which it does just before its prefill starts. A plant
-// that throws only while window.armed is set throws at no earlier call.
+// An init script that sets window.armed when the Study Link Builder's
+// prefill starts: at prefill()'s first statement, which asks the page's
+// own address for `setup`. Nothing asks the address for `setup` before
+// that. A plant that throws only while window.armed is set throws at no
+// earlier call.
 export function armOnAddress() {
   const Real = URLSearchParams;
   window.URLSearchParams = class extends Real {
     constructor(init) {
       super(init);
-      if (init === window.location.search) window.armed = true;
+      if (init !== window.location.search) return;
+      const has = this.has.bind(this);
+      this.has = (name) => {
+        if (name === 'setup') window.armed = true;
+        return has(name);
+      };
     }
   };
 }

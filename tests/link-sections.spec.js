@@ -1129,8 +1129,8 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
   await expect(page.getByRole('heading', { name: 'Your study link' })).toBeVisible();
 });
 
-// S13: a throw in the prefill path, each plant armed when the page reads
-// its address (armOnAddress()). Each test asserts that its plants threw, so
+// S13: a throw in the prefill path, each plant armed when prefill()
+// starts (armOnAddress()). Each test asserts that its plants threw, so
 // a pass is not a load where nothing was thrown.
 const NOT_READ = 'The study link you opened could not be read. Fill in the form above to make a new link.';
 
