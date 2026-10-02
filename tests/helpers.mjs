@@ -35,6 +35,34 @@ export async function fetchExport(instrument) {
   return res.json();
 }
 
+// The requests a test's routes answered. A route marks its request before
+// its first await, so a request still held, or cancelled while its answer is
+// read, counts as answered. Checks of the requests a test sent read this.
+const answeredRequests = new WeakSet();
+export function markAnswered(request) {
+  answeredRequests.add(request);
+}
+export function isAnswered(request) {
+  return answeredRequests.has(request);
+}
+
+// Answers an export request from its copy in fixtures/exports/, marked as
+// answered. A request for an export with no copy there is unmarked and
+// aborted, so a check of the test's requests names it.
+export async function fulfillExport(route) {
+  const request = route.request();
+  markAnswered(request);
+  const name = new URL(request.url()).pathname.split('/').pop();
+  let body;
+  try {
+    body = await readFile(path.join(FIXTURES, 'exports', name), 'utf8');
+  } catch {
+    answeredRequests.delete(request);
+    return route.abort();
+  }
+  return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body });
+}
+
 export async function readFixture(name) {
   return readFile(path.join(FIXTURES, name), 'utf8');
 }

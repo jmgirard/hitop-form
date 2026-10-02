@@ -104,50 +104,37 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, FIXTURES, EXPORT_BASE, retiredIn,
-  setupFingerprint, setupQuery, SETUP_URL, armOnAddress,
+  useTarget, encodeConfig, encodeCompressed, readDescriptor, ROOT, EXPORT_BASE, retiredIn,
+  setupFingerprint, setupQuery, SETUP_URL, armOnAddress, markAnswered, isAnswered, fulfillExport,
 } from './helpers.mjs';
 
 const base = useTarget();
 
 // No request of this spec leaves the browser for anywhere but the test
-// target. Each route below marks the request it fulfills or aborts. The
-// listener records a request to any other address that no route marked,
-// and the test fails on that record when it ends. The instrument exports
-// come from the copies in tests/fixtures/exports/. A request for an export
-// with no copy there is aborted unmarked, so the test fails naming it.
-let answered;
-let strays;
-
-async function fulfillExport(route) {
-  const name = new URL(route.request().url()).pathname.split('/').pop();
-  let body;
-  try {
-    body = await readFile(path.join(FIXTURES, 'exports', name), 'utf8');
-  } catch {
-    return route.abort();
-  }
-  answered.add(route.request());
-  return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', body });
-}
+// target. Each route below marks the request it fulfills, aborts or holds,
+// before its first await. The listener records every request of the test's
+// browser context as it starts, on any of its pages. When the test ends, it
+// fails on each recorded request to another address that no route marked,
+// finished or still open. The instrument exports come from the copies in
+// tests/fixtures/exports/. A request for an export with no copy there is
+// aborted unmarked, so the test fails naming it.
+let started;
 
 function abortRequest(route) {
-  answered.add(route.request());
+  markAnswered(route.request());
   return route.abort();
 }
 
-test.beforeEach(async ({ page }) => {
-  answered = new Set();
-  strays = [];
-  const note = (req) => {
-    if (!req.url().startsWith(base()) && !answered.has(req)) strays.push(`${req.method()} ${req.url()}`);
-  };
-  page.on('requestfinished', note);
-  page.on('requestfailed', note);
+test.beforeEach(async ({ context, page }) => {
+  started = [];
+  context.on('request', (req) => started.push(req));
   await page.route(`${EXPORT_BASE}**`, fulfillExport);
 });
 
 test.afterEach(() => {
+  const strays = started
+    .filter((req) => !req.url().startsWith(base()) && !isAnswered(req))
+    .map((req) => `${req.method()} ${req.url()}`);
   expect(strays, 'requests to another address that no route answered').toEqual([]);
 });
 
@@ -798,7 +785,7 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
 // Answers the setup-file address through a route marked as answered.
 async function answerSetup(page, body, { status = 200, abort = false } = {}) {
   await page.route(SETUP_URL, (route) => {
-    answered.add(route.request());
+    markAnswered(route.request());
     if (abort) return route.abort();
     return route.fulfill({ status, headers: { 'access-control-allow-origin': '*' }, body });
   });
@@ -924,6 +911,7 @@ test('a field changed while a build waits leaves the result hidden', async ({ pa
   let reached;
   const asked = new Promise((r) => { reached = r; });
   await page.route(`${EXPORT_BASE}**`, async (route) => {
+    markAnswered(route.request());
     reached();
     await held;
     await fulfillExport(route);
@@ -1306,6 +1294,7 @@ function holdExports(page) {
   let release;
   const released = new Promise((r) => { release = r; });
   const ready = page.route(`${EXPORT_BASE}**`, async (route) => {
+    markAnswered(route.request());
     reached();
     const how = await released;
     if (how === 'abort') await abortRequest(route);
@@ -1775,7 +1764,7 @@ function holdSetup(page) {
   let release;
   const released = new Promise((r) => { release = r; });
   const ready = page.route(SETUP_URL, async (route) => {
-    answered.add(route.request());
+    markAnswered(route.request());
     reached();
     const how = await released;
     if (how === 'abort') return route.abort();
