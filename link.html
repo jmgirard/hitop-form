@@ -112,7 +112,7 @@
        form.js not loaded or not parsed. The second is shown by the plain
        script after </main>. -->
   <noscript><p role="alert">The Study Link Builder needs JavaScript. Turn on JavaScript in this browser, then reload the page.</p></noscript>
-  <p role="alert" id="loadFail" hidden>The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.</p>
+  <p role="alert" id="loadFail" tabindex="-1" hidden>The Study Link Builder did not start. Reload the page. If it still does not start, open it in a current version of Chrome, Edge, Firefox or Safari.</p>
   <h1>Study Link Builder</h1>
   <p class="muted" id="intro">A study link opens the online form. Fill in the required parts, then press "Make the link". The Study Link Builder keeps nothing you type. Opening a study link on either page puts its setup, or its setup file's address, in <a href="https://github.com/jmgirard/hitop-form#what-the-pages-host-sees">GitHub Pages' logs</a>. See the <a href="https://jmgirard.github.io/hitop/articles/online-collection.html">online collection tutorial</a>.</p>
   <div id="prefilled" role="status" tabindex="-1" hidden>
@@ -280,9 +280,13 @@
   // or in a browser that runs no module script. The load event fires after
   // the module script has started, so an unset flag there means the
   // builder did not start. Written without newer syntax, so a browser too
-  // old for form.js still runs it.
+  // old for form.js still runs it. The message is shown at load, when its
+  // live region's own announcement is not relied on, so it takes focus.
   window.addEventListener('load', function () {
-    if (window.linkBuilderStarted !== true) document.getElementById('loadFail').hidden = false;
+    if (window.linkBuilderStarted === true) return;
+    var loadFail = document.getElementById('loadFail');
+    loadFail.hidden = false;
+    loadFail.focus();
   });
 </script>
 <script type="module">

@@ -1501,6 +1501,9 @@ for (const [name, answer] of [
     });
     await page.goto(`${base()}link.html`);
     await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeVisible();
+    // Shown at load, so focus moves to it rather than resting on its live
+    // region's own announcement.
+    await expect(page.locator('#loadFail')).toBeFocused();
     expect(served).toHaveLength(1);
     await expect(page.getByRole('button', { name: 'Make the link' })).toBeDisabled();
   });
@@ -1524,6 +1527,13 @@ test('L39: a normal load shows neither message', async ({ page }) => {
   // absent element.
   await expect(page.getByText(LOAD_FAILED, { exact: true })).toHaveCount(1);
   await expect(page.getByText(LOAD_FAILED, { exact: true })).toBeHidden();
+  // With JavaScript on, the browser keeps a <noscript>'s content as text and
+  // shows none of it. The element and its message are asserted present
+  // first, so the hidden check is not of an absent element.
+  const noscript = page.locator('noscript');
+  await expect(noscript).toHaveCount(1);
+  expect(await noscript.evaluate((el) => el.textContent)).toContain(NO_SCRIPT);
+  await expect(noscript).toBeHidden();
   await expect(page.getByText(NO_SCRIPT, { exact: true })).toBeHidden();
 });
 
