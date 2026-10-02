@@ -1092,11 +1092,6 @@
         return filled;
       }
       setInstruments(stems.map((s) => (s === 'hitopsr' ? MODULE : s)));
-      // A module that is not an object leaves the box empty, and "Make the
-      // link" asks for the file.
-      if (isPlainObject(config.module)) {
-        instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = JSON.stringify(config.module, null, 2);
-      }
     } else {
       setInstruments(stems);
     }
@@ -1138,6 +1133,13 @@
     } else if (typeof config.participantParam === 'string') {
       siteSelect.value = siteOf(config.participantParam);
       if (siteSelect.value === 'other') text('participantParam', config.participantParam);
+    }
+    // The module row's box, filled in the place the module box held before
+    // it moved into the row, after the study and the completion URLs. A
+    // module that is not an object leaves the box empty, and "Make the link"
+    // asks for the file.
+    if (isPlainObject(config.module)) {
+      instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = JSON.stringify(config.module, null, 2);
     }
     const store = config.store;
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
