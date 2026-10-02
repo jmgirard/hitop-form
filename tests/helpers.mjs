@@ -710,9 +710,41 @@ export async function currentPage(page) {
   return { page: Number(m[1]), of: Number(m[2]) };
 }
 
+// The document's states from now until the page starts to leave, in the
+// order they arose. `snapshot` is a function run in the page, taking no
+// arguments and closing over nothing. A mutation observer reports its result
+// at each change. The Navigation API's `navigate` event reports it once more
+// when a script starts a navigation, before the navigation's request, and
+// nothing is recorded after that. Both reports go through one exposed
+// function, so they arrive in the order the page made them, and
+// `states.left` turns true with the last. While a route holds the
+// navigation's request, `states.at(-1)` is then the document at the request.
+export async function observeUntilLeave(page, snapshot) {
+  const states = [];
+  states.left = false;
+  await page.exposeFunction('noteUntilLeave', (state, leaving) => {
+    if (states.left) return;
+    states.push(state);
+    if (leaving) states.left = true;
+  });
+  await page.evaluate(`(() => {
+    const snapshot = ${snapshot.toString()};
+    let left = false;
+    new MutationObserver(() => { if (!left) window.noteUntilLeave(snapshot(), false); })
+      .observe(document.body, { childList: true, subtree: true });
+    navigation.addEventListener('navigate', () => {
+      if (left) return;
+      left = true;
+      window.noteUntilLeave(snapshot(), true);
+    });
+  })()`);
+  return states;
+}
+
 // Walks every page from the first, answering each, collecting the items seen,
 // and pressing Finish on the last (with a double click when `finish` is
-// 'dblclick'). Returns the items in rendered order. Under a list link it
+// 'dblclick'). With `finish` 'held', the press does not wait for the
+// navigation it starts, which a route holds. Returns the items in rendered order. Under a list link it
 // walks the pages of the instrument on screen, and its last press leads to
 // the next start screen, or after the last instrument to the after screen
 // or Finish. `choose` is answerPage()'s.
@@ -724,6 +756,7 @@ export async function walkAll(page, { finish = 'click', choose } = {}) {
     await answerPage(page, { choose });
     if (p === of) {
       if (finish === 'dblclick') await nextButton(page).dblclick();
+      else if (finish === 'held') await nextButton(page).click({ noWaitAfter: true });
       else await nextButton(page).click();
       break;
     }

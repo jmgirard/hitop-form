@@ -42,7 +42,7 @@
 import {
   test, expect, useTarget, useStore, allowLocalStore, webhook, supabase, openForm, begin, walkAll, fetchExport, readDescriptor,
   exportUrl, awaitDownload, answerPage, currentPage, nextButton, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete, encodeConfig, refusalText,
-  serveSetup, setupQuery, setupFingerprint, SETUP_URL,
+  serveSetup, setupQuery, setupFingerprint, SETUP_URL, observeUntilLeave,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -142,22 +142,20 @@ test('N7: the HiTOP-BR walk with a store and a complete address requests the sto
     instrument: 'hitopbr', study: 'net', participant: 'n7', store: webhook(store(), '/record'), complete: COMPLETE_URL,
   });
   await begin(page);
-  const states = [];
-  await page.exposeFunction('noteState', (s) => states.push(s));
-  await page.evaluate(() => {
-    const snapshot = () => ({
-      h1: document.querySelector('h1')?.textContent ?? null,
-      href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
-      navButtons: document.querySelectorAll('.nav button').length,
-    });
-    new MutationObserver(() => window.noteState(snapshot())).observe(document.body, { childList: true, subtree: true });
-  });
+  const states = await observeUntilLeave(page, () => ({
+    h1: document.querySelector('h1')?.textContent ?? null,
+    href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+    navButtons: document.querySelectorAll('.nav button').length,
+  }));
   await walkToLast(page);
   expect([...urls].sort(), 'before Finish').toEqual([...ownFiles('hitopbr')].sort());
-  await nextButton(page).click();
+  // The press starts the navigation the route holds, so it does not wait for it.
+  await nextButton(page).click({ noWaitAfter: true });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
-  // The document at the request, as the observer last reported it: a
-  // locator or an evaluate would wait on the held navigation (send T15).
+  // The document as the page started to leave, reported through the same
+  // channel as each change before it: a locator or an evaluate would wait
+  // on the held navigation (send T15).
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
   expect(states.some((s) => s.navButtons > 0), 'the observer saw nav buttons on the form').toBe(true);
   expect(states.at(-1)).toEqual({ h1: 'Thank you', href: COMPLETE_URL, navButtons: 0 });
   release();

@@ -48,7 +48,7 @@
 import { readFile } from 'node:fs/promises';
 import {
   test, expect, useTarget, openSectionOf, useStore, allowLocalStore, openForm, webhook, supabase, begin, walkAll, awaitDownload, parseCsv,
-  leadColumns, refusalText, CONTINUE,
+  leadColumns, refusalText, CONTINUE, observeUntilLeave,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -211,20 +211,15 @@ for (const [storeName, storeFields] of Object.entries(STORES)) {
   }
 }
 
-// The document at the moment of a navigation request, reported through a
-// mutation observer (a locator waits on the pending navigation).
-async function observeScreen(page) {
-  const states = [];
-  await page.exposeFunction('noteScreen', (s) => states.push(s));
-  await page.evaluate(`(() => {
-    const snap = () => ({
-      h1: document.querySelector('h1')?.textContent ?? null,
-      declined: [...document.querySelectorAll('.declined p')].map((p) => p.innerText),
-      links: [...document.querySelectorAll('main a')].map((a) => [a.getAttribute('href'), a.textContent]),
-    });
-    new MutationObserver(() => window.noteScreen(snap())).observe(document.body, { childList: true, subtree: true });
-  })()`);
-  return states;
+// The document's states until the page starts to leave, the last of them
+// the document at the navigation request (observeUntilLeave(); a locator
+// waits on the pending navigation).
+function observeScreen(page) {
+  return observeUntilLeave(page, () => ({
+    h1: document.querySelector('h1')?.textContent ?? null,
+    declined: [...document.querySelectorAll('.declined p')].map((p) => p.innerText),
+    links: [...document.querySelectorAll('main a')].map((a) => [a.getAttribute('href'), a.textContent]),
+  }));
 }
 
 // Answers every request to the host of `address`, holding each until
@@ -289,6 +284,7 @@ for (const c of DECLINED_CASES) {
         await page.getByRole('button', { name: 'I do not agree', exact: true }).click();
         await page.getByRole('button', { name: 'Yes, I do not agree' }).click({ noWaitAfter: true });
         await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+        await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
         expect(states.at(-1), 'the declined screen at the request').toEqual({
           h1: 'Thank you',
           declined: declined ? DECLINED_PARAGRAPHS : ['You chose not to take part.'],

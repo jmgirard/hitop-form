@@ -57,7 +57,7 @@
 import { readFile } from 'node:fs/promises';
 import {
   test, expect, useTarget, useStore, allowLocalStore, webhook, openForm, begin, walkAll, awaitDownload, parseCsv, leadColumns,
-  prolificQuery, COMPLETE_URL, CONTINUE,
+  prolificQuery, COMPLETE_URL, CONTINUE, observeUntilLeave,
 } from './helpers.mjs';
 import { readParticipantParam, fillParticipant } from '../form.js';
 
@@ -221,20 +221,15 @@ async function serveCompletion(page, { hold = false } = {}) {
   return { requests, release };
 }
 
-// The document at the moment of a navigation request, reported through a
-// mutation observer (a locator waits on the pending navigation).
-async function observeLink(page) {
-  const states = [];
-  await page.exposeFunction('noteLink', (s) => states.push(s));
-  await page.evaluate(`(() => {
-    const snap = () => ({
-      h1: document.querySelector('h1')?.textContent ?? null,
-      href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
-      text: document.querySelector('p.complete a')?.textContent ?? null,
-    });
-    new MutationObserver(() => window.noteLink(snap())).observe(document.body, { childList: true, subtree: true });
-  })()`);
-  return states;
+// The document's states until the page starts to leave, the last of them
+// the document at the navigation request (observeUntilLeave(); a locator
+// waits on the pending navigation).
+function observeLink(page) {
+  return observeUntilLeave(page, () => ({
+    h1: document.querySelector('h1')?.textContent ?? null,
+    href: document.querySelector('p.complete a')?.getAttribute('href') ?? null,
+    text: document.querySelector('p.complete a')?.textContent ?? null,
+  }));
 }
 
 // P8
@@ -246,8 +241,9 @@ test('a confirmed send fills the token with the identifier from the address in t
   await expect(page.locator('input[name="participant"]')).toHaveCount(0);
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
   expect(states.at(-1), 'the sent screen at the request').toEqual({
     h1: 'Thank you', href: SONA_FILLED_ABC, text: CONTINUE,
   });
@@ -342,8 +338,9 @@ test('under participantParam, a confirmed send uses a completion address without
   }, { extra: `&id=${SONA_CODE}` });
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
   expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: EXAMPLE_PARSED, text: CONTINUE });
   release();
   await expect(page).toHaveURL(EXAMPLE_PARSED);
@@ -414,8 +411,9 @@ test('an address value encoding a surrogate arrives as replacement characters, a
   await expect(page.locator('input[name="participant"]')).toHaveCount(0);
   await begin(page);
   const states = await observeLink(page);
-  await walkAll(page);
+  await walkAll(page, { finish: 'held' });
   await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
+  await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
   const filled = 'https://example.org/done?code=%EF%BF%BD%EF%BF%BD%EF%BF%BD';
   expect(states.at(-1), 'the sent screen at the request').toEqual({ h1: 'Thank you', href: filled, text: CONTINUE });
   release();

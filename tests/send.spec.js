@@ -93,7 +93,7 @@ import {
   test, expect, useTarget, useStore, allowLocalStore, webhook, supabase, JWT_SHAPED_KEY, openForm, begin, walkAll,
   fetchExport, readDescriptor, readFixture, parseCsv, awaitDownload, nextButton, SEND_TIMEOUT_MS, expectShuffled,
   leadColumns, PROLIFIC, prolificQuery, COMPLETE_URL, COMPLETE_SAVED_URL, serveComplete,
-  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder, CONTINUE,
+  SAVE_AGAIN, expectSaveAgain, expectStatusEmpty, savedScreenOrder, screenOrder, CONTINUE, observeUntilLeave,
 } from './helpers.mjs';
 import { readFile } from 'node:fs/promises';
 import { unusedPort } from './serve.mjs';
@@ -401,9 +401,9 @@ for (const shuffle of [false, true]) {
 // at the moment the navigation was asked for: the sent screen, with its
 // link to the address and no nav button left. Then the route answers. A
 // locator or an evaluate waits on the pending navigation, so the document
-// reaches the test through a mutation observer that reports its state on
-// every change through an exposed function; the last report before the
-// request is the document at that request.
+// reaches the test through observeUntilLeave(): a report at every change,
+// then one as the page starts to leave, which is the document at the
+// request.
 function snapshot() {
   return {
     h1: document.querySelector('h1')?.textContent ?? null,
@@ -414,15 +414,6 @@ function snapshot() {
     navButtons: document.querySelectorAll('.nav button').length,
     saveButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent.trim().includes('Save the file')).length,
   };
-}
-async function observeDocument(page) {
-  const states = [];
-  await page.exposeFunction('noteState', (s) => states.push(s));
-  await page.evaluate(`(() => {
-    const snapshot = ${snapshot.toString()};
-    new MutationObserver(() => window.noteState(snapshot())).observe(document.body, { childList: true, subtree: true });
-  })()`);
-  return states;
 }
 for (const w of [
   { name: 'a webhook', make: () => webhook(store(), '/record'), path: '/record' },
@@ -450,11 +441,12 @@ for (const w of [
       instrument: 'hitopbr', study: 'send', participant: 'c1', store: w.make(), complete: COMPLETE_URL,
     });
     await begin(page);
-    const states = await observeDocument(page);
-    await walkAll(page);
+    const states = await observeUntilLeave(page, snapshot);
+    await walkAll(page, { finish: 'held' });
     // The request is seen, and held. The document is the sent screen.
     await expect.poll(() => requests.length, 'the navigation request was made').toBe(1);
-    expect(states.length, 'the observer saw the page walk').toBeGreaterThan(0);
+    await expect.poll(() => states.left, 'the page reported its navigation').toBe(true);
+    expect(states.length, 'the observer saw the page walk').toBeGreaterThan(1);
     // The selector finds the form's buttons, so a count of zero means they are gone.
     expect(states.some((s) => s.navButtons > 0), 'the observer saw nav buttons on the form').toBe(true);
     const sentScreen = {
@@ -468,6 +460,8 @@ for (const w of [
       saveButtons: 0,
     };
     expect(states.at(-1), 'the document at the request').toEqual(sentScreen);
+    // form.js draws the sent screen and starts the navigation in one task,
+    // so the report as the page leaves is the only one that shows it.
     expect(states.filter((s) => s.h1 === 'Thank you'), 'the sent screen was drawn once, whole').toEqual([sentScreen]);
     release();
     await expect(page).toHaveURL(COMPLETE_URL);
