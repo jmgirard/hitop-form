@@ -7,9 +7,11 @@ export default defineConfig({
   // 405 items over 27 pages.
   timeout: 2 * 60 * 1000,
   expect: { timeout: 15 * 1000 },
-  // One retry in CI, so a single hiccup fetching the export from the package's
-  // site does not turn the job red on its own. A second failure does. Locally
-  // none: a red run is what a plant is asking for.
+  // One retry in CI, so a single hiccup fetching an export from the package's
+  // site on the weekly run does not turn the job red on its own. A second
+  // failure does. Pull request and push runs answer the exports from
+  // tests/fixtures/exports/. Locally none: a red run is what a plant is
+  // asking for.
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   // The full Chromium build rather than Playwright's headless shell: what the

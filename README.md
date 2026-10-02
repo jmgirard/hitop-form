@@ -1119,15 +1119,19 @@ npx playwright test
 | `tests/instruments-supabase.spec.js` | The builder's Supabase SQL for two instruments, byte for byte, against `supabase-hitopbr-pid5bf.sql` and `supabase-pid5bf-hitopbr-prolific-shuffle-questions.sql`. The keys of the rows posted to a web address and to a Supabase table under those two links, against the fixtures' columns |
 | `tests/link-instruments.spec.js` | The builder's instrument rows: one row at load, "Add an instrument" up to three rows, and Move up, Move down and Remove. One row writes `instrument`, and two or three write `instruments` in row order. The refusal of a repeated instrument, of two and of three PID-5 forms, and of a module of another instrument in a module row. The menu offers "HiTOP-SR module (scales you choose)" after the HiTOP-SR. Only a module row shows its box and file control, between its menu and its buttons. Only a module row writes its box into the link. A row set away and back shows its text again. "Item order" holds only the random-order box. When either HiTOP-SR entry is listed, "Add an instrument" skips both. Three module setups build the queries that the builder at `2af14f0` built for them, held in the test. A HiTOP-SR row beside a module row, and two module rows, are refused as a repeat at row 2. Each refusal adds its own sentence, and two HiTOP-SR rows add neither. A module row with an empty box is refused at its box. A `c`, a `z` and a setup file with a module each fill a module row, alone and as row 2 of a list. Without a module, each fills a plain HiTOP-SR row. A link with a module and no HiTOP-SR is refused. A `c` of the shape the Module Builder writes fills a module row. Links of two and of three instruments built, opened at "Part 1 of N", and reloaded on the builder through `c` and `z` with the same rows. An opened link refused by name for each list fault the online form refuses, with the rows back at one HiTOP-SR row. Move up, Move down and Remove named from their visible text, and Remove disabled on a single row. With two module rows, each row's box, file control, message and status are named for its number, and the names follow a move. A row set away from the module empties its message and status, and a file read running then drops its text |
 | `tests/network.spec.js` | Without a web address or table, no request leaves the page except its own files and one export fetch per instrument, on the HiTOP-BR, a HiTOP-SR module and a list of the HiTOP-BR and the PID-5-BF. With one, the further requests are the POST to it at Finish and any redirect it answers with, or the insert's address under a Supabase project URL, and with a completion URL the one navigation to it after the confirmed send, the sent screen already drawn when that request is made. `link.html` opened with a Supabase config in its `c` requests only `link.html` and `form.js` up to the first network idle. A link that names a setup file, walked to a saved file, requests the page, `form.js`, the export and the setup file, each once |
+| `tests/exports.spec.js` | With `FORM_TARGET` set, the text of each of the five copies in `tests/fixtures/exports/` equals the site's file. Skipped otherwise |
 | `tests/layout.spec.js` | On every page of the HiTOP-SR and the PID-5, at 320 px, 375 px and the default width, each item's text box lies inside its card's border on all four sides and does not overflow, the options start below it, no page scrolls sideways, and at least one wrapped item is measured. Each item on a first page is a group named by its position and text. A refused blank item's card has the error colour on all four borders |
 
 `tests/fixtures/README.md` names the generator of every fixture. The Tests
 workflow runs the suite on every pull request and every push to `main`,
-against the checkout.
-It runs every Monday against the deployed page, so a new package export that
-breaks the page is noticed. `tests/link-sections.spec.js` is the exception:
-it answers the page's export requests from the copies in
-`tests/fixtures/exports/`, so it does not check a new export. On that run the send tests ask the browser for
+against the checkout. On those runs the page gets the instrument exports from
+the copies in `tests/fixtures/exports/`, and a test fails on an export request
+that no route answers.
+It runs every Monday against the deployed page, with the exports fetched from
+the package's site, so a new package export that breaks the page is noticed.
+`tests/exports.spec.js` runs only then, and fails when a copy differs from the
+site's file. `tests/link-sections.spec.js` answers the page's export requests
+from the copies on every run. On that run the send tests ask the browser for
 permission to reach the local recording server from the public page. If
 the browser refuses, they skip with the reason printed.
 

@@ -8,8 +8,11 @@
 # under something that did, such as a new export published by the hitop
 # package.
 #
-# The run goes red on an outage of jmgirard.github.io just as it does on a
-# real break, after the one retry playwright.config.js allows.
+# A pull request and a push answer the instrument exports from the copies in
+# tests/fixtures/exports/. The weekly and manual runs fetch them from
+# jmgirard.github.io and check each copy against the site's file. Those runs
+# go red on an outage of jmgirard.github.io just as on a real break, after
+# the one retry playwright.config.js allows.
 name: Tests
 
 on:
