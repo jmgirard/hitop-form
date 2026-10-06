@@ -325,7 +325,7 @@ test('a c setup over 100,000 bytes is refused with its size, and one of exactly 
   const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
   const study = (bytes) => 's'.repeat(1 + bytes - base1);
 
-  // The online form's host takes 8,192 characters of path and query (link.spec.js
+  // The online form's host takes 8,177 characters of path and query (link.spec.js
   // L38), so the size check passes and the length check refuses.
   const count = hostCount(first) - b64Length(base1) + b64Length(100_000);
   await make(page, study(100_000));

@@ -43,7 +43,7 @@
 //        whose file has not arrived after 30 seconds is refused at the
 //        limit, and "Make the link" then works
 //   LF9: with no site, SONA and Prolific, a setup-file link counting
-//        8,192 characters after its origin is made, and one counting 8,193
+//        8,177 characters after its origin is made, and one counting 8,178
 //        is refused naming that count, with no advice to host a file. Each
 //        Prolific placeholder counts as 24 characters and a Prolific link
 //        counts the three IDs once more; SONA's %SURVEY_CODE% counts as 7

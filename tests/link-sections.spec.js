@@ -1665,7 +1665,7 @@ const REFUSE_AT = [
     name: 'a link longer than the online form\'s host accepts',
     call: ['the online form\'s host accepts'],
     study: 'x'.repeat(7_000),
-    message: /^This link counts [\d,]+ characters after the host name, more than the 8,192 the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
+    message: /^This link counts [\d,]+ characters after the host name, more than the 8,177 the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
     focus: null,
   },
   {

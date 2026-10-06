@@ -393,11 +393,14 @@ function doPost(e) {
   // URIs of at least 8,000 octets. A study link is ASCII, so its length in
   // characters is its length in octets. A longer link gets a warning.
   const LINK_WARN_LENGTH = 8_000;
-  // Fastly, which serves GitHub Pages, answers "414 URI Too Long" for a URL
-  // over 8 KB. On 2026-10-01 GitHub Pages answered a path and query of 8,192
-  // characters and refused one of 8,193 (hitop's
-  // cairn/references/fastly2026limits.md). A longer link is refused.
-  const HOST_PATH_MAX = 8_192;
+  // GitHub Pages hosts the online form, and Fastly serves it from a cache
+  // whose key leaves out the query. On 2026-10-06 a cached page answered a
+  // path and query of 8,192 characters and Fastly refused 8,193 with "414
+  // URI Too Long". A request the cache did not answer went to GitHub's
+  // server, which answered 8,177 characters and refused 8,178 with 400
+  // (hitop's cairn/references/fastly2026limits.md). A participant can open
+  // a link when the page is not cached, so a longer link is refused.
+  const HOST_PATH_MAX = 8_177;
   // Prolific's API reference, "Get submission", shows a participant, a study
   // and a submission ID of 24 characters each, and passes the submission ID
   // as %SESSION_ID%. The Prolific pages hitop's

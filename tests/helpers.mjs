@@ -429,7 +429,7 @@ export function formUrl(base, config, extra = '', param = 'c') {
 }
 
 // Opens `href`, an address too long for any host: the deployed page's host
-// answers 414 past 8,192 characters of path and query, and the local server
+// refuses a path and query past HOST_AT characters, and the local server
 // refuses a request line past Node's 16 KiB. The browser asks for `href`, and
 // the answer is the page fetched at the same address with no query, so the
 // page still reads the long query from its own location.
@@ -458,9 +458,10 @@ export function prolificQuery(given = {}) {
   return part('PROLIFIC_PID', pid) + part('STUDY_ID', study) + part('SESSION_ID', session);
 }
 
-// The online form's host answered 8,192 characters of path and query and
-// refused 8,193 (hitop's cairn/references/fastly2026limits.md).
-export const HOST_AT = 8_192;
+// On a request its cache did not answer, the online form's host answered
+// 8,177 characters of path and query and refused 8,178 (hitop's
+// cairn/references/fastly2026limits.md, 2026-10-06).
+export const HOST_AT = 8_177;
 
 // The length the host sees for a study link, counted apart from the
 // builder: the link after its origin, with each Prolific placeholder

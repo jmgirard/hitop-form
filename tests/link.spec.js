@@ -1446,7 +1446,7 @@ for (const length of [LONG_AT, LONG_AT + 1]) {
 test('L37: the warning goes when a shorter link is made', async ({ page }) => {
   await openBuilder(page);
   // A ?c= of some 8,050 characters: past the warning, within the host's
-  // 8,192 (L38).
+  // HOST_AT (L38).
   await buildPadded(page, 'x'.repeat(6_000));
   await expect(page.locator('#long')).toBeVisible();
   await buildPadded(page, 's');
@@ -1517,9 +1517,9 @@ test('L43: a field changed one frame after the result opens leaves the long-link
   expect(await page.locator('#long').textContent(), 'the long-link line after the change').toBe('');
 });
 
-// L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
-// and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
-// and refused 8,193. The count here is made apart from the builder by
+// L38: on a request its cache did not answer, GitHub Pages answered HOST_AT
+// characters of path and query and refused one more (helpers.mjs and
+// host-limit.spec.js H1). The count here is made apart from the builder by
 // hostCount() in helpers.mjs. Which lengths a ?c= link can reach depends on
 // the page's address and the site's ending (L37), so each length is tried
 // with no ending, SONA's and Prolific's, and each must be reached by one.
@@ -1533,7 +1533,7 @@ async function press(page, study) {
   await expect(page.locator('#out').or(page.locator('#err')).filter({ hasText: /./ })).toHaveCount(1);
 }
 
-test('L38: a link counting 8,192 characters after its origin is made, and one counting 8,193 is refused', async ({ page }) => {
+test(`L38: a link counting ${HOST_AT.toLocaleString('en-US')} characters after its origin is made, and one counting ${(HOST_AT + 1).toLocaleString('en-US')} is refused`, async ({ page }) => {
   const reached = { [HOST_AT]: [], [HOST_AT + 1]: [] };
   for (const site of ['', 'sona', 'prolific']) {
     await openBuilder(page);
@@ -1559,8 +1559,8 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
       }
     }
   }
-  expect(reached[HOST_AT].length, 'some site reaches 8,192').toBeGreaterThan(0);
-  expect(reached[HOST_AT + 1].length, 'some site reaches 8,193').toBeGreaterThan(0);
+  expect(reached[HOST_AT].length, `some site reaches ${HOST_AT}`).toBeGreaterThan(0);
+  expect(reached[HOST_AT + 1].length, `some site reaches ${HOST_AT + 1}`).toBeGreaterThan(0);
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
 });
