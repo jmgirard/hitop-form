@@ -56,6 +56,9 @@
 //        nothing filled, the file not chosen and no uncaught error; the
 //        test first checks that the browser throws on the module's
 //        indented write
+//  LF12: a setup-file link over 8,000 characters shows the long-link line
+//        naming the setup file's address as what makes it long, with no
+//        advice to keep the setup in a file
 //
 // LF7 also holds a throw in the offer's fill and a second throw in
 // emptying the form, which still leave a message and an enabled "Make the
@@ -615,6 +618,21 @@ for (const { site, name, setup } of LF9_SITES) {
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+// LF12: the long-link line under a setup-file link names the file's address
+// as what makes the link long. link.spec.js L37 reads the line under a link
+// that carries its setup.
+test('LF12: the long-link line under a setup-file link names the address, not a hosted file', async ({ page }) => {
+  await serveSetup(page, pretty(PLAIN), { url: (u) => u.hostname === 'setup.example.org' });
+  await openBuilder(page);
+  await fillPlain(page);
+  await chooseFile(page, longAddress(8_000));
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  const href = await page.locator('#out').textContent();
+  expect(href.length).toBeGreaterThan(8_000);
+  await expect(page.locator('#long')).toHaveText(`This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. The address of the setup file makes this link long, and a shorter address makes a shorter link.`);
+});
 
 // LF10: the file's answer is held until the test releases it.
 test('LF10: while the setup file is fetched, typing and "Add an instrument" change nothing', async ({ page }) => {

@@ -1590,8 +1590,10 @@ function doPost(e) {
     a.target = '_blank';
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${href.length.toLocaleString('en-US')} characters)`);
+    // A link that names a setup file is long because of the file's address,
+    // so the line names that and not a hosted file.
     if (href.length > LINK_WARN_LENGTH) {
-      long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.`;
+      long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. ${setupQuery === undefined ? 'You can keep the setup in a file you host instead.' : 'The address of the setup file makes this link long, and a shorter address makes a shorter link.'}`;
       long.hidden = false;
     }
     next.textContent = nextStep(site, kind === 'supabase');
