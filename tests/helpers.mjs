@@ -429,8 +429,9 @@ export function formUrl(base, config, extra = '', param = 'c') {
 }
 
 // Opens `href`, an address too long for any host: the deployed page's host
-// answers 414 past 8,192 characters of path and query, and the local server
-// refuses a request line past Node's 16 KiB. The browser asks for `href`, and
+// refuses a path and query past HOST_AT characters on a cache miss and past
+// 8,192 on a hit, and the local server refuses a request line past Node's
+// 16 KiB. The browser asks for `href`, and
 // the answer is the page fetched at the same address with no query, so the
 // page still reads the long query from its own location.
 export async function gotoLong(page, href) {
@@ -456,6 +457,34 @@ export function prolificQuery(given = {}) {
   const { pid, study, session } = { ...PROLIFIC, ...given };
   const part = (name, v) => (v === null ? '' : `&${name}=${v}`);
   return part('PROLIFIC_PID', pid) + part('STUDY_ID', study) + part('SESSION_ID', session);
+}
+
+// On a request its cache did not answer, the online form's host answered
+// 8,177 characters of path and query and refused 8,178 (hitop's
+// cairn/references/fastly2026limits.md, 2026-10-06).
+export const HOST_AT = 8_177;
+
+// The length the host sees for a study link, counted apart from the
+// builder: the link after its origin, with each Prolific placeholder
+// filled by a 24-character ID like PROLIFIC's, and SONA's %SURVEY_CODE% as
+// 7 characters, the longest code SONA's help gives. A Prolific link counts
+// the three IDs once more, as Prolific's "I'll use URL parameters" option
+// can append them to the study URL.
+export function hostCount(href) {
+  const after = href.slice(new URL(href).origin.length);
+  const filled = after
+    .replace(/\{\{%[A-Z_]+%\}\}/g, PROLIFIC.pid)
+    .replace(/%SURVEY_CODE%/g, 'x'.repeat(7));
+  return filled.length + (after.includes('{{%PROLIFIC_PID%}}') ? prolificQuery().length : 0);
+}
+
+// The builder's refusal of a link whose count passes HOST_AT. `ids` for a
+// Prolific or SONA link, and `setup` for a link that carries its setup.
+export function hostRefusal(count, { ids = false, setup = false } = {}) {
+  return `This link counts ${count.toLocaleString('en-US')} characters after the host name`
+    + (ids ? ', counting the IDs the recruiting site adds' : '')
+    + `, more than the ${HOST_AT.toLocaleString('en-US')} the online form's host accepts.`
+    + (setup ? ' Choose "In a file I host" under "Where the setup is kept".' : '');
 }
 
 // A completion address for a link's `complete` field, of the shape Prolific's

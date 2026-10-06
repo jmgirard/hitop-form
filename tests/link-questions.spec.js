@@ -40,7 +40,7 @@
 //        naming the count, and no link or SQL shows
 
 import { readFile } from 'node:fs/promises';
-import { test, expect, useTarget, openSectionOf, encodeCompressed, decodeLinkParam, begin, walkAll } from './helpers.mjs';
+import { test, expect, useTarget, openSectionOf, encodeCompressed, decodeLinkParam, begin, walkAll, hostCount, hostRefusal } from './helpers.mjs';
 
 const base = useTarget();
 
@@ -325,11 +325,11 @@ test('a c setup over 100,000 bytes is refused with its size, and one of exactly 
   const base1 = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
   const study = (bytes) => 's'.repeat(1 + bytes - base1);
 
-  // The online form's host takes 8,192 characters of path and query (link.spec.js
+  // The online form's host takes 8,177 characters of path and query (link.spec.js
   // L38), so the size check passes and the length check refuses.
-  const length = first.length - b64Length(base1) + b64Length(100_000);
+  const count = hostCount(first) - b64Length(base1) + b64Length(100_000);
   await make(page, study(100_000));
-  await expect(page.locator('#err')).toHaveText(`This link is ${length.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`);
+  await expect(page.locator('#err')).toHaveText(hostRefusal(count, { setup: true }));
   await expect(page.locator('#out')).toHaveText('');
 
   await openBuilder(page);

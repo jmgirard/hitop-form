@@ -393,18 +393,33 @@ function doPost(e) {
   // URIs of at least 8,000 octets. A study link is ASCII, so its length in
   // characters is its length in octets. A longer link gets a warning.
   const LINK_WARN_LENGTH = 8_000;
-  // Fastly, which serves GitHub Pages, answers "414 URI Too Long" for a URL
-  // over 8 KB. On 2026-10-01 GitHub Pages answered a path and query of 8,192
-  // characters and refused one of 8,193 (hitop's
-  // cairn/references/fastly2026limits.md). A longer link is refused.
-  const HOST_PATH_MAX = 8_192;
-  // Prolific's help gives its participant ID as 24 characters. Its study and
-  // session IDs are taken to be as long.
+  // GitHub Pages hosts the online form, and Fastly serves it from a cache
+  // whose key leaves out the query. On 2026-10-06 a cached page answered a
+  // path and query of 8,192 characters and Fastly refused 8,193 with "414
+  // URI Too Long". A request the cache did not answer went to GitHub's
+  // server, which answered 8,177 characters and refused 8,178 with 400
+  // (hitop's cairn/references/fastly2026limits.md). A participant can open
+  // a link when the page is not cached, so a longer link is refused.
+  const HOST_PATH_MAX = 8_177;
+  // Prolific's API reference, "Get submission", shows a participant, a study
+  // and a submission ID of 24 characters each, and passes the submission ID
+  // as %SESSION_ID%. The Prolific pages hitop's
+  // cairn/references/prolific2026help.md lists state no maximum length.
   const PROLIFIC_ID_LENGTH = 24;
+  // Prolific's "I'll use URL parameters" option appends URL parameters to the
+  // study URL, and its help names the three IDs. The count takes them as
+  // appended once more, each as `&NAME=` and an ID: 108 characters at most.
+  const PROLIFIC_APPENDED_LENGTH = PROLIFIC_PARAMS.reduce((n, p) => n + `&${p}=`.length + PROLIFIC_ID_LENGTH, 0);
+  // SONA puts a code of 2 to 7 characters in place of %SURVEY_CODE% (hitop's
+  // cairn/references/sona2026help.md), and the count takes the longest.
+  const SONA_CODE_LENGTH = 7;
   const result = document.getElementById('result');
   // How many times hideResult() ran: a build reads it before and after
   // each wait.
   let changes = 0;
+  // The long-link line's pending write: a build or a change bumps it, so a
+  // write scheduled for an earlier link does nothing.
+  let longWrite = 0;
   const resultHeading = document.getElementById('resultHeading');
   const next = document.getElementById('next');
   const copy = document.getElementById('copy');
@@ -792,6 +807,7 @@ function doPost(e) {
   // count is declared with `result`, because setup renumbers before here.
   function hideResult() {
     changes += 1;
+    longWrite += 1;
     result.hidden = true;
   }
   f.addEventListener('input', hideResult);
@@ -1456,6 +1472,7 @@ function doPost(e) {
     open.textContent = '';
     long.hidden = true;
     long.textContent = '';
+    longWrite += 1;
     next.textContent = '';
     sqlBlock.hidden = true;
     sql.value = '';
@@ -1559,14 +1576,20 @@ function doPost(e) {
     // the site as it expects them.
     const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
     const href = url.href + suffix;
-    // The host sees the path and query, with each Prolific placeholder
-    // replaced by the ID Prolific puts in its place.
+    // The host sees the path and query, with each placeholder replaced by
+    // an ID the site puts in its place: 24 characters for Prolific, the
+    // length its examples show, and 7 for SONA, its longest code. A
+    // Prolific link has the three IDs appended once more.
+    const ids = prolific || site === 'sona';
     const sent = url.pathname.length + url.search.length
-      + (prolific ? suffix.replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH)) : suffix).length;
+      + suffix
+        .replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH))
+        .replace(/%SURVEY_CODE%/g, 'x'.repeat(SONA_CODE_LENGTH)).length
+      + (prolific ? PROLIFIC_APPENDED_LENGTH : 0);
     if (sent > HOST_PATH_MAX) {
       sqlBlock.hidden = true;
       sql.value = '';
-      refuseAt(`This link is ${href.length.toLocaleString('en-US')} characters long, longer than the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
+      refuseAt(`This link counts ${sent.toLocaleString('en-US')} characters after the host name${ids ? ', counting the IDs the recruiting site adds' : ''}, more than the ${HOST_PATH_MAX.toLocaleString('en-US')} the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
       return;
     }
     out.textContent = href;
@@ -1576,9 +1599,19 @@ function doPost(e) {
     a.target = '_blank';
     a.rel = 'noopener';
     open.replaceChildren(a, ` (${href.length.toLocaleString('en-US')} characters)`);
+    // A link that names a setup file is long because of the file's address,
+    // so the line names that and not a hosted file. The line is shown empty
+    // as the result opens, and its text is written in the second frame
+    // after, since a callback of the first runs before that frame is drawn
+    // and a status filled as it is shown can go unannounced.
     if (href.length > LINK_WARN_LENGTH) {
-      long.textContent = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. You can keep the setup in a file you host instead.`;
+      const text = `This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. ${setupQuery === undefined ? 'You can keep the setup in a file you host instead.' : 'The address of the setup file makes this link long, and a shorter address makes a shorter link.'}`;
       long.hidden = false;
+      longWrite += 1;
+      const write = longWrite;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (write === longWrite) long.textContent = text;
+      }));
     }
     next.textContent = nextStep(site, kind === 'supabase');
     copy.hidden = !navigator.clipboard;

@@ -163,12 +163,16 @@
 //       deep is refused by name, with nothing filled and no uncaught error;
 //       the test first checks that the browser throws on the module's
 //       indented write
+//  L43: the long-link line is shown empty in the frame #result opens, and
+//       its text is written two frames later; a field changed one frame
+//       after #result opens leaves the line without the text
 
 import { deflateRawSync } from 'node:zlib';
 import {
   test, expect, useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, routeExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
   expectHeldInput, expectReleasedInput, deepModuleText, encodeCompressedText, DEEP_MODULE_REFUSAL, expectIndentThrows,
+  HOST_AT, hostCount, hostRefusal,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1442,7 +1446,7 @@ for (const length of [LONG_AT, LONG_AT + 1]) {
 test('L37: the warning goes when a shorter link is made', async ({ page }) => {
   await openBuilder(page);
   // A ?c= of some 8,050 characters: past the warning, within the host's
-  // 8,192 (L38).
+  // HOST_AT (L38).
   await buildPadded(page, 'x'.repeat(6_000));
   await expect(page.locator('#long')).toBeVisible();
   await buildPadded(page, 's');
@@ -1450,16 +1454,80 @@ test('L37: the warning goes when a shorter link is made', async ({ page }) => {
   await expect(page.locator('#long')).toHaveText('');
 });
 
-// L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
-// and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
-// and refused 8,193. The count here is made apart from the builder: the link
-// after its origin, with each Prolific placeholder as 24 characters, the
-// length Prolific's help gives for the participant ID. Which lengths a ?c= link can reach depends on
+// L43: a status filled in the frame that shows it can go unannounced. A
+// frame counter and a log of #result and #long at each change: a callback of
+// frame f runs before f is drawn, so text logged two frames after #result
+// opens follows a drawn frame that held #long shown and empty.
+async function logLongLine(page) {
+  await page.evaluate(() => {
+    window.frameNo = 0;
+    const tick = () => { window.frameNo += 1; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    window.longLog = [];
+    const result = document.getElementById('result');
+    const long = document.getElementById('long');
+    new MutationObserver(() => {
+      window.longLog.push({ frame: window.frameNo, resultHidden: result.hidden, longHidden: long.hidden, text: long.textContent });
+    }).observe(result, { attributes: true, childList: true, subtree: true, characterData: true });
+  });
+}
+
+test('L43: the long-link line is shown empty as the result opens, and its text is written two frames later', async ({ page }) => {
+  await openBuilder(page);
+  await logLongLine(page);
+  // A ?c= of some 8,050 characters, as in L37.
+  await buildPadded(page, 'x'.repeat(6_000));
+  await expect(page.locator('#long')).toHaveText(/^This link is [\d,]+ characters long\./);
+  const log = await page.evaluate(() => window.longLog);
+  const opened = log.find((e) => !e.resultHidden);
+  const written = log.find((e) => e.text !== '');
+  expect(opened, 'the result opened').toBeDefined();
+  expect({ longHidden: opened.longHidden, text: opened.text }, '#long as #result opens').toEqual({ longHidden: false, text: '' });
+  expect(written.frame - opened.frame, 'frames between the opening and the text').toBeGreaterThanOrEqual(2);
+});
+
+test('L43: a field changed one frame after the result opens leaves the long-link line without the text', async ({ page }) => {
+  await openBuilder(page);
+  // One frame after #result opens, the study box takes a character, as
+  // typing does.
+  await page.evaluate(() => {
+    const result = document.getElementById('result');
+    const watch = new MutationObserver(() => {
+      if (result.hidden) return;
+      watch.disconnect();
+      requestAnimationFrame(() => {
+        const study = document.querySelector('input[name="study"]');
+        study.value += 'y';
+        study.dispatchEvent(new Event('input', { bubbles: true }));
+        window.changedAt = true;
+      });
+    });
+    watch.observe(result, { attributes: true });
+  });
+  await page.locator('input[name="study"]').fill('x'.repeat(6_000));
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await page.waitForFunction(() => window.changedAt === true);
+  // Five frames, past the two the write waits.
+  await page.evaluate(() => new Promise((r) => {
+    let n = 0;
+    const step = () => { n += 1; if (n === 5) r(); else requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }));
+  // The link made was long enough for the line, and #long was unhidden for
+  // it, so the empty text is the cancelled write.
+  expect((await page.locator('#out').textContent()).length, 'the link made').toBeGreaterThan(8_000);
+  expect(await page.locator('#long').evaluate((l) => l.hidden), '#long unhidden for that link').toBe(false);
+  await expect(page.locator('#result')).toBeHidden();
+  expect(await page.locator('#long').textContent(), 'the long-link line after the change').toBe('');
+});
+
+// L38: on a request its cache did not answer, GitHub Pages answered HOST_AT
+// characters of path and query and refused one more (helpers.mjs and
+// host-limit.spec.js H1). The count here is made apart from the builder by
+// hostCount() in helpers.mjs. Which lengths a ?c= link can reach depends on
 // the page's address and the site's ending (L37), so each length is tried
 // with no ending, SONA's and Prolific's, and each must be reached by one.
-const HOST_AT = 8_192;
-const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
-const HOST_REFUSED = (n) => `This link is ${n.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`;
+// link-setupfile.spec.js LF9 reaches both lengths for each site.
 
 // Presses "Make the link" with the study name given, and waits for a link
 // or a refusal.
@@ -1469,7 +1537,7 @@ async function press(page, study) {
   await expect(page.locator('#out').or(page.locator('#err')).filter({ hasText: /./ })).toHaveCount(1);
 }
 
-test('L38: a link counting 8,192 characters after its origin is made, and one counting 8,193 is refused', async ({ page }) => {
+test(`L38: a link counting ${HOST_AT.toLocaleString('en-US')} characters after its origin is made, and one counting ${(HOST_AT + 1).toLocaleString('en-US')} is refused`, async ({ page }) => {
   const reached = { [HOST_AT]: [], [HOST_AT + 1]: [] };
   for (const site of ['', 'sona', 'prolific']) {
     await openBuilder(page);
@@ -1479,7 +1547,6 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
     const first = await page.locator('#out').textContent();
     const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
     const restCount = hostCount(first) - b64Length(bytes);
-    const restLength = first.length - b64Length(bytes);
     for (const target of [HOST_AT, HOST_AT + 1]) {
       const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => restCount + b64Length(k) === target);
       if (n === undefined) continue;
@@ -1490,14 +1557,14 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
         const href = await page.locator('#out').textContent();
         expect(hostCount(href), `${site || 'no site'} at ${target}`).toBe(target);
       } else {
-        await expect(page.locator('#err')).toHaveText(HOST_REFUSED(restLength + b64Length(n)));
+        await expect(page.locator('#err')).toHaveText(hostRefusal(target, { ids: site !== '', setup: true }));
         await expect(page.locator('#result')).toBeHidden();
         await expect(page.locator('#out')).toHaveText('');
       }
     }
   }
-  expect(reached[HOST_AT].length, 'some site reaches 8,192').toBeGreaterThan(0);
-  expect(reached[HOST_AT + 1].length, 'some site reaches 8,193').toBeGreaterThan(0);
+  expect(reached[HOST_AT].length, `some site reaches ${HOST_AT}`).toBeGreaterThan(0);
+  expect(reached[HOST_AT + 1].length, `some site reaches ${HOST_AT + 1}`).toBeGreaterThan(0);
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'Prolific reaches one length').toContain('prolific');
   expect([...reached[HOST_AT], ...reached[HOST_AT + 1]], 'SONA reaches one length').toContain('sona');
 });

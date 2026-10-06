@@ -42,10 +42,11 @@
 //        100,000 bytes is refused in the builder's refusal pattern; one
 //        whose file has not arrived after 30 seconds is refused at the
 //        limit, and "Make the link" then works
-//   LF9: a setup-file link counting 8,192 characters after its origin is
-//        made, and one counting 8,193 is refused naming its length, with no
-//        advice to host a file; with Prolific chosen, each placeholder
-//        counts as 24 characters
+//   LF9: with no site, SONA and Prolific, a setup-file link counting
+//        8,177 characters after its origin is made, and one counting 8,178
+//        is refused naming that count, with no advice to host a file. Each
+//        Prolific placeholder counts as 24 characters and a Prolific link
+//        counts the three IDs once more; SONA's %SURVEY_CODE% counts as 7
 //  LF10: while an opened link's setup file is fetched, typing in the study
 //        box and pressing "Add an instrument" change nothing; once the
 //        file arrives, the box holds the file's study name and takes
@@ -55,6 +56,9 @@
 //        nothing filled, the file not chosen and no uncaught error; the
 //        test first checks that the browser throws on the module's
 //        indented write
+//  LF12: a setup-file link over 8,000 characters shows the long-link line
+//        naming the setup file's address as what makes it long, with no
+//        advice to keep the setup in a file
 //
 // LF7 also holds a throw in the offer's fill and a second throw in
 // emptying the form, which still leave a message and an enabled "Make the
@@ -64,7 +68,7 @@ import { readFile } from 'node:fs/promises';
 import {
   test, expect, useTarget, openSectionOf, encodeConfig, encodeCompressed, setupFingerprint, serveSetup, setupQuery, retiredIn,
   SETUP_URL, COMPLETE_URL, SETUP_TIMEOUT_MS, armOnAddress, expectHeldInput, expectReleasedInput,
-  deepModuleText, textFingerprint, DEEP_MODULE_REFUSAL, expectIndentThrows,
+  deepModuleText, textFingerprint, DEEP_MODULE_REFUSAL, expectIndentThrows, HOST_AT, hostCount, hostRefusal,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -577,39 +581,65 @@ for (const fault of FETCH_FAULTS) {
   });
 }
 
-// LF9: the count is made apart from the builder, as in link.spec.js L38: the
-// link after its origin, each Prolific placeholder as 24 characters. The
-// address's path sets the length one character at a time.
-const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
+// LF9: the count is made apart from the builder by hostCount() in
+// helpers.mjs, as in link.spec.js L38. The address's path sets the length
+// one character at a time, so every site reaches both lengths.
 const longAddress = (k) => `https://setup.example.org/${'a'.repeat(k)}.json`;
+const LF9_SITES = [
+  { site: '', name: 'no site', setup: PLAIN },
+  { site: 'sona', name: 'SONA', setup: { ...PLAIN, participantParam: 'id' } },
+  { site: 'prolific', name: 'Prolific', setup: { ...PLAIN, prolific: true } },
+];
 
-for (const prolific of [false, true]) {
-  test(`a setup-file link${prolific ? ' for Prolific' : ''} counting 8,192 characters is made, and one counting 8,193 is refused naming its length`, async ({ page }) => {
-    await serveSetup(page, pretty(prolific ? { ...PLAIN, prolific: true } : PLAIN), { url: (u) => u.hostname === 'setup.example.org' });
+for (const { site, name, setup } of LF9_SITES) {
+  test(`LF9: a setup-file link for ${name} counting ${HOST_AT.toLocaleString('en-US')} characters is made, and one counting ${(HOST_AT + 1).toLocaleString('en-US')} is refused naming its count`, async ({ page }) => {
+    await serveSetup(page, pretty(setup), { url: (u) => u.hostname === 'setup.example.org' });
     await openBuilder(page);
     await fillPlain(page);
-    if (prolific) {
+    if (site !== '') {
       await openSectionOf(page, 'site');
-      await page.locator('select[name="site"]').selectOption('prolific');
+      await page.locator('select[name="site"]').selectOption(site);
     }
     await chooseFile(page, longAddress(1));
     await make(page).click();
     await expect(page.locator('#result')).toBeVisible();
     const first = await page.locator('#out').textContent();
 
-    const k = 1 + 8_192 - hostCount(first);
+    const k = 1 + HOST_AT - hostCount(first);
     await addressField(page).fill(longAddress(k));
     await make(page).click();
     await expect(page.locator('#result')).toBeVisible();
     await expect(err(page)).toHaveText('');
-    expect(hostCount(await page.locator('#out').textContent())).toBe(8_192);
+    expect(hostCount(await page.locator('#out').textContent())).toBe(HOST_AT);
 
     await addressField(page).fill(longAddress(k + 1));
     await make(page).click();
-    await expectRefused(page, `This link is ${(first.length + k).toLocaleString('en-US')} characters long, longer than the online form's host accepts.`);
+    await expectRefused(page, hostRefusal(HOST_AT + 1, { ids: site !== '' }));
     await expect(page.locator('#out')).toHaveText('');
   });
 }
+
+// LF12: the long-link line under a setup-file link names the file's address
+// as what makes the link long. link.spec.js L37 reads the line under a link
+// that carries its setup.
+test('LF12: the long-link line under a setup-file link names the address, not a hosted file', async ({ page }) => {
+  await serveSetup(page, pretty(PLAIN), { url: (u) => u.hostname === 'setup.example.org' });
+  await openBuilder(page);
+  await fillPlain(page);
+  // The address is sized from a first link so the count is 8,100 wherever
+  // the page is served: past the warning, under HOST_AT.
+  await chooseFile(page, longAddress(1));
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  const k = 1 + 8_100 - hostCount(await page.locator('#out').textContent());
+  await addressField(page).fill(longAddress(k));
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  const href = await page.locator('#out').textContent();
+  expect(hostCount(href)).toBe(8_100);
+  expect(href.length).toBeGreaterThan(8_000);
+  await expect(page.locator('#long')).toHaveText(`This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. The address of the setup file makes this link long, and a shorter address makes a shorter link.`);
+});
 
 // LF10: the file's answer is held until the test releases it.
 test('LF10: while the setup file is fetched, typing and "Add an instrument" change nothing', async ({ page }) => {

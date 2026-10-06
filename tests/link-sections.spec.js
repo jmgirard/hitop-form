@@ -1660,12 +1660,12 @@ const REFUSE_AT = [
     focus: null,
   },
   {
-    // A ?c= of some 9,400 characters. link.spec.js L38 checks the length
+    // A ?c= of some 9,400 characters. link.spec.js L38 checks the count
     // the message names.
     name: 'a link longer than the online form\'s host accepts',
-    call: ['longer than the online form'],
+    call: ['the online form\'s host accepts'],
     study: 'x'.repeat(7_000),
-    message: /^This link is [\d,]+ characters long, longer than the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
+    message: /^This link counts [\d,]+ characters after the host name, more than the 8,177 the online form's host accepts\. Choose "In a file I host" under "Where the setup is kept"\.$/,
     focus: null,
   },
   {
