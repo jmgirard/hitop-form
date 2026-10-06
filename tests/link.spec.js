@@ -163,6 +163,9 @@
 //       deep is refused by name, with nothing filled and no uncaught error;
 //       the test first checks that the browser throws on the module's
 //       indented write
+//  L43: the long-link line is shown empty in the frame #result opens, and
+//       its text is written two frames later; a field changed one frame
+//       after #result opens leaves the line without the text
 
 import { deflateRawSync } from 'node:zlib';
 import {
@@ -1449,6 +1452,69 @@ test('L37: the warning goes when a shorter link is made', async ({ page }) => {
   await buildPadded(page, 's');
   await expect(page.locator('#long')).toBeHidden();
   await expect(page.locator('#long')).toHaveText('');
+});
+
+// L43: a status filled in the frame that shows it can go unannounced. A
+// frame counter and a log of #result and #long at each change: a callback of
+// frame f runs before f is drawn, so text logged two frames after #result
+// opens follows a drawn frame that held #long shown and empty.
+async function logLongLine(page) {
+  await page.evaluate(() => {
+    window.frameNo = 0;
+    const tick = () => { window.frameNo += 1; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    window.longLog = [];
+    const result = document.getElementById('result');
+    const long = document.getElementById('long');
+    new MutationObserver(() => {
+      window.longLog.push({ frame: window.frameNo, resultHidden: result.hidden, longHidden: long.hidden, text: long.textContent });
+    }).observe(result, { attributes: true, childList: true, subtree: true, characterData: true });
+  });
+}
+
+test('L43: the long-link line is shown empty as the result opens, and its text is written two frames later', async ({ page }) => {
+  await openBuilder(page);
+  await logLongLine(page);
+  // A ?c= of some 8,050 characters, as in L37.
+  await buildPadded(page, 'x'.repeat(6_000));
+  await expect(page.locator('#long')).toHaveText(/^This link is [\d,]+ characters long\./);
+  const log = await page.evaluate(() => window.longLog);
+  const opened = log.find((e) => !e.resultHidden);
+  const written = log.find((e) => e.text !== '');
+  expect(opened, 'the result opened').toBeDefined();
+  expect({ longHidden: opened.longHidden, text: opened.text }, '#long as #result opens').toEqual({ longHidden: false, text: '' });
+  expect(written.frame - opened.frame, 'frames between the opening and the text').toBeGreaterThanOrEqual(2);
+});
+
+test('L43: a field changed one frame after the result opens leaves the long-link line without the text', async ({ page }) => {
+  await openBuilder(page);
+  // One frame after #result opens, the study box takes a character, as
+  // typing does.
+  await page.evaluate(() => {
+    const result = document.getElementById('result');
+    const watch = new MutationObserver(() => {
+      if (result.hidden) return;
+      watch.disconnect();
+      requestAnimationFrame(() => {
+        const study = document.querySelector('input[name="study"]');
+        study.value += 'y';
+        study.dispatchEvent(new Event('input', { bubbles: true }));
+        window.changedAt = true;
+      });
+    });
+    watch.observe(result, { attributes: true });
+  });
+  await page.locator('input[name="study"]').fill('x'.repeat(6_000));
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  await page.waitForFunction(() => window.changedAt === true);
+  // Five frames, past the two the write waits.
+  await page.evaluate(() => new Promise((r) => {
+    let n = 0;
+    const step = () => { n += 1; if (n === 5) r(); else requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }));
+  await expect(page.locator('#result')).toBeHidden();
+  expect(await page.locator('#long').textContent(), 'the long-link line after the change').toBe('');
 });
 
 // L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
