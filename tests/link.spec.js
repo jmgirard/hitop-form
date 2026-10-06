@@ -1513,6 +1513,10 @@ test('L43: a field changed one frame after the result opens leaves the long-link
     const step = () => { n += 1; if (n === 5) r(); else requestAnimationFrame(step); };
     requestAnimationFrame(step);
   }));
+  // The link made was long enough for the line, and #long was unhidden for
+  // it, so the empty text is the cancelled write.
+  expect((await page.locator('#out').textContent()).length, 'the link made').toBeGreaterThan(8_000);
+  expect(await page.locator('#long').evaluate((l) => l.hidden), '#long unhidden for that link').toBe(false);
   await expect(page.locator('#result')).toBeHidden();
   expect(await page.locator('#long').textContent(), 'the long-link line after the change').toBe('');
 });

@@ -236,9 +236,10 @@ page. None of the Prolific pages that the hitop package's source notes list
 states a maximum length. A Prolific link also counts the three IDs once
 more, as `&PROLIFIC_PID=`, `&STUDY_ID=` and `&SESSION_ID=` with 24
 characters each, 108 characters in all. Prolific's "I'll use URL
-parameters" option appends URL parameters to the study URL, and its help
-does not say which or how. SONA's `%SURVEY_CODE%` counts as 7 characters,
-the longest code SONA's help gives. The message gives the count, and for a
+parameters" option appends URL parameters to the study URL. Its help names
+the three IDs, but not their order or their form in the address. SONA's
+`%SURVEY_CODE%` counts as 7 characters, the longest code SONA's help
+gives. The message gives the count, and for a
 Prolific or SONA link it says that the count takes the site's IDs at their
 longest. For a link that carries its setup, it also says to choose "In a
 file I host". If a field changes while the link is being made, no link is

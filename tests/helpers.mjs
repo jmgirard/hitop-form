@@ -429,8 +429,9 @@ export function formUrl(base, config, extra = '', param = 'c') {
 }
 
 // Opens `href`, an address too long for any host: the deployed page's host
-// refuses a path and query past HOST_AT characters, and the local server
-// refuses a request line past Node's 16 KiB. The browser asks for `href`, and
+// refuses a path and query past HOST_AT characters on a cache miss and past
+// 8,192 on a hit, and the local server refuses a request line past Node's
+// 16 KiB. The browser asks for `href`, and
 // the answer is the page fetched at the same address with no query, so the
 // page still reads the long query from its own location.
 export async function gotoLong(page, href) {
