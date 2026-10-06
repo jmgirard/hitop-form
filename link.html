@@ -74,6 +74,7 @@
                   padding: var(--s3) var(--s4); margin: 0 0 var(--s5); overflow-wrap: anywhere; }
   #setupChanged p:last-child { margin: 0; }
   #setupChanged button.secondary { margin-left: 0; }
+  #sheetFields button.secondary { margin-left: 0; }
   .site-hint { color: var(--muted); font-size: .875rem; margin-top: calc(-1 * var(--s2)); }
   fieldset { border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3) var(--s4); margin: 0 0 var(--s4); }
   legend { font-weight: 600; padding: 0 var(--s1); }
@@ -133,16 +134,82 @@
     </label>
     <fieldset id="destBlock">
       <legend id="destLegend">Where responses go</legend>
-      <span class="hint" id="destHint">A file goes to the participant's downloads. A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
+      <span class="hint" id="destHint">A file goes to the participant's downloads. A Google Sheet, or another web address, gets one JSON row per participant, and a Supabase table one row, a column per item. <a href="https://github.com/jmgirard/hitop-form#where-responses-go">Set up a sheet or a table</a>.</span>
       <select name="storeKind" aria-labelledby="destLegend" aria-describedby="destHint">
         <option value="">A file on the participant's device</option>
-        <option value="webhook">A web address</option>
+        <option value="sheet">A Google Sheet</option>
+        <option value="webhook">Another web address</option>
         <option value="supabase">A Supabase table</option>
       </select>
+      <div id="sheetFields" hidden>
+        <ol id="sheetSteps">
+          <li>Make a new Google Sheet. In its menu, choose Extensions, then Apps Script.</li>
+          <li>Press "Copy the script". In Apps Script, paste it over everything in <code>Code.gs</code>, and save.</li>
+          <li>Choose Deploy, then New deployment. Set the type to Web app, "Execute as" to Me, and "Who has access" to Anyone. Press Deploy, and allow the script when Google asks.</li>
+          <li>Copy the web app URL, which ends in <code>/exec</code>, and paste it below.</li>
+        </ol>
+        <p><button type="button" class="secondary" id="copyScript">Copy the script</button></p>
+        <p id="sheetMore">The rows go to the sheet's Responses tab. <a href="https://github.com/jmgirard/hitop-form#send-responses-to-a-google-sheet">What the script does, and how to change it</a>.</p>
+        <label>Web app URL
+          <span class="hint">The address of the sheet's Apps Script web app. It ends in /exec.</span>
+          <input name="sheetUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+        </label>
+        <!-- The script "Copy the script" copies: the README's code under
+             "Send responses to a Google Sheet", which a test keeps equal to
+             this copy. -->
+        <script type="text/plain" id="sheetScript">
+// Appends one row per POST to the sheet named below, creating it on the
+// first row. The first row's keys become the header. Later rows follow the
+// header's order, and a key the header lacks is added to it. A body that
+// is not an object, has more than MAX_KEYS keys, or has a key outside
+// a-z, 0-9 and _ is refused, so no one can grow the header without limit
+// or put a formula in it. Every cell is written behind a leading
+// apostrophe, the sheet's mark for text, and formatted as text, so "007"
+// keeps its zeros and "=1+1" stays the text =1+1 rather than a formula
+// (the text format alone does not stop the formula). Answers {"ok":true},
+// or {"ok":false} with the reason when the body is refused.
+const SHEET_NAME = 'Responses';
+const MAX_KEYS = 1000;
+const asText = (v) => "'" + String(v);
+const answer = (body) => ContentService.createTextOutput(JSON.stringify(body))
+  .setMimeType(ContentService.MimeType.JSON);
+
+function doPost(e) {
+  const row = JSON.parse(e.postData.contents);
+  if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+    return answer({ ok: false, why: 'the body is not an object' });
+  }
+  const keys = Object.keys(row);
+  if (keys.length > MAX_KEYS) return answer({ ok: false, why: 'too many keys' });
+  const badKey = keys.find((k) => !/^[a-z0-9_]+$/.test(k));
+  if (badKey !== undefined) return answer({ ok: false, why: 'a key is not a column name' });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const book = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = book.getSheetByName(SHEET_NAME) || book.insertSheet(SHEET_NAME);
+    let header = sheet.getLastRow() === 0
+      ? []
+      : sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    const missing = keys.filter((k) => !header.includes(k));
+    if (missing.length) {
+      header = header.concat(missing);
+      sheet.getRange(1, 1, 1, header.length).setNumberFormat('@').setValues([header.map(asText)]);
+    }
+    const values = header.map((k) => (k in row ? asText(row[k]) : ''));
+    const at = sheet.getLastRow() + 1;
+    sheet.getRange(at, 1, 1, values.length).setNumberFormat('@').setValues([values]);
+  } finally {
+    lock.releaseLock();
+  }
+  return answer({ ok: true });
+}
+</script>
+      </div>
       <div id="webhookFields" hidden>
         <label>Web address
           <span class="hint">The https:// address that receives each participant's row.</span>
-          <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+          <input name="store" type="text" autocomplete="off" spellcheck="false" placeholder="https://example.org/responses">
         </label>
       </div>
       <div id="supabaseFields" hidden>
@@ -350,10 +417,25 @@
 
   // Only the chosen kind's fields show.
   function showKind() {
+    document.getElementById('sheetFields').hidden = kindSelect.value !== 'sheet';
     document.getElementById('webhookFields').hidden = kindSelect.value !== 'webhook';
     document.getElementById('supabaseFields').hidden = kindSelect.value !== 'supabase';
   }
   kindSelect.addEventListener('change', showKind);
+
+  // An Apps Script web app's address: https, the host script.google.com and
+  // a path that ends in /exec, as a personal account's
+  // /macros/s/<id>/exec and a Workspace account's /a/macros/<domain>/s/<id>/exec
+  // both do, on the default port. The query and the fragment are not read.
+  function isSheetUrl(v) {
+    if (typeof v !== 'string') return false;
+    try {
+      const u = new URL(v.trim());
+      return u.protocol === 'https:' && u.hostname === 'script.google.com' && u.port === '' && u.pathname.endsWith('/exec');
+    } catch {
+      return false;
+    }
+  }
 
   // Only the chosen recruiting site's hint, or the other site's field, shows.
   // The hints sit outside the menu's label, so the shown one is tied to the
@@ -1227,11 +1309,18 @@
       instrumentList.children[stems.indexOf('hitopsr')].querySelector('textarea[name="module"]').value = moduleText;
     }
     const store = config.store;
+    // A web address that is an Apps Script web app's opens as "A Google
+    // Sheet", and any other as "Another web address": the link holds the
+    // same kind for both.
     if (isPlainObject(store) && (store.kind === 'webhook' || store.kind === 'supabase')) {
-      kindSelect.value = store.kind;
-      if (store.kind === 'webhook') {
+      if (store.kind === 'webhook' && isSheetUrl(store.url)) {
+        kindSelect.value = 'sheet';
+        address('sheetUrl', 'Web app URL', store.url);
+      } else if (store.kind === 'webhook') {
+        kindSelect.value = 'webhook';
         address('store', 'Web address', store.url);
       } else {
+        kindSelect.value = 'supabase';
         address('supabaseUrl', 'Project URL', store.url);
         text('supabaseKey', store.key);
         text('supabaseTable', store.table);
@@ -1265,7 +1354,7 @@
     // no site hint, other-site field, destination fields or setup-file
     // fields, every summary "Not used", every section closed, and no notice
     // or offer.
-    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'webhookFields', 'supabaseFields', 'setupFileFields']) {
+    for (const id of [...Object.values(SITE_HINTS), 'otherFields', 'sheetFields', 'webhookFields', 'supabaseFields', 'setupFileFields']) {
       document.getElementById(id).hidden = true;
     }
     siteSelect.removeAttribute('aria-describedby');
@@ -1715,8 +1804,11 @@
     const kind = data.get('storeKind');
     if (kind !== '') {
       // The same check the form page runs on the link, so a store it would
-      // refuse is refused here, at the researcher.
-      const store = kind === 'webhook'
+      // refuse is refused here, at the researcher. "A Google Sheet" and
+      // "Another web address" both make a webhook.
+      const store = kind === 'sheet'
+        ? { kind: 'webhook', url: data.get('sheetUrl').trim() }
+        : kind === 'webhook'
         ? { kind, url: data.get('store').trim() }
         : {
             kind,
@@ -1733,10 +1825,19 @@
         config.store = checkStore(store);
       } catch (e) {
         const opening = (what) => new RegExp(`^Where responses go could not be used: (its|it names no) ${what}\\b`);
-        const name = kind === 'webhook' ? 'store'
+        const name = kind === 'sheet' ? 'sheetUrl'
+          : kind === 'webhook' ? 'store'
           : opening('key').test(e.message) ? 'supabaseKey'
           : opening('table').test(e.message) ? 'supabaseTable' : 'supabaseUrl';
         refuseAt(e.message, f.elements[name]);
+        return;
+      }
+      // "A Google Sheet" takes only an Apps Script web app's address, read
+      // after the online form's own check so an http: address gets that
+      // check's message. Pasting the sheet's or the script editor's address
+      // is the slip this catches.
+      if (kind === 'sheet' && !isSheetUrl(config.store.url)) {
+        refuseAt('Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".', f.elements.sheetUrl);
         return;
       }
     }
@@ -1786,6 +1887,22 @@
       setTimeout(() => { copySql.textContent = 'Copy the SQL'; }, 1500);
     } catch {
       err.textContent = 'The SQL could not be copied. Select it and copy by hand.';
+    }
+  });
+
+  // The script as the README prints it: the text after the element's
+  // opening line break, which ends in one line break.
+  // Hidden, as the other copy buttons are, where the browser has no
+  // clipboard; the README link under it still gives the script.
+  const copyScript = document.getElementById('copyScript');
+  copyScript.hidden = !navigator.clipboard;
+  copyScript.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('sheetScript').textContent.replace(/^\n/, ''));
+      copyScript.textContent = 'Copied';
+      setTimeout(() => { copyScript.textContent = 'Copy the script'; }, 1500);
+    } catch {
+      err.textContent = 'The script could not be copied. Under "A Google Sheet", open "What the script does, and how to change it" and copy it from there.';
     }
   });
 

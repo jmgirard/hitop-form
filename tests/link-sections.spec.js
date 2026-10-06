@@ -578,21 +578,26 @@ for (const [kind, o] of Object.entries(ORDERS)) {
 // each pair gets, written out in full here rather than built, so a test
 // cannot share a mistake with the page's own wording.
 const SITES = ['', 'prolific', 'sona', 'connect', 'other'];
-const KINDS = ['', 'webhook', 'supabase'];
+const KINDS = ['', 'sheet', 'webhook', 'supabase'];
 const NEXT = [
   ['', '', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'sheet', 'Open the link once to test it, and then give it to each participant.'],
   ['', 'webhook', 'Open the link once to test it, and then give it to each participant.'],
   ['', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor, then open the link once to test it and give it to each participant.'],
   ['prolific', '', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'sheet', 'Paste the link into your study\'s page on Prolific.'],
   ['prolific', 'webhook', 'Paste the link into your study\'s page on Prolific.'],
   ['prolific', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on Prolific.'],
   ['sona', '', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'sheet', 'Paste the link into your study\'s page on SONA.'],
   ['sona', 'webhook', 'Paste the link into your study\'s page on SONA.'],
   ['sona', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on SONA.'],
   ['connect', '', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'sheet', 'Paste the link into your study\'s page on CloudResearch Connect.'],
   ['connect', 'webhook', 'Paste the link into your study\'s page on CloudResearch Connect.'],
   ['connect', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on CloudResearch Connect.'],
   ['other', '', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'sheet', 'Paste the link into your study\'s page on your recruiting site.'],
   ['other', 'webhook', 'Paste the link into your study\'s page on your recruiting site.'],
   ['other', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on your recruiting site.'],
 ];
@@ -605,7 +610,8 @@ test('the next-step table holds one sentence for each site and destination', () 
 // Fills the destination's fields for a kind.
 async function chooseDestination(page, kind) {
   await page.locator('select[name="storeKind"]').selectOption(kind);
-  if (kind === 'webhook') await page.locator('input[name="store"]').fill('https://script.google.com/macros/s/abc/exec');
+  if (kind === 'sheet') await page.locator('input[name="sheetUrl"]').fill('https://script.google.com/macros/s/abc/exec');
+  if (kind === 'webhook') await page.locator('input[name="store"]').fill('https://example.org/rows');
   if (kind === 'supabase') {
     await page.locator('input[name="supabaseUrl"]').fill('https://abcdefghijkl.supabase.co');
     await page.locator('input[name="supabaseKey"]').fill('sb_publishable_test');
@@ -771,7 +777,7 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
     await expectText(page, `site ${JSON.stringify(site)}`);
   }
   await page.locator('select[name="site"]').selectOption('');
-  for (const kind of ['', 'webhook', 'supabase']) {
+  for (const kind of KINDS) {
     await chooseDestination(page, kind);
     await expectText(page, `destination ${JSON.stringify(kind)}`);
   }
@@ -997,7 +1003,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
-  await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');
+  await expect(page.locator('#destHint')).toContainText('A Google Sheet, or another web address, gets one JSON row per participant, and a Supabase table one row, a column per item.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('At most one PID-5 form. At most one HiTOP-SR, whole or as a module.');
   const sqlHint = page.locator('#sqlBlock .hint');
@@ -1089,10 +1095,10 @@ test('labelText() uses no copying method', async ({ page }) => {
 });
 
 // S11: a throw in the setup steps after the prefill leaves a clean page.
-// The opened link sets SONA, a web address for the responses and consent
-// text. The throw is in the last setup step, the loop that opens filled
-// sections, when it opens the consent section. By then showKind() has shown
-// the web address block, showSite() the SONA hint, showHeld() the filled
+// The opened link sets SONA, a Google Sheet's web app URL for the responses
+// and consent text. The throw is in the last setup step, the loop that opens
+// filled sections, when it opens the consent section. By then showKind() has
+// shown the Google Sheet block, showSite() the SONA hint, showHeld() the filled
 // summaries, and the loop has opened the participants section, so each
 // check below fails unless the catch undoes that step.
 test('a throw after the prefill leaves a clean page that still builds', async ({ page }) => {
@@ -1129,7 +1135,7 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
   }
   // The hints sit in a closed section, so each is checked by its own
   // hidden flag rather than by whether it shows.
-  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'webhookFields', 'supabaseFields']) {
+  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'sheetFields', 'webhookFields', 'supabaseFields']) {
     expect(await page.locator(`#${id}`).evaluate((node) => node.hidden), id).toBe(true);
   }
   await expect(page.locator('select[name="site"]')).not.toHaveAttribute('aria-describedby');
@@ -1570,6 +1576,16 @@ const REFUSE_AT = [
     },
     message: /^Where responses go could not be used: /,
     focus: field('store'),
+  },
+  {
+    name: 'store: a sheet\'s own address under "A Google Sheet"',
+    call: ['needs the web app URL'],
+    fill: async (page) => {
+      await page.locator(field('storeKind')).selectOption('sheet');
+      await page.locator(field('sheetUrl')).fill('https://docs.google.com/spreadsheets/d/x/edit');
+    },
+    message: 'Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".',
+    focus: field('sheetUrl'),
   },
   {
     name: 'store: a bad project URL',

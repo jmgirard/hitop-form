@@ -146,7 +146,7 @@ test('a z parameter fills the consent fields and round-trips', async ({ page }) 
   await expect(page.locator('#prefilled li')).toHaveText([
     `Completion URL: ${config.complete}`,
     `Completion URL after a decline: ${config.completeDeclined}`,
-    `Web address: ${config.store.url}`,
+    `Web app URL: ${config.store.url}`,
   ]);
   await page.getByRole('button', { name: 'Make the link' }).click();
   await expect(page.locator('#out')).not.toBeEmpty();

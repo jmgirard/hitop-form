@@ -58,8 +58,9 @@
 //       shows the chosen store kind's field group and hides the other (both
 //       for no store), and "Make the link" then builds a link whose c
 //       decodes to a config deep-equal to the one opened: once per store
-//       choice (none, a web address, a Supabase table), two runs with a
-//       participant and one under Prolific with none, every run with a
+//       choice (none, a Google Sheet, another web address, a Supabase
+//       table), three runs with a participant and one under Prolific with
+//       none, every run with a
 //       module, the random order and both completion URLs
 //  L17: a c carrying only the instrument selects it and leaves every other
 //       control as a load with no c leaves it; one carrying the instrument
@@ -77,8 +78,9 @@
 //  L19: above the form, the intro asks for the required parts, names
 //       "Make the link" and links the online-collection tutorial; the module
 //       hint links the Module Builder
-//  L20: a c filling any of the four address fields (Web address, Project
-//       URL, Completion URL, Completion URL after a saved file) with a string
+//  L20: a c filling any of the five address fields (Web app URL, Web
+//       address, Project URL, Completion URL, Completion URL after a saved
+//       file) with a string
 //       that leaves the field non-empty lists each filled one, after its
 //       label name, in a notice between the intro and the form, as the
 //       field holds it: each field alone, the most one c can carry once per
@@ -630,7 +632,8 @@ async function openBuilder(page, { config, raw } = {}) {
 // no path), so the round trip has nothing to normalise.
 const PREFILL_STORES = [
   { name: 'no store, with a participant', participant: 'l16' },
-  { name: 'a web address, under Prolific', prolific: true, store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' } },
+  { name: 'a Google Sheet, with a participant', participant: 'l16g', choice: 'sheet', store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' } },
+  { name: 'another web address, under Prolific', prolific: true, choice: 'webhook', store: { kind: 'webhook', url: 'https://example.org/rows' } },
   {
     name: 'a Supabase table, with a participant',
     participant: 'l16s',
@@ -658,11 +661,14 @@ for (const w of PREFILL_STORES) {
     await expect(page.locator('input[name="complete"]')).toHaveValue(COMPLETE_URL);
     await expect(page.locator('input[name="completeSaved"]')).toHaveValue(COMPLETE_SAVED_URL);
     expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
-    const kind = w.store ? w.store.kind : '';
+    // A web address opens as the choice its address names.
+    const kind = w.store ? (w.choice ?? w.store.kind) : '';
     await expect(page.locator('select[name="storeKind"]')).toHaveValue(kind);
     // The chosen kind's field group shows and any other is hidden.
+    await expect(page.locator('#sheetFields')).toBeVisible({ visible: kind === 'sheet' });
     await expect(page.locator('#webhookFields')).toBeVisible({ visible: kind === 'webhook' });
     await expect(page.locator('#supabaseFields')).toBeVisible({ visible: kind === 'supabase' });
+    if (kind === 'sheet') await expect(page.locator('input[name="sheetUrl"]')).toHaveValue(w.store.url);
     if (kind === 'webhook') await expect(page.locator('input[name="store"]')).toHaveValue(w.store.url);
     if (kind === 'supabase') {
       await expect(page.locator('input[name="supabaseUrl"]')).toHaveValue(w.store.url);
@@ -868,7 +874,8 @@ test('the intro above the form, the builder link in the module hint, and the tut
 // Stated here rather than read from link.html, so a change to the notice's
 // wording or to a field's label name shows up as a failure.
 const NOTICE_TEXT = 'The link you opened filled in these addresses. Check each one.';
-const WEB_URL = 'https://script.google.com/macros/s/abc/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/abc/exec';
+const WEB_URL = 'https://example.org/rows';
 const SUPABASE_URL = 'https://abc.supabase.co';
 
 // The notice's lines, or null when it is hidden.
@@ -887,12 +894,18 @@ const NOTICE_SHOWN = [
     fields: { completeSaved: COMPLETE_SAVED_URL },
     lines: [`Completion URL after a saved file: ${COMPLETE_SAVED_URL}`],
   },
+  { name: 'a web app URL alone', fields: { store: { kind: 'webhook', url: SHEET_URL } }, lines: [`Web app URL: ${SHEET_URL}`] },
   { name: 'a web address alone', fields: { store: { kind: 'webhook', url: WEB_URL } }, lines: [`Web address: ${WEB_URL}`] },
   { name: 'a Supabase project URL alone', fields: { store: { kind: 'supabase', url: SUPABASE_URL } }, lines: [`Project URL: ${SUPABASE_URL}`] },
   {
     name: 'both completion URLs and a web address',
     fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: WEB_URL } },
     lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Web address: ${WEB_URL}`],
+  },
+  {
+    name: 'both completion URLs and a web app URL',
+    fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: SHEET_URL } },
+    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Web app URL: ${SHEET_URL}`],
   },
   {
     name: 'both completion URLs and a Supabase project URL',
@@ -966,21 +979,27 @@ for (const w of NOTICE_SILENT) {
 // L21: markup and an entity in each address show as written. Read as markup,
 // the first would add an img to the notice and the second would read "&".
 const MARKUP = '"><img src=x>&amp;';
-for (const kind of ['webhook', 'supabase']) {
-  test(`addresses holding markup show verbatim as text in the notice: ${kind}`, async ({ page }) => {
+// The store address of each label: a web app's address opens as "A Google
+// Sheet", markup in its path included.
+const MARKUP_STORES = [
+  { name: 'sheet', kind: 'webhook', label: 'Web app URL', url: (tail) => `https://script.google.com/macros/s/${tail}/exec` },
+  { name: 'webhook', kind: 'webhook', label: 'Web address', url: (tail) => `https://w.test/${tail}` },
+  { name: 'supabase', kind: 'supabase', label: 'Project URL', url: (tail) => `https://w.test/${tail}` },
+];
+for (const s of MARKUP_STORES) {
+  test(`addresses holding markup show verbatim as text in the notice: ${s.name}`, async ({ page }) => {
     const plainFields = (tail) => ({
       complete: `https://c.test/${tail}`,
       completeSaved: `https://s.test/${tail}`,
-      store: { kind, url: `https://w.test/${tail}` },
+      store: { kind: s.kind, url: s.url(tail) },
     });
     await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields('plain') } });
     const plainTags = await page.$$eval('#prefilled *', (nodes) => nodes.map((n) => n.tagName));
     await openBuilder(page, { config: { instrument: 'hitopbr', ...plainFields(MARKUP) } });
-    const label = kind === 'webhook' ? 'Web address' : 'Project URL';
     expect(await noticeLines(page)).toEqual([
       `Completion URL: https://c.test/${MARKUP}`,
       `Completion URL after a saved file: https://s.test/${MARKUP}`,
-      `${label}: https://w.test/${MARKUP}`,
+      `${s.label}: ${s.url(MARKUP)}`,
     ]);
     expect(await page.$$eval('#prefilled *', (nodes) => nodes.map((n) => n.tagName))).toEqual(plainTags);
     await expect(page.locator('#prefilled img')).toHaveCount(0);
