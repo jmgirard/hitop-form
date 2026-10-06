@@ -16,6 +16,12 @@
 //   G4: "A Google Sheet" shows four setup steps, outside any hint and with
 //       no retired term, and "Copy the script" puts the README's script on
 //       the clipboard
+//   G5: "Make the link" and "Download the setup file" under "A Google
+//       Sheet" refuse an address whose host is not script.google.com or
+//       whose path does not end in /exec, at the field; an http: address
+//       gets the online form's own message first; web app addresses of
+//       both account kinds, in any host case and with a query, are taken;
+//       "Another web address" takes any https address
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -148,6 +154,76 @@ test('"Copy the script" copies the README\'s script, beside the setup steps', as
   expect(copied).toHaveLength(1);
   expect(copied[0]).toBe(await readmeScript());
   expect(copied[0]).toContain('function doPost(e) {');
+});
+
+// G5: the addresses "A Google Sheet" refuses, and those it takes. The
+// refusal is stated here in full rather than read from link.html.
+const SHEET_REFUSAL = 'Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".';
+const NOT_SHEET = [
+  'https://docs.google.com/spreadsheets/d/x/edit',
+  'https://script.google.com/home/projects/x/edit',
+  'https://script.google.com/macros/s/x/dev',
+  'https://script.google.com/macros/s/x/exec/',
+  'https://script.google.com.evil.org/macros/s/x/exec',
+  'https://script.googleusercontent.com/macros/echo?x=1',
+  'https://example.org/exec',
+];
+const SHEET_OK = [
+  'https://script.google.com/macros/s/x/exec',
+  'https://SCRIPT.GOOGLE.COM/macros/s/x/exec',
+  'https://script.google.com/a/macros/example.edu/s/x/exec',
+  'https://script.google.com/macros/s/x/exec?y=1',
+];
+
+async function tryAddress(page, value, url) {
+  await openBuilder(page);
+  await fillPlain(page);
+  await kindSelect(page).selectOption(value);
+  await page.locator(`input[name="${value === 'sheet' ? 'sheetUrl' : 'store'}"]`).fill(url);
+  await make(page).click();
+}
+
+for (const url of NOT_SHEET) {
+  test(`"A Google Sheet" refuses ${url}`, async ({ page }) => {
+    await tryAddress(page, 'sheet', url);
+    await expect(page.locator('#err')).toHaveText(SHEET_REFUSAL);
+    await expect(page.locator('input[name="sheetUrl"]')).toBeFocused();
+    await expect(page.locator('#result')).toBeHidden();
+    expect(retiredIn(SHEET_REFUSAL), 'retired terms in the refusal').toEqual([]);
+  });
+}
+
+test('"Download the setup file" refuses a sheet address too, and saves nothing', async ({ page }) => {
+  await openBuilder(page);
+  await fillPlain(page);
+  await kindSelect(page).selectOption('sheet');
+  await page.locator('input[name="sheetUrl"]').fill(NOT_SHEET[0]);
+  await page.getByLabel('In a file I host').check();
+  let saved = false;
+  page.on('download', () => { saved = true; });
+  await page.getByRole('button', { name: 'Download the setup file' }).click();
+  await expect(page.locator('#err')).toHaveText(SHEET_REFUSAL);
+  expect(saved).toBe(false);
+});
+
+test('an http: address under "A Google Sheet" gets the online form\'s https message', async ({ page }) => {
+  await tryAddress(page, 'sheet', 'http://script.google.com/macros/s/x/exec');
+  await expect(page.locator('#err')).toHaveText(/^Where responses go could not be used: its url/);
+  await expect(page.locator('#err')).not.toHaveText(SHEET_REFUSAL);
+});
+
+for (const url of SHEET_OK) {
+  test(`"A Google Sheet" takes ${url}`, async ({ page }) => {
+    await tryAddress(page, 'sheet', url);
+    await expect(page.locator('#err')).toHaveText('');
+    expect(decodeLinkParam(await page.locator('#out').textContent()).store).toEqual({ kind: 'webhook', url: new URL(url).href });
+  });
+}
+
+test('"Another web address" takes an address that is not a web app\'s', async ({ page }) => {
+  await tryAddress(page, 'webhook', 'https://example.org/rows');
+  await expect(page.locator('#err')).toHaveText('');
+  expect(decodeLinkParam(await page.locator('#out').textContent()).store).toEqual({ kind: 'webhook', url: 'https://example.org/rows' });
 });
 
 // G3: the round trip from "Another web address" to "A Google Sheet".

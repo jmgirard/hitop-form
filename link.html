@@ -1832,6 +1832,14 @@ function doPost(e) {
         refuseAt(e.message, f.elements[name]);
         return;
       }
+      // "A Google Sheet" takes only an Apps Script web app's address, read
+      // after the online form's own check so an http: address gets that
+      // check's message. Pasting the sheet's or the script editor's address
+      // is the slip this catches.
+      if (kind === 'sheet' && !isSheetUrl(config.store.url)) {
+        refuseAt('Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".', f.elements.sheetUrl);
+        return;
+      }
     }
     return { config, site, prolific, kind };
   }
