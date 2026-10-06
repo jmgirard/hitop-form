@@ -398,9 +398,18 @@ function doPost(e) {
   // characters and refused one of 8,193 (hitop's
   // cairn/references/fastly2026limits.md). A longer link is refused.
   const HOST_PATH_MAX = 8_192;
-  // Prolific's help gives its participant ID as 24 characters. Its study and
-  // session IDs are taken to be as long.
+  // Prolific's API reference, "Get submission", shows a participant, a study
+  // and a submission ID of 24 characters each, and passes the submission ID
+  // as %SESSION_ID%. The Prolific pages hitop's
+  // cairn/references/prolific2026help.md lists state no maximum length.
   const PROLIFIC_ID_LENGTH = 24;
+  // Prolific's "I'll use URL parameters" option appends URL parameters to the
+  // study URL, and its help names the three IDs. The count takes them as
+  // appended once more, each as `&NAME=` and an ID: 108 characters at most.
+  const PROLIFIC_APPENDED_LENGTH = PROLIFIC_PARAMS.reduce((n, p) => n + `&${p}=`.length + PROLIFIC_ID_LENGTH, 0);
+  // SONA puts a code of 2 to 7 characters in place of %SURVEY_CODE% (hitop's
+  // cairn/references/sona2026help.md), and the count takes the longest.
+  const SONA_CODE_LENGTH = 7;
   const result = document.getElementById('result');
   // How many times hideResult() ran: a build reads it before and after
   // each wait.
@@ -1559,14 +1568,19 @@ function doPost(e) {
     // the site as it expects them.
     const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
     const href = url.href + suffix;
-    // The host sees the path and query, with each Prolific placeholder
-    // replaced by the ID Prolific puts in its place.
+    // The host sees the path and query, with each placeholder replaced by
+    // the longest ID the site puts in its place, and a Prolific link with
+    // the three IDs appended once more.
+    const ids = prolific || site === 'sona';
     const sent = url.pathname.length + url.search.length
-      + (prolific ? suffix.replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH)) : suffix).length;
+      + suffix
+        .replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(PROLIFIC_ID_LENGTH))
+        .replace(/%SURVEY_CODE%/g, 'x'.repeat(SONA_CODE_LENGTH)).length
+      + (prolific ? PROLIFIC_APPENDED_LENGTH : 0);
     if (sent > HOST_PATH_MAX) {
       sqlBlock.hidden = true;
       sql.value = '';
-      refuseAt(`This link is ${href.length.toLocaleString('en-US')} characters long, longer than the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
+      refuseAt(`This link counts ${sent.toLocaleString('en-US')} characters after the host name${ids ? ', with the IDs the recruiting site adds at their longest' : ''}, more than the ${HOST_PATH_MAX.toLocaleString('en-US')} the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
       return;
     }
     out.textContent = href;

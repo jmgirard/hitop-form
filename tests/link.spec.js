@@ -169,6 +169,7 @@ import {
   test, expect, useTarget, openSectionOf, useStore, allowLocalStore, begin, walkAll, fetchExport, routeExport, readDescriptor, readFixture, COMPLETE_URL, COMPLETE_SAVED_URL,
   NOT_ASCENDING, NOT_ASCENDING_MESSAGE, notAscendingDescriptor, encodeConfig, encodeCompressed, decodeLinkParam, gotoLong,
   expectHeldInput, expectReleasedInput, deepModuleText, encodeCompressedText, DEEP_MODULE_REFUSAL, expectIndentThrows,
+  HOST_AT, hostCount, hostRefusal,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -1452,14 +1453,11 @@ test('L37: the warning goes when a shorter link is made', async ({ page }) => {
 
 // L38: Fastly, which serves GitHub Pages, answers 414 for a URL over 8 KB,
 // and on 2026-10-01 GitHub Pages answered 8,192 characters of path and query
-// and refused 8,193. The count here is made apart from the builder: the link
-// after its origin, with each Prolific placeholder as 24 characters, the
-// length Prolific's help gives for the participant ID. Which lengths a ?c= link can reach depends on
+// and refused 8,193. The count here is made apart from the builder by
+// hostCount() in helpers.mjs. Which lengths a ?c= link can reach depends on
 // the page's address and the site's ending (L37), so each length is tried
 // with no ending, SONA's and Prolific's, and each must be reached by one.
-const HOST_AT = 8_192;
-const hostCount = (href) => href.slice(new URL(href).origin.length).replace(/\{\{%[A-Z_]+%\}\}/g, 'x'.repeat(24)).length;
-const HOST_REFUSED = (n) => `This link is ${n.toLocaleString('en-US')} characters long, longer than the online form's host accepts. Choose "In a file I host" under "Where the setup is kept".`;
+// link-setupfile.spec.js LF9 reaches both lengths for each site.
 
 // Presses "Make the link" with the study name given, and waits for a link
 // or a refusal.
@@ -1479,7 +1477,6 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
     const first = await page.locator('#out').textContent();
     const bytes = Buffer.byteLength(JSON.stringify(decodeLinkParam(first)));
     const restCount = hostCount(first) - b64Length(bytes);
-    const restLength = first.length - b64Length(bytes);
     for (const target of [HOST_AT, HOST_AT + 1]) {
       const n = Array.from({ length: 12_000 }, (_, k) => k).find((k) => restCount + b64Length(k) === target);
       if (n === undefined) continue;
@@ -1490,7 +1487,7 @@ test('L38: a link counting 8,192 characters after its origin is made, and one co
         const href = await page.locator('#out').textContent();
         expect(hostCount(href), `${site || 'no site'} at ${target}`).toBe(target);
       } else {
-        await expect(page.locator('#err')).toHaveText(HOST_REFUSED(restLength + b64Length(n)));
+        await expect(page.locator('#err')).toHaveText(hostRefusal(target, { ids: site !== '', setup: true }));
         await expect(page.locator('#result')).toBeHidden();
         await expect(page.locator('#out')).toHaveText('');
       }

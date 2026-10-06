@@ -458,6 +458,33 @@ export function prolificQuery(given = {}) {
   return part('PROLIFIC_PID', pid) + part('STUDY_ID', study) + part('SESSION_ID', session);
 }
 
+// The online form's host answered 8,192 characters of path and query and
+// refused 8,193 (hitop's cairn/references/fastly2026limits.md).
+export const HOST_AT = 8_192;
+
+// The length the host sees for a study link, counted apart from the
+// builder: the link after its origin, with each Prolific placeholder
+// filled by a 24-character ID like PROLIFIC's, and SONA's %SURVEY_CODE% as
+// 7 characters, the longest code SONA's help gives. A Prolific link counts
+// the three IDs once more, as Prolific's "I'll use URL parameters" option
+// can append them to the study URL.
+export function hostCount(href) {
+  const after = href.slice(new URL(href).origin.length);
+  const filled = after
+    .replace(/\{\{%[A-Z_]+%\}\}/g, PROLIFIC.pid)
+    .replace(/%SURVEY_CODE%/g, 'x'.repeat(7));
+  return filled.length + (after.includes('{{%PROLIFIC_PID%}}') ? prolificQuery().length : 0);
+}
+
+// The builder's refusal of a link whose count passes HOST_AT. `ids` for a
+// Prolific or SONA link, and `setup` for a link that carries its setup.
+export function hostRefusal(count, { ids = false, setup = false } = {}) {
+  return `This link counts ${count.toLocaleString('en-US')} characters after the host name`
+    + (ids ? ', with the IDs the recruiting site adds at their longest' : '')
+    + `, more than the ${HOST_AT.toLocaleString('en-US')} the online form's host accepts.`
+    + (setup ? ' Choose "In a file I host" under "Where the setup is kept".' : '');
+}
+
 // A completion address for a link's `complete` field, of the shape Prolific's
 // help center shows, and a route that answers it with a small page and
 // counts the requests that reached it. The address is never fetched for
