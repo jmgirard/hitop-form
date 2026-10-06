@@ -36,9 +36,12 @@ test('H1: on a cache miss the deployed host refuses one character past HOST_AT, 
     const href = hostUrl(target, slashes, length);
     expect(href.slice(new URL(href).origin.length), `the path and query of ${length}`).toHaveLength(length);
     const response = await request.get(href, { maxRedirects: 0 });
-    const cache = response.headers()['x-cache'];
-    expect(cache, `the cache's answer at ${length}`).not.toBe('HIT');
+    const cache = response.headers()['x-cache'] ?? '';
+    expect(cache, `the cache's answer at ${length}`).not.toMatch(/HIT/);
     if (ok) {
+      // A 200 counts only from GitHub's server: the answer must say MISS.
+      // Fastly's own 414 carries no x-cache, so a refusal is not held to it.
+      expect(cache, `the cache's answer at ${length}`).toMatch(/MISS/);
       expect(response.status(), `the host's answer to ${length} characters`).toBe(200);
     } else {
       expect([400, 414], `the host's answer to ${length} characters`).toContain(response.status());

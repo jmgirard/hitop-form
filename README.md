@@ -214,34 +214,38 @@ sites and mail programs cut long links. For a link that carries its setup,
 it says that you can keep the setup in a file you host instead. For a link
 that names a setup file, it says that the file's address makes the link
 long. A shorter address makes a shorter link. The line is shown
-empty as the result opens, and its text is written two animation frames
-later, so that a screen reader announces it. RFC 9110 (section 4.1)
+empty as the result opens. Its text is written in the next animation frame
+after a frame draws the line empty, so that a screen reader can announce
+the change. No screen reader was tested. RFC 9110 (section 4.1)
 recommends that HTTP senders and recipients support links of at least
 8,000 characters.
 
 The builder makes no link whose path and query, the part after the host
 name, count more than 8,177 characters. GitHub Pages hosts the online
 form, and Fastly serves it from a cache whose key leaves out the query.
-Fastly documents a limit of 8 KB on a link. On 2026-10-06, a cached page
-answered 8,192 characters of path and query, and Fastly refused 8,193 with
-"414 URI Too Long". When the page was not cached, GitHub's server answered
-8,177 characters and refused 8,178 with status 400. A participant can open
-the link when the page is not cached, so the builder holds to 8,177.
+Fastly documents a limit of 8 KB on a link. On 2026-10-06, with the online
+form cached, Fastly answered 8,192 characters of path and query and refused
+8,193 with "414 URI Too Long". When the online form was not cached, GitHub's
+server answered 8,177 characters and refused 8,178 with status 400. A
+participant can open the link when the online form is not cached, so the
+builder holds to 8,177.
 
 The count includes what a recruiting site adds. Each Prolific placeholder
 counts as 24 characters. Prolific's API reference shows participant, study
 and session IDs of that length on its
 [Get submission](https://docs.prolific.com/api-reference/submissions/get-submission)
-page. None of the Prolific pages that the hitop package's source notes list
-states a maximum length. A Prolific link also counts the three IDs once
+page. None of the Prolific pages that the hitop package's
+[source note](https://github.com/jmgirard/hitop/blob/main/cairn/references/prolific2026help.md)
+lists states a maximum length. So 24 is the length the examples show, not a
+stated maximum. A Prolific link also counts the three IDs once
 more, as `&PROLIFIC_PID=`, `&STUDY_ID=` and `&SESSION_ID=` with 24
 characters each, 108 characters in all. Prolific's "I'll use URL
 parameters" option appends URL parameters to the study URL. Its help names
 the three IDs, but not their order or their form in the address. SONA's
 `%SURVEY_CODE%` counts as 7 characters, the longest code SONA's help
 gives. The message gives the count, and for a
-Prolific or SONA link it says that the count takes the site's IDs at their
-longest. For a link that carries its setup, it also says to choose "In a
+Prolific or SONA link it says that the count includes the IDs the site
+adds. For a link that carries its setup, it also says to choose "In a
 file I host". If a field changes while the link is being made, no link is
 shown, and a message asks you to press "Make the link" again.
 
@@ -548,7 +552,8 @@ list. Each list keeps the builder's order.
 The number of questions has no limit of its own. The page reads at most
 100,000 bytes of setup, so the builder refuses a setup that is larger, and
 names its size. A link that carries its setup must also fit in the 8,177
-characters that the online form's host accepts. A setup too large for that
+characters that the online form's host accepts. That count includes the
+IDs a recruiting site adds. A setup too large for that
 goes in a file you host (see "Keep the setup in a file you host"). With a
 Supabase table, the builder also refuses to make a link for
 a setup whose table would have more than 1,600 columns, the most a

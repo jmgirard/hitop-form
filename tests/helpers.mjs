@@ -482,7 +482,7 @@ export function hostCount(href) {
 // Prolific or SONA link, and `setup` for a link that carries its setup.
 export function hostRefusal(count, { ids = false, setup = false } = {}) {
   return `This link counts ${count.toLocaleString('en-US')} characters after the host name`
-    + (ids ? ', with the IDs the recruiting site adds at their longest' : '')
+    + (ids ? ', counting the IDs the recruiting site adds' : '')
     + `, more than the ${HOST_AT.toLocaleString('en-US')} the online form's host accepts.`
     + (setup ? ' Choose "In a file I host" under "Where the setup is kept".' : '');
 }

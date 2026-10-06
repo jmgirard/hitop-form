@@ -626,10 +626,17 @@ test('LF12: the long-link line under a setup-file link names the address, not a 
   await serveSetup(page, pretty(PLAIN), { url: (u) => u.hostname === 'setup.example.org' });
   await openBuilder(page);
   await fillPlain(page);
-  await chooseFile(page, longAddress(8_000));
+  // The address is sized from a first link so the count is 8,100 wherever
+  // the page is served: past the warning, under HOST_AT.
+  await chooseFile(page, longAddress(1));
+  await make(page).click();
+  await expect(page.locator('#result')).toBeVisible();
+  const k = 1 + 8_100 - hostCount(await page.locator('#out').textContent());
+  await addressField(page).fill(longAddress(k));
   await make(page).click();
   await expect(page.locator('#result')).toBeVisible();
   const href = await page.locator('#out').textContent();
+  expect(hostCount(href)).toBe(8_100);
   expect(href.length).toBeGreaterThan(8_000);
   await expect(page.locator('#long')).toHaveText(`This link is ${href.length.toLocaleString('en-US')} characters long. Some sites and mail programs cut long links. The address of the setup file makes this link long, and a shorter address makes a shorter link.`);
 });

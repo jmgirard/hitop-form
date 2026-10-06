@@ -1577,8 +1577,9 @@ function doPost(e) {
     const suffix = prolific ? PROLIFIC_SUFFIX : SITES[site]?.suffix ?? '';
     const href = url.href + suffix;
     // The host sees the path and query, with each placeholder replaced by
-    // the longest ID the site puts in its place, and a Prolific link with
-    // the three IDs appended once more.
+    // an ID the site puts in its place: 24 characters for Prolific, the
+    // length its examples show, and 7 for SONA, its longest code. A
+    // Prolific link has the three IDs appended once more.
     const ids = prolific || site === 'sona';
     const sent = url.pathname.length + url.search.length
       + suffix
@@ -1588,7 +1589,7 @@ function doPost(e) {
     if (sent > HOST_PATH_MAX) {
       sqlBlock.hidden = true;
       sql.value = '';
-      refuseAt(`This link counts ${sent.toLocaleString('en-US')} characters after the host name${ids ? ', with the IDs the recruiting site adds at their longest' : ''}, more than the ${HOST_PATH_MAX.toLocaleString('en-US')} the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
+      refuseAt(`This link counts ${sent.toLocaleString('en-US')} characters after the host name${ids ? ', counting the IDs the recruiting site adds' : ''}, more than the ${HOST_PATH_MAX.toLocaleString('en-US')} the online form's host accepts.${setupQuery === undefined ? ' Choose "In a file I host" under "Where the setup is kept".' : ''}`);
       return;
     }
     out.textContent = href;
