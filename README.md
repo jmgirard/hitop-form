@@ -87,15 +87,23 @@ read. Change the row back, and the text shows again.
 ### Where responses go
 
 "A file on the participant's device" is the default. The page saves a file
-on the participant's device and sends nothing. "A web address" is the
-`https://` address of a server that takes one JSON row per participant. The
-web app in [Send responses to a Google Sheet](#send-responses-to-a-google-sheet)
-is one. "A Supabase table" takes the project URL, its publishable key and a
-table name, as [Send responses to Supabase](#send-responses-to-supabase)
+on the participant's device and sends nothing. "A Google Sheet" shows the
+setup steps of
+[Send responses to a Google Sheet](#send-responses-to-a-google-sheet), a
+"Copy the script" button that copies that section's script, and a "Web app
+URL" field. That field takes only an Apps Script web app's address: `https://`,
+the host `script.google.com`, and a path that ends in `/exec`. The builder
+refuses the sheet's own address, the script editor's address, and a `/dev`
+address. "Another web address" is the `https://` address of any other server
+that takes one JSON row per participant. Both choices make the same link, so
+a link that names a web app's address opens the builder with "A Google
+Sheet" chosen. "A Supabase table" takes the project URL, its publishable key
+and a table name, as [Send responses to Supabase](#send-responses-to-supabase)
 describes. The builder refuses an address that is not `https://`, with one
-exception for local testing: `http://` to `127.0.0.1` or `localhost`. A
-table name must be lower-case letters, digits and underscores, up to 63 of
-them, and its first character must not be a digit.
+exception for local testing under "Another web address": `http://` to
+`127.0.0.1` or `localhost`. A table name must be lower-case letters, digits
+and underscores, up to 63 of them, and its first character must not be a
+digit.
 
 ### Participants and recruiting site
 
@@ -935,8 +943,9 @@ an identifier such as `007` keeps its zeros, and a value that starts with
    as" to Me, and "Who has access" to Anyone. Press Deploy and authorize the
    script when asked. Copy the web app URL, which ends in `/exec`.
 4. In the [Study Link Builder](https://jmgirard.github.io/hitop-form/link.html),
-   set "Where responses go" to "A web address", paste that URL into the
-   "Web address" field, and make the link.
+   set "Where responses go" to "A Google Sheet", paste that URL into the
+   "Web app URL" field, and make the link. The builder shows these steps
+   too, and its "Copy the script" button copies the code above.
 5. When you change the code later, choose Deploy, then Manage deployments,
    edit the deployment and pick "New version". The `/exec` URL stays the same.
 

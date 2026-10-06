@@ -1003,7 +1003,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
-  await expect(page.locator('#destHint')).toContainText('A web address, such as an Apps Script web app, gets one JSON row per participant, and a Supabase table one row, a column per item.');
+  await expect(page.locator('#destHint')).toContainText('A Google Sheet, or another web address, gets one row per participant, and a Supabase table one row, a column per item.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('At most one PID-5 form. At most one HiTOP-SR, whole or as a module.');
   const sqlHint = page.locator('#sqlBlock .hint');
@@ -1576,6 +1576,16 @@ const REFUSE_AT = [
     },
     message: /^Where responses go could not be used: /,
     focus: field('store'),
+  },
+  {
+    name: 'store: a sheet\'s own address under "A Google Sheet"',
+    call: ['needs the web app URL'],
+    fill: async (page) => {
+      await page.locator(field('storeKind')).selectOption('sheet');
+      await page.locator(field('sheetUrl')).fill('https://docs.google.com/spreadsheets/d/x/edit');
+    },
+    message: 'Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".',
+    focus: field('sheetUrl'),
   },
   {
     name: 'store: a bad project URL',
