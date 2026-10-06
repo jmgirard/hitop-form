@@ -1003,7 +1003,7 @@ test('the hints keep the facts a researcher acts on', async ({ page }) => {
   await expect(sona).toContainText('Paste the link, ending in id=%SURVEY_CODE%, as SONA\'s Study URL.');
   await site.selectOption('prolific');
   await expect(page.locator('#prolificHint')).toContainText('The responses gain prolific_study and prolific_session columns.');
-  await expect(page.locator('#destHint')).toContainText('A Google Sheet, or another web address, gets one row per participant, and a Supabase table one row, a column per item.');
+  await expect(page.locator('#destHint')).toContainText('A Google Sheet, or another web address, gets one JSON row per participant, and a Supabase table one row, a column per item.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('The online form gives them one after another, and the responses hold their item columns, in this order.');
   await expect(page.locator('#instrumentsBlock > .hint')).toContainText('At most one PID-5 form. At most one HiTOP-SR, whole or as a module.');
   const sqlHint = page.locator('#sqlBlock .hint');
@@ -1095,10 +1095,10 @@ test('labelText() uses no copying method', async ({ page }) => {
 });
 
 // S11: a throw in the setup steps after the prefill leaves a clean page.
-// The opened link sets SONA, a web address for the responses and consent
-// text. The throw is in the last setup step, the loop that opens filled
-// sections, when it opens the consent section. By then showKind() has shown
-// the web address block, showSite() the SONA hint, showHeld() the filled
+// The opened link sets SONA, a Google Sheet's web app URL for the responses
+// and consent text. The throw is in the last setup step, the loop that opens
+// filled sections, when it opens the consent section. By then showKind() has
+// shown the Google Sheet block, showSite() the SONA hint, showHeld() the filled
 // summaries, and the loop has opened the participants section, so each
 // check below fails unless the catch undoes that step.
 test('a throw after the prefill leaves a clean page that still builds', async ({ page }) => {
@@ -1135,7 +1135,7 @@ test('a throw after the prefill leaves a clean page that still builds', async ({
   }
   // The hints sit in a closed section, so each is checked by its own
   // hidden flag rather than by whether it shows.
-  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'webhookFields', 'supabaseFields']) {
+  for (const id of ['prolificHint', 'sonaHint', 'connectHint', 'otherFields', 'sheetFields', 'webhookFields', 'supabaseFields']) {
     expect(await page.locator(`#${id}`).evaluate((node) => node.hidden), id).toBe(true);
   }
   await expect(page.locator('select[name="site"]')).not.toHaveAttribute('aria-describedby');

@@ -15,11 +15,13 @@
 //       web address" with a web app's address reopens as "A Google Sheet"
 //   G4: "A Google Sheet" shows four setup steps, outside any hint and with
 //       no retired term, and "Copy the script" puts the README's script on
-//       the clipboard
+//       the clipboard; a refused copy names where the script is, and with
+//       no clipboard the button is hidden
 //   G5: "Make the link" and "Download the setup file" under "A Google
-//       Sheet" refuse an address whose host is not script.google.com or
-//       whose path does not end in /exec, at the field; an http: address
-//       gets the online form's own message first; web app addresses of
+//       Sheet" refuse an address whose host is not script.google.com, whose
+//       port is not the default or whose path does not end in /exec, at the
+//       field; an http: address the online form refuses gets its message
+//       first, and one it takes (localhost) gets the sheet refusal; web app addresses of
 //       both account kinds, in any host case and with a query, are taken;
 //       "Another web address" takes any https address
 
@@ -156,6 +158,31 @@ test('"Copy the script" copies the README\'s script, beside the setup steps', as
   expect(copied[0]).toContain('function doPost(e) {');
 });
 
+// G4: a copy the browser refuses says where the script is, and a browser
+// with no clipboard shows no button.
+test('a refused copy names where to find the script', async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = async () => { throw new Error('denied'); };
+  });
+  await openBuilder(page);
+  await kindSelect(page).selectOption('sheet');
+  await page.getByRole('button', { name: 'Copy the script' }).click();
+  await expect(page.locator('#err')).toHaveText('The script could not be copied. Under "A Google Sheet", open "What the script does, and how to change it" and copy it from there.');
+  await expect(page.getByRole('link', { name: 'What the script does, and how to change it' })).toBeVisible();
+  expect(retiredIn(await page.locator('#err').textContent())).toEqual([]);
+});
+
+test('with no clipboard, "Copy the script" is hidden and the README link shows', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'clipboard', { get: () => undefined, configurable: true });
+  });
+  await openBuilder(page);
+  await kindSelect(page).selectOption('sheet');
+  await expect(page.locator('#sheetSteps')).toBeVisible();
+  await expect(page.locator('#copyScript')).toBeHidden();
+  await expect(page.getByRole('link', { name: 'What the script does, and how to change it' })).toBeVisible();
+});
+
 // G5: the addresses "A Google Sheet" refuses, and those it takes. The
 // refusal is stated here in full rather than read from link.html.
 const SHEET_REFUSAL = 'Where responses go could not be used: "A Google Sheet" needs the web app URL, the address that ends in /exec. For another server, choose "Another web address".';
@@ -167,6 +194,10 @@ const NOT_SHEET = [
   'https://script.google.com.evil.org/macros/s/x/exec',
   'https://script.googleusercontent.com/macros/echo?x=1',
   'https://example.org/exec',
+  'https://script.google.com:8443/macros/s/x/exec',
+  // The online form takes http: to localhost, so this one reaches the
+  // sheet check.
+  'http://localhost/macros/s/x/exec',
 ];
 const SHEET_OK = [
   'https://script.google.com/macros/s/x/exec',
@@ -203,6 +234,7 @@ test('"Download the setup file" refuses a sheet address too, and saves nothing',
   page.on('download', () => { saved = true; });
   await page.getByRole('button', { name: 'Download the setup file' }).click();
   await expect(page.locator('#err')).toHaveText(SHEET_REFUSAL);
+  await expect(page.locator('input[name="sheetUrl"]')).toBeFocused();
   expect(saved).toBe(false);
 });
 
