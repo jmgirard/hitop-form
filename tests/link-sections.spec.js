@@ -578,21 +578,26 @@ for (const [kind, o] of Object.entries(ORDERS)) {
 // each pair gets, written out in full here rather than built, so a test
 // cannot share a mistake with the page's own wording.
 const SITES = ['', 'prolific', 'sona', 'connect', 'other'];
-const KINDS = ['', 'webhook', 'supabase'];
+const KINDS = ['', 'sheet', 'webhook', 'supabase'];
 const NEXT = [
   ['', '', 'Open the link once to test it, and then give it to each participant.'],
+  ['', 'sheet', 'Open the link once to test it, and then give it to each participant.'],
   ['', 'webhook', 'Open the link once to test it, and then give it to each participant.'],
   ['', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor, then open the link once to test it and give it to each participant.'],
   ['prolific', '', 'Paste the link into your study\'s page on Prolific.'],
+  ['prolific', 'sheet', 'Paste the link into your study\'s page on Prolific.'],
   ['prolific', 'webhook', 'Paste the link into your study\'s page on Prolific.'],
   ['prolific', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on Prolific.'],
   ['sona', '', 'Paste the link into your study\'s page on SONA.'],
+  ['sona', 'sheet', 'Paste the link into your study\'s page on SONA.'],
   ['sona', 'webhook', 'Paste the link into your study\'s page on SONA.'],
   ['sona', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on SONA.'],
   ['connect', '', 'Paste the link into your study\'s page on CloudResearch Connect.'],
+  ['connect', 'sheet', 'Paste the link into your study\'s page on CloudResearch Connect.'],
   ['connect', 'webhook', 'Paste the link into your study\'s page on CloudResearch Connect.'],
   ['connect', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on CloudResearch Connect.'],
   ['other', '', 'Paste the link into your study\'s page on your recruiting site.'],
+  ['other', 'sheet', 'Paste the link into your study\'s page on your recruiting site.'],
   ['other', 'webhook', 'Paste the link into your study\'s page on your recruiting site.'],
   ['other', 'supabase', 'Run the SQL below once in your Supabase project\'s SQL editor before you paste the link into your study\'s page on your recruiting site.'],
 ];
@@ -605,7 +610,8 @@ test('the next-step table holds one sentence for each site and destination', () 
 // Fills the destination's fields for a kind.
 async function chooseDestination(page, kind) {
   await page.locator('select[name="storeKind"]').selectOption(kind);
-  if (kind === 'webhook') await page.locator('input[name="store"]').fill('https://script.google.com/macros/s/abc/exec');
+  if (kind === 'sheet') await page.locator('input[name="sheetUrl"]').fill('https://script.google.com/macros/s/abc/exec');
+  if (kind === 'webhook') await page.locator('input[name="store"]').fill('https://example.org/rows');
   if (kind === 'supabase') {
     await page.locator('input[name="supabaseUrl"]').fill('https://abcdefghijkl.supabase.co');
     await page.locator('input[name="supabaseKey"]').fill('sb_publishable_test');
@@ -771,7 +777,7 @@ test('hints stay under 40 words, the intro under 60, and no retired term shows',
     await expectText(page, `site ${JSON.stringify(site)}`);
   }
   await page.locator('select[name="site"]').selectOption('');
-  for (const kind of ['', 'webhook', 'supabase']) {
+  for (const kind of KINDS) {
     await chooseDestination(page, kind);
     await expectText(page, `destination ${JSON.stringify(kind)}`);
   }

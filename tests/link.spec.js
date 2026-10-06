@@ -630,7 +630,8 @@ async function openBuilder(page, { config, raw } = {}) {
 // no path), so the round trip has nothing to normalise.
 const PREFILL_STORES = [
   { name: 'no store, with a participant', participant: 'l16' },
-  { name: 'a web address, under Prolific', prolific: true, store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' } },
+  { name: 'a Google Sheet, under Prolific', prolific: true, choice: 'sheet', store: { kind: 'webhook', url: 'https://script.google.com/macros/s/abc/exec' } },
+  { name: 'another web address, with a participant', participant: 'l16w', choice: 'webhook', store: { kind: 'webhook', url: 'https://example.org/rows' } },
   {
     name: 'a Supabase table, with a participant',
     participant: 'l16s',
@@ -658,11 +659,14 @@ for (const w of PREFILL_STORES) {
     await expect(page.locator('input[name="complete"]')).toHaveValue(COMPLETE_URL);
     await expect(page.locator('input[name="completeSaved"]')).toHaveValue(COMPLETE_SAVED_URL);
     expect(JSON.parse(await page.locator('textarea[name="module"]').inputValue())).toEqual(module);
-    const kind = w.store ? w.store.kind : '';
+    // A web address opens as the choice its address names.
+    const kind = w.store ? (w.choice ?? w.store.kind) : '';
     await expect(page.locator('select[name="storeKind"]')).toHaveValue(kind);
     // The chosen kind's field group shows and any other is hidden.
+    await expect(page.locator('#sheetFields')).toBeVisible({ visible: kind === 'sheet' });
     await expect(page.locator('#webhookFields')).toBeVisible({ visible: kind === 'webhook' });
     await expect(page.locator('#supabaseFields')).toBeVisible({ visible: kind === 'supabase' });
+    if (kind === 'sheet') await expect(page.locator('input[name="sheetUrl"]')).toHaveValue(w.store.url);
     if (kind === 'webhook') await expect(page.locator('input[name="store"]')).toHaveValue(w.store.url);
     if (kind === 'supabase') {
       await expect(page.locator('input[name="supabaseUrl"]')).toHaveValue(w.store.url);
@@ -868,7 +872,8 @@ test('the intro above the form, the builder link in the module hint, and the tut
 // Stated here rather than read from link.html, so a change to the notice's
 // wording or to a field's label name shows up as a failure.
 const NOTICE_TEXT = 'The link you opened filled in these addresses. Check each one.';
-const WEB_URL = 'https://script.google.com/macros/s/abc/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/abc/exec';
+const WEB_URL = 'https://example.org/rows';
 const SUPABASE_URL = 'https://abc.supabase.co';
 
 // The notice's lines, or null when it is hidden.
@@ -887,12 +892,13 @@ const NOTICE_SHOWN = [
     fields: { completeSaved: COMPLETE_SAVED_URL },
     lines: [`Completion URL after a saved file: ${COMPLETE_SAVED_URL}`],
   },
+  { name: 'a web app URL alone', fields: { store: { kind: 'webhook', url: SHEET_URL } }, lines: [`Web app URL: ${SHEET_URL}`] },
   { name: 'a web address alone', fields: { store: { kind: 'webhook', url: WEB_URL } }, lines: [`Web address: ${WEB_URL}`] },
   { name: 'a Supabase project URL alone', fields: { store: { kind: 'supabase', url: SUPABASE_URL } }, lines: [`Project URL: ${SUPABASE_URL}`] },
   {
-    name: 'both completion URLs and a web address',
-    fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: WEB_URL } },
-    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Web address: ${WEB_URL}`],
+    name: 'both completion URLs and a web app URL',
+    fields: { complete: COMPLETE_URL, completeSaved: COMPLETE_SAVED_URL, store: { kind: 'webhook', url: SHEET_URL } },
+    lines: [`Completion URL: ${COMPLETE_URL}`, `Completion URL after a saved file: ${COMPLETE_SAVED_URL}`, `Web app URL: ${SHEET_URL}`],
   },
   {
     name: 'both completion URLs and a Supabase project URL',
