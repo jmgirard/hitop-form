@@ -13,10 +13,14 @@
 //       and "Another web address" chosen otherwise, the notice labelling the
 //       address "Web app URL" or "Web address"; a link made under "Another
 //       web address" with a web app's address reopens as "A Google Sheet"
+//   G4: "A Google Sheet" shows four setup steps, outside any hint and with
+//       no retired term, and "Copy the script" puts the README's script on
+//       the clipboard
 
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
-  test, expect, useTarget, encodeConfig, decodeLinkParam, setupFingerprint, serveSetup, setupQuery,
+  test, expect, useTarget, encodeConfig, decodeLinkParam, setupFingerprint, serveSetup, setupQuery, retiredIn, ROOT,
 } from './helpers.mjs';
 
 const base = useTarget();
@@ -105,6 +109,46 @@ for (const choice of WEB_CHOICES) {
     await expectChosen(page);
   });
 }
+
+// G4: the README's script, read from README.md here: the fenced js block in
+// step 2 of "Send responses to a Google Sheet", its 3-space list indent
+// removed, ending in one line break.
+async function readmeScript() {
+  const lines = (await readFile(path.join(ROOT, 'README.md'), 'utf8')).split('\n');
+  const from = lines.indexOf('## Send responses to a Google Sheet');
+  const open = lines.indexOf('   ```js', from);
+  const close = lines.indexOf('   ```', open + 1);
+  expect(from, 'the README section').toBeGreaterThan(-1);
+  expect(open, 'the js fence').toBeGreaterThan(from);
+  const body = lines.slice(open + 1, close);
+  for (const line of body) expect(line === '' || line.startsWith('   '), `indent of ${JSON.stringify(line)}`).toBe(true);
+  return `${body.map((line) => line.slice(3)).join('\n')}\n`;
+}
+
+test('"Copy the script" copies the README\'s script, beside the setup steps', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.copied = [];
+    navigator.clipboard.writeText = async (text) => { window.copied.push(text); };
+  });
+  await openBuilder(page);
+  await expect(page.getByRole('button', { name: 'Copy the script' })).toBeHidden();
+  await kindSelect(page).selectOption('sheet');
+  const steps = page.locator('#sheetSteps li');
+  await expect(steps).toHaveText([
+    /^Make a new Google Sheet\. In its menu, choose Extensions, then Apps Script\.$/,
+    /^Press "Copy the script"\. .*Code\.gs.*save\.$/,
+    /^Choose Deploy, then New deployment\. .*"Execute as" to Me.*"Who has access" to Anyone\./,
+    /^Copy the web app URL, which ends in \/exec, and paste it below\.$/,
+  ]);
+  expect(await page.locator('#sheetSteps').evaluate((n) => n.closest('.hint') === null && n.querySelector('.hint') === null), 'the steps are not a hint').toBe(true);
+  expect(retiredIn(await page.locator('#sheetFields').innerText()), 'retired terms in the sheet fields').toEqual([]);
+  await page.getByRole('button', { name: 'Copy the script' }).click();
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+  const copied = await page.evaluate(() => window.copied);
+  expect(copied).toHaveLength(1);
+  expect(copied[0]).toBe(await readmeScript());
+  expect(copied[0]).toContain('function doPost(e) {');
+});
 
 // G3: the round trip from "Another web address" to "A Google Sheet".
 test('a web app URL entered under "Another web address" reopens as "A Google Sheet"', async ({ page }) => {
