@@ -1088,8 +1088,7 @@ The table keeps every value as text or as an integer. So in the table
 itself, a participant identifier or a text answer such as `=1+1` is stored
 as those four characters. If you open the exported CSV in a spreadsheet
 program, it can still read such a cell as a formula. `read_form_responses()`
-returns it as text, as does reading the file in R as shown above. You can
-also open the file in the spreadsheet as text.
+returns it as text, as does reading the file in R as shown above.
 
 ## Scoring
 
