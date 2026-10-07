@@ -861,6 +861,11 @@ file is saved where the participant's browser puts downloads. Its name is
 the name starts with the instruments' names joined by `-`. Ask each
 participant to send you the file the way your study collects documents.
 
+A participant identifier or a text answer can start with `=`, such as
+`=1+1`. If you open the file in a spreadsheet program, it can read such a
+cell as a formula. `read_form_responses()` returns the cell as text. So
+read the file in R rather than in a spreadsheet.
+
 The file has two rows. The header is
 `study,participant,instrument,form_build,submitted` followed by one column
 per item, named as the package names the items (`hitopbr_01`,
@@ -907,9 +912,10 @@ file saved in that case duplicates a row the server kept. The `submitted` value
 identifies the pair.
 
 A Google Apps Script web app bound to a Google Sheet is one such server,
-and it needs only a Google account. Each row lands in the sheet as text. So
-an identifier such as `007` keeps its zeros, and a value that starts with
-`=` is never read as a formula.
+and it needs only a Google account. The script below writes each cell
+behind a leading apostrophe and formats it as text. So an identifier such as
+`007` keeps its zeros, and in the sheet itself a value that starts with `=`
+is not read as a formula.
 
 1. Create a new Google Sheet. In its menu choose Extensions, then Apps Script.
 2. Replace the contents of `Code.gs` with the code below and save the
@@ -1004,6 +1010,11 @@ columns as the next section describes. The file
 `tests/fixtures/sheet-hitopbr.csv` is one such download, from two HiTOP-BR
 walks against a web app deployed from the code above.
 
+The download does not keep the apostrophe. A participant identifier
+or a text answer that starts with `=`, such as `=1+1`, is text in the sheet.
+If you open the downloaded file in a spreadsheet program, it can read such a
+cell as a formula. `read_form_responses()` returns it as text.
+
 ## Send responses to Supabase
 
 A Supabase project holds a Postgres database behind a REST API, and a free
@@ -1074,11 +1085,11 @@ Anyone with the link can insert rows: the key and the table name sit inside
 every study link. Screen the table before scoring, as with a sheet. The page
 never reads the table.
 
-The table keeps every value as text or as an integer, so a participant
-code such as `=1+1` is stored as those four characters. A spreadsheet
-program can still read such a cell as a formula when you open the exported
-CSV in it. Read the file in R as shown above, where every column stays
-text, or open it in the spreadsheet as text.
+The table keeps every value as text or as an integer. So in the table
+itself, a participant identifier or a text answer such as `=1+1` is stored
+as those four characters. If you open the exported CSV in a spreadsheet
+program, it can still read such a cell as a formula. `read_form_responses()`
+returns it as text, as does reading the file in R as shown above.
 
 ## Scoring
 
