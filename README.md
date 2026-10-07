@@ -864,7 +864,7 @@ participant to send you the file the way your study collects documents.
 A participant identifier or a text answer can start with `=`, such as
 `=1+1`. If you open the file in a spreadsheet program, it can read such a
 cell as a formula. `read_form_responses()` returns the cell as text. So
-read the file in R before you open it in a spreadsheet.
+read the file in R rather than in a spreadsheet.
 
 The file has two rows. The header is
 `study,participant,instrument,form_build,submitted` followed by one column
@@ -912,9 +912,10 @@ file saved in that case duplicates a row the server kept. The `submitted` value
 identifies the pair.
 
 A Google Apps Script web app bound to a Google Sheet is one such server,
-and it needs only a Google account. Each row lands in the sheet as text. So
-an identifier such as `007` keeps its zeros, and in the sheet itself a
-value that starts with `=` is not read as a formula.
+and it needs only a Google account. The script below writes each cell
+behind a leading apostrophe and formats it as text. So an identifier such as
+`007` keeps its zeros, and in the sheet itself a value that starts with `=`
+is not read as a formula.
 
 1. Create a new Google Sheet. In its menu choose Extensions, then Apps Script.
 2. Replace the contents of `Code.gs` with the code below and save the
@@ -1009,7 +1010,7 @@ columns as the next section describes. The file
 `tests/fixtures/sheet-hitopbr.csv` is one such download, from two HiTOP-BR
 walks against a web app deployed from the code above.
 
-The download does not keep the sheet's protection. A participant identifier
+The download does not keep the apostrophe. A participant identifier
 or a text answer that starts with `=`, such as `=1+1`, is text in the sheet.
 If you open the downloaded file in a spreadsheet program, it can read such a
 cell as a formula. `read_form_responses()` returns it as text.
